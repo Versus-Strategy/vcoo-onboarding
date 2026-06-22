@@ -1,10 +1,10 @@
 # WebSocket endpoints for UI and agents
 from fastapi import WebSocket, WebSocketDisconnect, Depends, HTTPException
-from .ws_bridge import register_agent, unregister_agent, register_ui, unregister_ui, forward_to_ui, forward_to_agent
-from .auth import verify_operator
-from .db import SessionLocal
+from ws_bridge import register_agent, unregister_agent, register_ui, unregister_ui, forward_to_ui, forward_to_agent
+from auth import verify_operator
+from db import SessionLocal
 import json
-from . import crud
+import crud
 from sqlalchemy.orm import Session
 
 def get_db():

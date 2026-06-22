@@ -1,9 +1,15 @@
+import sys, os as _os
+_sys_path = _os.path.dirname(__file__)
+if _sys_path not in sys.path:
+    sys.path.insert(0, _sys_path)
+
 from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from .db import engine, Base, SessionLocal
-from . import models, crud, auth, schemas
-from .ws_routes import register_ws_routes
+import db
+from db import engine, Base, SessionLocal
+import models, crud, auth, schemas
+from ws_routes import register_ws_routes
 import asyncio
 import json
 import os as _os
@@ -126,7 +132,7 @@ def get_setup_info(token: str, db: Session = Depends(get_db)):
     st = crud.get_onboarding_state(db, vcoo_id)
     if not st:
         raise HTTPException(status_code=404, detail="No hay datos de onboarding")
-    from .onboarding import get_total_steps
+    from onboarding import get_total_steps
     modules = list(st.modules or ["core"])
     total = get_total_steps(modules)
     done = len(st.completed or [])
@@ -156,7 +162,7 @@ def trigger_step_verification(token: str, db: Session = Depends(get_db)):
     st = crud.get_onboarding_state(db, vcoo_id)
     if not st:
         raise HTTPException(status_code=404, detail="No hay datos de onboarding")
-    from .onboarding import get_step_command
+    from onboarding import get_step_command
     step = st.step
     if step == "finalize" or step == "done":
         return {"status": "skip", "message": "Onboarding ya completado"}
@@ -353,7 +359,7 @@ def get_state(vcoo_id: str, db: Session = Depends(get_db)):
     # Add onboarding state (SPEC v2)
     st = crud.get_onboarding_state(db, vcoo_id)
     if st:
-        from .onboarding import get_total_steps
+        from onboarding import get_total_steps
         modules = list(st.modules or ["core"])
         state["modules"] = modules
         state["step"] = st.step
@@ -423,7 +429,7 @@ def retry_onboarding_step(vcoo_id: str, payload: dict, db: Session = Depends(get
     # Re-enqueue the verification command
     agent = crud.get_agent_by_vcoo(db, vcoo_id)
     if agent:
-        from .onboarding import get_step_command
+        from onboarding import get_step_command
         cmd_name = get_step_command(step)
         crud.create_command(db, agent_id=str(agent.id), command=cmd_name, step=step)
     return {"status": "ok", "step": step, "onboarding_status": st.status}

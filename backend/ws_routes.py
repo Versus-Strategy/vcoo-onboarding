@@ -1,6 +1,6 @@
 from fastapi import WebSocket
-from .ws_endpoints import agent_ws, ui_ws
-from . import auth
+from ws_endpoints import agent_ws, ui_ws
+import auth
 
 
 def register_ws_routes(app):

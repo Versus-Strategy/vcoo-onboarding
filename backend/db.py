@@ -1,46 +1,22 @@
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 import os
 
-# Read connection URL from environment (may or may not contain password)
 DATABASE_URL = os.getenv('POSTGRES_URL', 'postgresql://postgres:***@db:5432/vcoo')
 
-def _create_connection():
-    """Create a psycopg2 connection, using keyword args to avoid
-    psycopg2's DSN parser bugs with dots in usernames (needed for Supabase pooler)."""
-    import psycopg2
-    from urllib.parse import urlparse, unquote
-    
-    parsed = urlparse(DATABASE_URL)
-    
-    username = unquote(parsed.username) if parsed.username else 'postgres'
-    paassword = unquote(parsed.password) if parsed.password else (os.getenv('PGPASSWORD') or '')
-    host = parsed.hostname
-    port_val = parsed.port or 5432
-    dbname = parsed.path.lstrip('/') or 'postgres'
-    
-    kwargs = {
-        'host': host,
-        'port': port_val,
-        'user': username,
-        'password': paassword,
-        'dbname': dbname,
-        'connect_timeout': 10,
-    }
-    
-    if host and ('supabase.co' in host or os.getenv('VERCEL_ENV')):
-        kwargs['sslmode'] = 'require'
-    
-    return psycopg2.connect(**kwargs)
+# SQLAlchemy 2.0 maneja URLs con dots en username sin problema.
+# connect_args={'sslmode': 'require'} para Supabase.
+connect_args = {}
+if 'supabase.co' in DATABASE_URL or os.getenv('VERCEL_ENV'):
+    connect_args['sslmode'] = 'require'
 
 engine = create_engine(
-    'postgresql://',
-    creator=_create_connection,
+    DATABASE_URL,
     pool_size=1,
     max_overflow=3,
     pool_pre_ping=True,
-    pool_recycle=300
+    pool_recycle=300,
+    connect_args=connect_args,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

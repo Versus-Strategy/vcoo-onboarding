@@ -3,7 +3,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import uuid
 from datetime import datetime
-from .db import Base
+from db import Base
 
 class VCOO(Base):
     __tablename__ = 'vcoos'

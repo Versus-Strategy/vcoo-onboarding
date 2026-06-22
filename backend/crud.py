@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from . import models
+import models
 from datetime import datetime, timedelta
 
 
@@ -196,7 +196,7 @@ def touch_agent(db: Session, agent_id: str):
 # ── Provision tokens ─────────────────────────────────────
 
 def create_provision_for_vcoo(db: Session, vcoo_id: str, expires_minutes: int = 10080):  # 1 week
-    from . import auth
+    import auth
     token = auth.create_provision_token(vcoo_id, expires_minutes)
     expires_at = datetime.utcnow() + timedelta(minutes=expires_minutes)
     pt = models.ProvisionToken(token=token, vcoo_id=vcoo_id, expires_at=expires_at)
@@ -280,7 +280,7 @@ def advance_onboarding_step(db: Session, vcoo_id: str, step_completed: str):
     st.completed = completed
 
     # Advance to next step
-    from .onboarding import get_next_step, get_steps_for_modules
+    from onboarding import get_next_step, get_steps_for_modules
     modules: list = list(st.modules or ["core"])
     next_step = get_next_step(completed, modules)
     if next_step:
@@ -407,7 +407,7 @@ def process_agent_result(
             return cmd, True, None, 201  # blocked, stop
         # Re-enqueue same command for retry (if not blocked)
         if st and st.status != "blocked":
-            from .onboarding import get_step_command
+            from onboarding import get_step_command
             cmd_name = get_step_command(step)
             create_command(db, agent_id=agent_id, command=cmd_name, step=step)
         return cmd, True, step, 201  # same step, retry pending
