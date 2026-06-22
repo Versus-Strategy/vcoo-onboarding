@@ -6,7 +6,7 @@ from . import models, crud, auth, schemas
 from .ws_routes import register_ws_routes
 import asyncio
 import json
-import time
+import os as _os
 
 app = FastAPI(title="VCOO Onboarding API")
 
@@ -32,6 +32,9 @@ async def startup():
     # register websocket routes
     register_ws_routes(app)
 
+
+# ── VCOO ──────────────────────────────────────────────────
+
 @app.post("/vcoo")
 def create_vcoo(db: Session = Depends(get_db)):
     vcoo = crud.create_vcoo(db)
@@ -42,26 +45,24 @@ def get_provision_token(vcoo_id: str, db: Session = Depends(get_db)):
     v = crud.get_vcoo(db, vcoo_id)
     if not v:
         raise HTTPException(status_code=404, detail="VCOO not found")
-    # create and store a provision token server-side
     token = crud.create_provision_for_vcoo(db, vcoo_id)
     install_cmd = f"curl -sSL https://example.com/install.sh | PROVISION_TOKEN=*** bash -"
     return {"token": token, "install_command": install_cmd}
 
+
+# ── Agent registration & auth ─────────────────────────────
+
 @app.post("/register")
 def register_agent(payload: dict, db: Session = Depends(get_db)):
-    # payload expected: {"token": "..", "info": {"hostname": ".."}}
     token = payload.get("token")
     info = payload.get("info", {})
-    # validate token server-side (single-use)
     vcoo_id = crud.validate_provision_token(db, token)
     if not vcoo_id:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
     v = crud.get_vcoo(db, vcoo_id)
     if not v:
         raise HTTPException(status_code=404, detail="VCOO not found")
-    # create agent record
     agent = crud.create_agent(db, vcoo_id=vcoo_id, info=json.dumps(info))
-    # generate agent_token and persist jti
     agent_token = auth.create_agent_token(str(agent.id))
     payload_token = auth.decode_agent_token(agent_token)
     jti = payload_token.get('jti') if payload_token else None
@@ -69,21 +70,21 @@ def register_agent(payload: dict, db: Session = Depends(get_db)):
         crud.set_agent_token_jti(db, str(agent.id), jti)
     return {"agent_id": str(agent.id), "vcoo_id": str(vcoo_id), "agent_token": agent_token}
 
+
+# ── Agent polling & logs ──────────────────────────────────
+
 @app.get("/agent/{agent_id}/poll")
 def agent_poll(agent_id: str, authorization: str = Header(None), db: Session = Depends(get_db)):
-    # Authorization: Bearer ***
     if not authorization or not authorization.lower().startswith('bearer '):
         raise HTTPException(status_code=401, detail="missing auth")
     token = authorization.split(None, 1)[1]
     payload = auth.decode_agent_token(token)
     if not payload or payload.get('agent_id') != agent_id:
         raise HTTPException(status_code=401, detail="invalid agent token")
-    # update last_seen
     agent = crud.get_agent(db, agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="agent not found")
     crud.touch_agent(db, agent_id)
-    # return pending commands for this agent
     pending = crud.get_pending_commands(db, agent_id)
     result = []
     for cmd in pending:
@@ -91,13 +92,24 @@ def agent_poll(agent_id: str, authorization: str = Header(None), db: Session = D
         crud.mark_command_sent(db, cmd.id)
     return {"commands": result}
 
+@app.post('/agent/{agent_id}/logs')
+def agent_logs(agent_id: str, payload: dict, db: Session = Depends(get_db)):
+    cmd_id = payload.get('cmd_id')
+    chunk = payload.get('chunk', '')
+    stream = payload.get('stream', 'stdout')
+    if not cmd_id:
+        raise HTTPException(status_code=400, detail='cmd_id missing')
+    crud.append_command_log(db, cmd_id, chunk, stream)
+    return {'status': 'ok'}
+
+
+# ── Commands ──────────────────────────────────────────────
+
 @app.post("/vcoo/{vcoo_id}/commands")
 def enqueue_command(vcoo_id: str, payload: dict, db: Session = Depends(get_db)):
-    # payload: {"command": "..."}
     command_text = payload.get("command")
     if not command_text:
         raise HTTPException(status_code=400, detail="command missing")
-    # find agent for vcoo
     agent = crud.get_agent_by_vcoo(db, vcoo_id)
     if not agent:
         raise HTTPException(status_code=404, detail="no agent connected for vcoo")
@@ -106,22 +118,12 @@ def enqueue_command(vcoo_id: str, payload: dict, db: Session = Depends(get_db)):
 
 @app.post("/vcoo/{vcoo_id}/commands/{cmd_id}/result")
 def command_result(vcoo_id: str, cmd_id: str, payload: dict, db: Session = Depends(get_db)):
-    # payload: {"status":"done","result":"..."}
     result = payload.get('result', '')
     crud.mark_command_done(db, cmd_id, result=result)
     return {"status": "ok"}
 
 
-@app.post('/agent/{agent_id}/logs')
-def agent_logs(agent_id: str, payload: dict, db: Session = Depends(get_db)):
-    # payload: {"cmd_id": "...", "chunk": "...", "stream": "stdout"}
-    cmd_id = payload.get('cmd_id')
-    chunk = payload.get('chunk', '')
-    stream = payload.get('stream', 'stdout')
-    if not cmd_id:
-        raise HTTPException(status_code=400, detail='cmd_id missing')
-    crud.append_command_log(db, cmd_id, chunk, stream)
-    return {'status': 'ok'}
+# ── State ─────────────────────────────────────────────────
 
 @app.get("/vcoo/{vcoo_id}/state")
 def get_state(vcoo_id: str, db: Session = Depends(get_db)):
@@ -132,3 +134,30 @@ def get_state(vcoo_id: str, db: Session = Depends(get_db)):
     state = v.to_dict()
     state["agent"] = agent.to_dict() if agent else None
     return state
+
+
+# ── Playbooks ──────────────────────────────────────────────
+
+_PLAYBOOKS_DIR = _os.path.join(_os.path.dirname(__file__), 'playbooks')
+
+
+@app.get('/playbooks')
+def list_playbooks():
+    """List available playbook names (safe scripts for agent execution)."""
+    if not _os.path.isdir(_PLAYBOOKS_DIR):
+        return {'playbooks': []}
+    names = sorted(
+        f for f in _os.listdir(_PLAYBOOKS_DIR)
+        if _os.path.isfile(_os.path.join(_PLAYBOOKS_DIR, f)) and not f.startswith('.')
+    )
+    return {'playbooks': names}
+
+
+@app.get('/playbooks/{name}')
+def get_playbook(name: str):
+    """Return a playbook script by name. Agents download and execute these."""
+    path = _os.path.join(_PLAYBOOKS_DIR, name)
+    if not _os.path.isfile(path):
+        raise HTTPException(status_code=404, detail='Playbook not found')
+    content = open(path).read()
+    return {'name': name, 'script': content}
