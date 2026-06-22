@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { enqueueCommand, listPlaybooks, getProvisionToken, regenerateToken, reactivateVCOO } from '../api/client';
+import { getProvisionToken, regenerateToken, reactivateVCOO } from '../api/client';
 import type { VCOOResult } from '../api/client';
 import { useRealtimeLogs } from '../hooks/useRealtime';
-import { Circle, CircleDot, Terminal, Play, Clock, Activity, Copy, Check, Key, Archive, RotateCcw, Trash2, ExternalLink, ChevronDown, Zap, Wifi } from 'lucide-react';
+import { Circle, CircleDot, Terminal, Clock, Activity, Copy, Check, Key, Archive, RotateCcw, Trash2, ExternalLink, ChevronDown, Zap, Wifi } from 'lucide-react';
 
 interface Props {
   vcoos: VCOOResult[];
@@ -37,9 +37,6 @@ function VCOOCard({
   onDelete: (id: string) => void;
   onReactivate: (id: string) => void;
 }) {
-  const [command, setCommand] = useState('');
-  const [sending, setSending] = useState(false);
-  const [playbooks, setPlaybooks] = useState<string[]>([]);
   const [token, setToken] = useState<string | null>(vcoo.active_token);
   const [copiedCmd, setCopiedCmd] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
@@ -58,12 +55,8 @@ function VCOOCard({
   const tokenExpiresSoon = isActive && vcoo.token_expires_at && !tokenExpired &&
     (new Date(vcoo.token_expires_at).getTime() - Date.now()) < 86400000; // < 24h
 
-  const loadPlaybooks = async () => {
-    try { const data = await listPlaybooks(); setPlaybooks(data.playbooks || []); } catch {}
-  };
-
   const handleToggle = () => {
-    if (!expanded) { loadPlaybooks(); if (!token && isActive) loadToken(); }
+    if (!expanded && !token && isActive) loadToken();
     onToggle();
   };
 
@@ -102,13 +95,6 @@ function VCOOCard({
   const handleCopyUrl = () => {
     navigator.clipboard.writeText(setupUrl);
     setCopiedUrl(true); setTimeout(() => setCopiedUrl(false), 2000);
-  };
-  const handleSend = async () => {
-    if (!command.trim()) return;
-    setSending(true);
-    try { await enqueueCommand(vcoo.id, command.trim()); setCommand(''); }
-    catch (e: any) { alert('Error: ' + e.message); }
-    finally { setSending(false); }
   };
 
 
@@ -232,34 +218,6 @@ function VCOOCard({
           {/* Load token button if no token yet */}
           {isActive && !token && (
             <button onClick={loadToken} className="text-xs text-[var(--vs-purple)] hover:opacity-80 transition">Cargar token...</button>
-          )}
-
-          {/* Command input */}
-          {isActive && (
-            <div>
-              <label className="text-xs text-(--vs-muted) block mb-1.5 flex items-center gap-1"><Terminal className="w-3 h-3" /> Enviar comando</label>
-              <div className="flex gap-2">
-                <input type="text" value={command} onChange={(e) => setCommand(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                  placeholder="ej: playbook:system-info.sh"
-                  className="flex-1 bg-(--vs-input-bg) border border-(--vs-input-border) rounded-lg px-3 py-2 text-sm text-(--vs-heading) focus:outline-none focus:border-[var(--vs-purple)] font-mono" />
-                <button onClick={handleSend} disabled={sending || !command.trim()}
-                  className="bg-[var(--vs-purple)] hover:bg-[var(--vs-purple-hover)] disabled:opacity-40 text-white px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1.5 shrink-0">
-                  <Play className="w-3.5 h-3.5" /> {sending ? '...' : 'Run'}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Playbooks */}
-          {playbooks.length > 0 && isActive && (
-            <div className="flex flex-wrap gap-2">
-              {playbooks.map(name => (
-                <button key={name} onClick={() => setCommand(`playbook:${name}`)}
-                  className="text-xs px-2.5 py-1 rounded-md transition border bg-(--vs-playbook-bg) border-(--vs-playbook-border) text-(--vs-body) hover:text-[var(--vs-purple)] hover:border-[var(--vs-purple)]/30">
-                  {name}
-                </button>
-              ))}
-            </div>
           )}
 
           {/* Logs */}

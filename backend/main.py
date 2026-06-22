@@ -310,10 +310,18 @@ def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session
                 print(f"[oauth] Token exchange failed: {e}", file=sys.stderr)
                 # Continue — store the code as fallback so the agent can retry
 
+    # Map service to the correct onboarding step and advance it NOW
+    step_map = {"google": "google-oauth", "trello": "trello-setup"}
+    mapped_step = step_map.get(service, "save-creds")
+
+    # Advance onboarding step immediately (don't wait for agent)
+    if vcoo_id:
+        try:
+            crud.advance_onboarding_step(db, vcoo_id, mapped_step)
+        except Exception:
+            pass  # best-effort — command queue is the fallback
+
     if agent:
-        # Map service to the correct onboarding step
-        step_map = {"google": "google-oauth", "trello": "trello-setup"}
-        mapped_step = step_map.get(service, "save-creds")
         creds_data = {
             "service": service,
             "code": code,

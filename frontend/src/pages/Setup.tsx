@@ -38,7 +38,7 @@ const STEP_DEFS: Record<string, StepDef> = {
       'Abre el enlace de autorización de Google OAuth.',
       'Inicia sesión con tu cuenta de Google Workspace.',
       'Concede los permisos solicitados.',
-      'Haz clic en "Verificar" para comprobar la conexión.',
+      'La verificación se hará automáticamente al completar la autorización.',
     ],
   },
   'gmail-setup': {
