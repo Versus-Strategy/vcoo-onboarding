@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.vcoo-agent/
+agent.token
+master.key
+.env
+/tmp/
