@@ -1,455 +1,288 @@
 #!/usr/bin/env python3
 """
-VCOO Agent — HTTP polling client with Rich TUI.
+VCOO Agent v2 — Polling client with COMMAND_MAP, ACK, heartbeat, finalize.
 
-Usage: python3 agent_http.py <control_plane_base_url> <provision_token>
+Usage: python3 agent_http.py <control_plane_url> <provision_token>
+   or: PROVISION_TOKEN=*** python3 agent_http.py <control_plane_url>
 
-Features:
-- POST /register with provision_token → agent_id, vcoo_id, agent_token
-- Poll GET /agent/{agent_id}/poll every 5s
-- Execute commands with sandbox (timeout, drop-privileges, whitelist)
-- Playbook support: downloads script from /playbooks/{name} and executes
-- Stream stdout/stderr to POST /agent/{agent_id}/logs
-- Rich TUI: live status table + scrollable log panel
-
-Environment:
-- POLL_INTERVAL  — seconds between polls (default 5)
-- CMD_TIMEOUT    — max command execution seconds (default 60)
-- SAFE_MODE      — if '1', only whitelisted commands/playbooks allowed (default 1)
-- NO_TUI         — if '1', plain text output (no rich)
+Only executes commands defined in COMMAND_MAP.
+Reports results with ACK and retry (5s/15s/30s backoff).
+Sends heartbeat every 60s.
+Cleans up and self-deletes on finalize.
 """
 
-import sys, time, os, pwd, subprocess, tempfile, shlex
-from datetime import datetime, timezone
-
+import sys, os, time, json, subprocess, random
 import requests
 
+# ── Config ──
 BASE = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("CONTROL_PLANE", "http://localhost:8000")
 PROV = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("PROVISION_TOKEN", "")
-
-POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "5"))
+POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "15"))
 CMD_TIMEOUT = int(os.environ.get("CMD_TIMEOUT", "60"))
-SAFE_MODE = os.environ.get("SAFE_MODE", "1") == "1"
-NO_TUI = os.environ.get("NO_TUI", "0") == "1"
+STORAGE_DIR = os.path.expanduser("~/.vcoo-agent")
 
-ALLOWED_CMDS = set(
-    c.strip()
-    for c in os.environ.get(
-        "ALLOWED_CMDS", "echo,ls,pwd,cat,whoami,date,uname,df,free"
-    ).split(",")
-)
+# ── COMMAND_MAP ──
+COMMAND_MAP = {
+    "verify-bootstrap": ["python3", os.path.expanduser("~/.hermes/scripts/vcoo/vcoo-bootstrap.py")],
+    "verify-google":    ["python3", os.path.expanduser("~/.hermes/scripts/vcoo/vcoo-google.py"), "drive", "list"],
+    "verify-trello":    ["python3", os.path.expanduser("~/.hermes/scripts/vcoo/vcoo-trello.py"), "boards"],
+    "verify-email":     ["python3", os.path.expanduser("~/.hermes/scripts/vcoo/vcoo-email.py"), "list", "3"],
+    "verify-github":    ["gh", "repo", "list", "--limit", "3"],
+    "verify-vercel":    ["vercel", "projects", "ls", "--limit", "3"],
+    "verify-supabase":  ["supabase", "status"],
+    "save-creds":       None,
+    "finalize":         None,
+}
 
-# ── TUI (rich) ──────────────────────────────────────────
-tui = None
-if not NO_TUI:
-    try:
-        from rich.console import Console
-        from rich.table import Table
-        from rich.live import Live
-        from rich.panel import Panel
-        from rich.layout import Layout
-        from rich.text import Text
-        from rich import box
-
-        console = Console()
-
-        class AgentTUI:
-            def __init__(self):
-                self.agent_id = "—"
-                self.vcoo_id = "—"
-                self.status = "connecting"
-                self.cmds_done = 0
-                self.cmds_blocked = 0
-                self.uptime_start = time.time()
-                self.log_lines: list[str] = []
-                self.live: Live | None = None
-
-            def set_meta(self, agent_id, vcoo_id):
-                self.agent_id = agent_id
-                self.vcoo_id = vcoo_id
-                self.status = "polling"
-
-            def log(self, text: str, style: str = ""):
-                ts = datetime.now().strftime("%H:%M:%S")
-                line = f"[dim]{ts}[/dim] {text}"
-                if style:
-                    line = f"[{style}]{line}[/{style}]"
-                self.log_lines.append(line)
-                if len(self.log_lines) > 200:
-                    self.log_lines = self.log_lines[-100:]
-
-            def build(self):
-                uptime = int(time.time() - self.uptime_start)
-                m, s = divmod(uptime, 60)
-                h, m = divmod(m, 60)
-
-                table = Table(box=box.ROUNDED, expand=True, show_header=False)
-                table.add_column("k", style="dim cyan", width=14)
-                table.add_column("v", style="white")
-                table.add_row("Agent ID", self.agent_id[:20] + "…")
-                table.add_row("VCOO ID", self.vcoo_id[:20] + "…")
-                table.add_row("Status", self.status)
-                table.add_row("Uptime", f"{h:02d}:{m:02d}:{s:02d}")
-                table.add_row("Commands OK", str(self.cmds_done))
-                table.add_row("Blocked", str(self.cmds_blocked))
-
-                log_text = Text()
-                for line in self.log_lines[-15:]:
-                    log_text.append(line + "\n")
-
-                layout = Layout()
-                layout.split_column(
-                    Layout(Panel(table, title="[bold]VCOO Agent[/bold]", border_style="cyan"), size=10),
-                    Layout(Panel(log_text, title="Log", border_style="dim white")),
-                )
-                return layout
-
-            def __enter__(self):
-                self.live = Live(self.build(), console=console, refresh_per_second=4, screen=True)
-                self.live.__enter__()
-                return self
-
-            def __exit__(self, *args):
-                if self.live:
-                    self.live.__exit__(*args)
-
-            def update(self):
-                if self.live:
-                    self.live.update(self.build())
-
-        tui = AgentTUI()
-    except ImportError:
-        pass
-
-# ── Session ─────────────────────────────────────────────
 session = requests.Session()
 
 
-def drop_privileges():
-    if os.geteuid() == 0:
-        try:
-            nobody = pwd.getpwnam("nobody")
-            os.setgid(nobody.pw_gid)
-            os.setuid(nobody.pw_uid)
-            msg = "Dropped privileges to nobody"
-            if tui:
-                tui.log(msg, "dim yellow")
-            else:
-                print(msg)
-        except Exception as e:
-            msg = f"WARN: Could not drop privileges: {e}"
-            if tui:
-                tui.log(msg, "yellow")
-            else:
-                print(msg)
+# ── Helpers ──
+
+def log(msg):
+    ts = time.strftime("%H:%M:%S")
+    print(f"[{ts}] {msg}", flush=True)
 
 
-def send_log(agent_id, cmd_id, chunk, stream="stdout"):
-    try:
-        session.post(
-            f"{BASE}/agent/{agent_id}/logs",
-            json={"cmd_id": cmd_id, "chunk": chunk, "stream": stream},
-            timeout=5,
-        )
-    except Exception as e:
-        msg = f"[WARN] Failed to send log: {e}"
-        if tui:
-            tui.log(msg, "red")
-        else:
-            print(msg)
+def jitter():
+    return random.uniform(0, POLL_INTERVAL * 0.3)
 
 
-def send_result(vcoo_id, cmd_id, summary):
-    try:
-        session.post(
-            f"{BASE}/vcoo/{vcoo_id}/commands/{cmd_id}/result",
-            json={"result": summary},
-            timeout=5,
-        )
-    except Exception as e:
-        msg = f"[WARN] Failed to send result: {e}"
-        if tui:
-            tui.log(msg, "red")
-        else:
-            print(msg)
+# ── Persistencia ──
+
+def save_agent(agent_id, agent_token, vcoo_id):
+    os.makedirs(STORAGE_DIR, exist_ok=True)
+    with open(os.path.join(STORAGE_DIR, "agent.json"), "w") as f:
+        json.dump({"agent_id": agent_id, "agent_token": agent_token, "vcoo_id": vcoo_id}, f)
+    log("Agente guardado en " + STORAGE_DIR)
 
 
-def is_allowed(command: str) -> bool:
-    if not SAFE_MODE:
-        return True
-    # Playbooks are always allowed in safe mode
-    if command.startswith("playbook:"):
-        return True
-    try:
-        tokens = shlex.split(command)
-    except ValueError:
-        return False
-    if not tokens:
-        return False
-    base_cmd = os.path.basename(tokens[0])
-    return base_cmd in ALLOWED_CMDS
+def load_agent():
+    path = os.path.join(STORAGE_DIR, "agent.json")
+    if os.path.isfile(path):
+        with open(path) as f:
+            return json.load(f)
+    return None
 
 
-def resolve_playbook(command: str) -> str | None:
-    """If command is 'playbook:<name>', download and return the script content."""
-    if not command.startswith("playbook:"):
-        return None
-    name = command.split(":", 1)[1].strip()
-    if not name:
-        return None
-    try:
-        resp = session.get(f"{BASE}/playbooks/{name}", timeout=10)
-        if resp.status_code != 200:
-            msg = f"Playbook '{name}' not found (HTTP {resp.status_code})"
-            if tui:
-                tui.log(msg, "red")
-            else:
-                print(msg)
-            return None
-        data = resp.json()
-        script = data.get("script", "")
-        if not script:
-            msg = f"Playbook '{name}' is empty"
-            if tui:
-                tui.log(msg, "red")
-            else:
-                print(msg)
-            return None
-        msg = f"Downloaded playbook '{name}' ({len(script)} bytes)"
-        if tui:
-            tui.log(msg, "green")
-        else:
-            print(msg)
-        return script
-    except Exception as e:
-        msg = f"Failed to download playbook '{name}': {e}"
-        if tui:
-            tui.log(msg, "red")
-        else:
-            print(msg)
-        return None
-
-
-def execute_command(command: str, agent_id: str, cmd_id: str) -> str:
-    if not is_allowed(command):
-        summary = f"BLOCKED: '{command}' not in allowed commands"
-        if tui:
-            tui.log(summary, "red")
-        else:
-            print(summary)
-        send_log(agent_id, cmd_id, summary + "\n", "stderr")
-        if tui:
-            tui.cmds_blocked += 1
-        return summary
-
-    # Resolve playbook
-    script = resolve_playbook(command)
-    if script is not None:
-        if script == "":  # empty means failed to download
-            summary = f"FAILED: could not download playbook from '{command}'"
-            send_log(agent_id, cmd_id, summary + "\n", "stderr")
-            return summary
-        # Write playbook to temp file and execute
-        fd, tmpath = tempfile.mkstemp(prefix="vcoo-playbook-", suffix=".sh")
-        with os.fdopen(fd, "w") as f:
-            f.write(script)
-        os.chmod(tmpath, 0o700)
-        actual_cmd = f"bash {shlex.quote(tmpath)}"
-        cleanup = tmpath
-    else:
-        actual_cmd = command
-        cleanup = None
-
-    label = command if len(command) < 60 else command[:57] + "..."
-    if tui:
-        tui.log(f"Exec: {label}", "cyan")
-    else:
-        print(f"Executing: {label}")
-
-    try:
-        proc = subprocess.Popen(
-            actual_cmd,
-            shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            preexec_fn=os.setsid,
-        )
-
-        def stream_and_send(pipe, stream_name, style):
-            if pipe:
-                for line in pipe:
-                    stripped = line.rstrip()
-                    if tui:
-                        tui.log(f"  {stripped}", style)
-                    else:
-                        print(f"  {stripped}")
-                    send_log(agent_id, cmd_id, line, stream_name)
-
-        # Stream stdout and stderr
-        import threading
-
-        t_stdout = threading.Thread(target=stream_and_send, args=(proc.stdout, "stdout", "white"))
-        t_stderr = threading.Thread(target=stream_and_send, args=(proc.stderr, "stderr", "red"))
-        t_stdout.start()
-        t_stderr.start()
-
-        try:
-            exit_code = proc.wait(timeout=CMD_TIMEOUT)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait()
-            summary = f"TIMEOUT ({CMD_TIMEOUT}s): {label}"
-            send_log(agent_id, cmd_id, summary + "\n", "stderr")
-            if cleanup:
-                os.unlink(cleanup)
-            return summary
-
-        t_stdout.join(timeout=2)
-        t_stderr.join(timeout=2)
-
-        if exit_code == 0:
-            summary = f"OK (exit 0)"
-        else:
-            summary = f"FAILED (exit {exit_code})"
-
-        if tui:
-            tui.cmds_done += 1
-        return summary
-
-    except Exception as e:
-        summary = f"ERROR: {e}"
-        send_log(agent_id, cmd_id, summary + "\n", "stderr")
-        if tui:
-            tui.log(summary, "red")
-        return summary
-    finally:
-        if cleanup:
-            try:
-                os.unlink(cleanup)
-            except OSError:
-                pass
-
+# ── Registro ──
 
 def register():
     try:
         resp = session.post(
-            f"{BASE}/register",
+            BASE + "/register",
             json={"token": PROV, "info": {"hostname": os.uname().nodename}},
-            timeout=10,
+            timeout=10
         )
     except Exception as e:
-        msg = f"Registration failed: {e}"
-        if tui:
-            tui.log(msg, "red")
-        else:
-            print(msg)
+        log("Error de registro: " + str(e))
         return None
-
     if resp.status_code != 200:
-        msg = f"Registration failed: HTTP {resp.status_code} {resp.text}"
-        if tui:
-            tui.log(msg, "red")
-        else:
-            print(msg)
+        log("Registro fallido: HTTP " + str(resp.status_code) + " " + resp.text[:200])
         return None
-
     j = resp.json()
-    aid = j.get("agent_id", "?")
-    vid = j.get("vcoo_id", "?")
-    if tui:
-        tui.log(f"Registered as agent {aid[:20]}…", "green")
-        tui.set_meta(aid, vid)
-    else:
-        print(f"Registered agent_id {aid}")
+    log("Registrado como agente " + j.get("agent_id", "?")[:20])
     return j
 
 
+# ── Ejecucion ──
+
+def execute_command(cmd):
+    """Ejecuta un comando del COMMAND_MAP y devuelve resultado."""
+    command = cmd.get("command", "")
+    step = cmd.get("step", "")
+    cmd_id = cmd.get("cmd_id", "")
+
+    args = COMMAND_MAP.get(command)
+    if args is None:
+        log("Ignorado: " + command + " (no esta en COMMAND_MAP)")
+        return {"exit_code": -1, "output": "Comando no soportado: " + command, "step": step, "cmd_id": cmd_id}
+
+    log("Ejecutando: " + command + " -> " + " ".join(args))
+    try:
+        proc = subprocess.run(args, capture_output=True, text=True, timeout=CMD_TIMEOUT)
+        output = (proc.stdout + proc.stderr).strip() or "(sin salida)"
+        return {"exit_code": proc.returncode, "output": output, "step": step, "cmd_id": cmd_id}
+    except subprocess.TimeoutExpired:
+        return {"exit_code": -1, "output": "TIMEOUT (" + str(CMD_TIMEOUT) + "s)", "step": step, "cmd_id": cmd_id}
+    except FileNotFoundError:
+        return {"exit_code": -1, "output": "Ejecutable no encontrado: " + args[0], "step": step, "cmd_id": cmd_id}
+    except Exception as e:
+        return {"exit_code": -1, "output": "Error: " + str(e), "step": step, "cmd_id": cmd_id}
+
+
+# ── Reporte con ACK ──
+
+def report_with_retry(agent_id, agent_token, result, max_retries=3):
+    """Reporta resultado con backoff 5s/15s/30s hasta recibir ACK."""
+    payload = {
+        "cmd_id": result["cmd_id"],
+        "step": result.get("step", ""),
+        "status": "ok" if result["exit_code"] == 0 else "error",
+        "output": result["output"][:5000]
+    }
+    headers = {"Authorization": "Bearer " + agent_token}
+
+    for attempt, delay in enumerate([5, 15, 30]):
+        try:
+            resp = session.post(
+                BASE + "/agent/" + agent_id + "/result",
+                json=payload, headers=headers, timeout=10
+            )
+            if resp.status_code in (201, 409):
+                log("ACK recibido para " + result["cmd_id"][:12])
+                return True
+            if resp.status_code == 404:
+                log("Comando " + result["cmd_id"][:12] + " no encontrado, descartando")
+                return True
+            log("Reintento " + str(attempt+1) + "/" + str(max_retries) + ": HTTP " + str(resp.status_code))
+        except Exception as e:
+            log("Reintento " + str(attempt+1) + "/" + str(max_retries) + ": " + str(e))
+        if attempt < max_retries - 1:
+            time.sleep(delay)
+    log("FALLO: No se pudo reportar " + result["cmd_id"][:12] + " tras " + str(max_retries) + " intentos")
+    return False
+
+
+# ── Heartbeat ──
+
+def heartbeat(agent_id, vcoo_id, agent_token):
+    try:
+        session.post(
+            BASE + "/agent/heartbeat",
+            json={"agent_id": agent_id, "vcoo_id": vcoo_id},
+            headers={"Authorization": "Bearer " + agent_token},
+            timeout=5
+        )
+    except:
+        pass  # heartbeat failures are silent
+
+
+# ── Finalize ──
+
+def finalize(vcoo_id):
+    """Cleanup post-onboarding y autoborrado."""
+    log("Finalizando onboarding...")
+
+    # 1. Arrancar Hermes gateway
+    try:
+        subprocess.run(["systemctl", "--user", "start", "hermes-gateway"], capture_output=True, timeout=30)
+        log("Hermes gateway iniciado via systemctl")
+    except:
+        try:
+            subprocess.Popen(["hermes", "gateway", "run"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            log("Hermes gateway iniciado via CLI")
+        except Exception as e:
+            log("ADVERTENCIA: No se pudo iniciar Hermes gateway: " + str(e))
+
+    # 2. Limpiar credenciales
+    if os.path.isdir(STORAGE_DIR):
+        for f in os.listdir(STORAGE_DIR):
+            fp = os.path.join(STORAGE_DIR, f)
+            try:
+                os.remove(fp)
+            except OSError:
+                pass
+        try:
+            os.rmdir(STORAGE_DIR)
+        except OSError:
+            pass
+        log("Credenciales de provision eliminadas")
+
+    # 3. Autoborrado
+    script_path = os.path.abspath(__file__)
+    log("Eliminando " + script_path)
+    try:
+        os.remove(script_path)
+        log("agent_http.py eliminado. Onboarding completado.")
+    except OSError as e:
+        log("No se pudo autoborrar: " + str(e))
+
+
+# ── Bucle principal ──
+
 def poll_loop(agent_id, agent_token, vcoo_id):
-    headers = {"Authorization": f"Bearer {agent_token}"}
-    if tui:
-        tui.log(f"Polling {BASE} every {POLL_INTERVAL}s", "cyan")
-    else:
-        print(f"Poll loop started (interval={POLL_INTERVAL}s, safe_mode={SAFE_MODE})")
+    headers = {"Authorization": "Bearer " + agent_token}
+    last_heartbeat = 0
+    log("Polling cada " + str(POLL_INTERVAL) + "s (+jitter) en " + BASE)
 
     while True:
+        now = time.time()
+        if now - last_heartbeat >= 60:
+            heartbeat(agent_id, vcoo_id, agent_token)
+            last_heartbeat = now
+
         try:
-            r = session.get(f"{BASE}/agent/{agent_id}/poll", headers=headers, timeout=10)
+            r = session.get(BASE + "/agent/" + agent_id + "/poll", headers=headers, timeout=10)
         except Exception as e:
-            if tui:
-                tui.log(f"Poll error: {e}", "yellow")
-            else:
-                print(f"Poll error: {e}")
-            time.sleep(POLL_INTERVAL)
+            log("Error de poll: " + str(e))
+            time.sleep(POLL_INTERVAL + jitter())
             continue
 
         if r.status_code == 200:
-            j = r.json()
-            cmds = j.get("commands", [])
-            for c in cmds:
-                cmd_id = c.get("cmd_id")
-                command = c.get("command")
-                summary = execute_command(command, agent_id, cmd_id)
-                send_result(vcoo_id, cmd_id, summary)
-                if tui:
-                    tui.log(f"Done: {summary}", "green" if "OK" in summary else "yellow")
-                else:
-                    ts = datetime.now(timezone.utc).isoformat()
-                    print(f"{ts} DONE {cmd_id}: {summary}")
+            cmds = r.json().get("commands", [])
+            for cmd in cmds:
+                command = cmd.get("command", "")
+
+                # Manejar comandos especiales
+                if command == "finalize":
+                    log("Recibido comando finalize")
+                    report_with_retry(agent_id, agent_token, {
+                        "cmd_id": cmd.get("cmd_id", ""),
+                        "step": "finalize",
+                        "exit_code": 0,
+                        "output": "Onboarding completado"
+                    })
+                    finalize(vcoo_id)
+                    sys.exit(0)
+
+                if command == "save-creds":
+                    log("save-creds manejado por el frontend, ignorando")
+                    continue
+
+                # Ejecutar y reportar
+                result = execute_command(cmd)
+                report_with_retry(agent_id, agent_token, result)
+
         elif r.status_code == 401:
-            msg = "Auth expired, exiting"
-            if tui:
-                tui.log(msg, "red")
-            else:
-                print(msg)
+            log("Token expirado, saliendo")
             break
-        else:
-            if tui:
-                tui.log(f"Poll HTTP {r.status_code}", "dim")
-            else:
-                print(f"poll returned {r.status_code}")
 
-        if tui:
-            tui.update()
-        time.sleep(POLL_INTERVAL)
+        time.sleep(POLL_INTERVAL + jitter())
 
+
+# ── Entry point ──
 
 def main():
     if not PROV:
-        print("Provision token required", file=sys.stderr)
-        print("Usage: python3 agent_http.py <control_plane_url> <provision_token>", file=sys.stderr)
-        print("   or: PROVISION_TOKEN=*** python3 agent_http.py <control_plane_url>", file=sys.stderr)
+        print("PROVISION_TOKEN requerido", file=sys.stderr)
+        print("Uso: python3 agent_http.py <url> <token>", file=sys.stderr)
         sys.exit(2)
 
-    drop_privileges()
+    log("VCOO Agent v2 iniciando...")
 
-    if tui:
-        with tui:
-            tui.log("Starting VCOO Agent…", "cyan bold")
-            tui.update()
-            meta = register()
-            if not meta:
-                tui.log("FATAL: Registration failed", "red bold")
-                time.sleep(2)
-                sys.exit(1)
-            agent_id = meta.get("agent_id")
-            agent_token = meta.get("agent_token")
-            vcoo_id = meta.get("vcoo_id")
-            try:
-                poll_loop(agent_id, agent_token, vcoo_id)
-            except KeyboardInterrupt:
-                tui.log("Interrupted, exiting", "yellow")
+    # Cargar estado persistente o registrar
+    loaded = load_agent()
+    if loaded:
+        agent_id = loaded["agent_id"]
+        agent_token = loaded["agent_token"]
+        vcoo_id = loaded["vcoo_id"]
+        log("Estado restaurado: agente " + agent_id[:20])
     else:
         meta = register()
         if not meta:
+            log("FATAL: No se pudo registrar")
             sys.exit(1)
-        agent_id = meta.get("agent_id")
-        agent_token = meta.get("agent_token")
-        vcoo_id = meta.get("vcoo_id")
-        try:
-            poll_loop(agent_id, agent_token, vcoo_id)
-        except KeyboardInterrupt:
-            print("Interrupted, exiting")
+        agent_id = meta["agent_id"]
+        agent_token = meta["agent_token"]
+        vcoo_id = meta["vcoo_id"]
+        save_agent(agent_id, agent_token, vcoo_id)
+
+    try:
+        poll_loop(agent_id, agent_token, vcoo_id)
+    except KeyboardInterrupt:
+        log("Interrumpido por el usuario")
+        sys.exit(0)
 
 
 if __name__ == "__main__":

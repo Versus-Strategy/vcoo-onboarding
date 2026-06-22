@@ -59,6 +59,13 @@ def decode_agent_token(token: str):
     except Exception:
         return None
 
+# Dashboard password verification (dev: hardcoded 'versus')
+_DASHBOARD_PASSWORD = os.getenv('DASHBOARD_PASSWORD', 'versus')
+
+def verify_dashboard_password(password: str) -> bool:
+    """Simple password check for dashboard access. Dev default: 'versus'."""
+    return password == _DASHBOARD_PASSWORD
+
 # Minimal operator verification for WS UI
 def verify_operator(authorization: str = Header(None)) -> str:
     """FastAPI dependency to verify an operator token in Authorization header.

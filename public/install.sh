@@ -6,7 +6,7 @@
 set -e
 
 CONTROL_PLANE="${CONTROL_PLANE:-https://vcoo-onboarding.vercel.app}"
-AGENT_URL="${AGENT_URL:-https://frontend-ivory-seven-d0aw1wzkae.vercel.app/agent_http.py}"
+AGENT_URL="${AGENT_URL:-https://vcoo-onboarding.vercel.app/agent_http.py}"
 AGENT_SHA256="${AGENT_SHA256:-SKIP}"
 
 echo "=== VCOO Agent Installer ==="

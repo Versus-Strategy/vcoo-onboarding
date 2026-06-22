@@ -1,22 +1,114 @@
+@import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700;900&family=Source+Code+Pro:wght@400;500;700&display=swap');
 @import "tailwindcss";
 
-/* VCOO Dark Theme */
+/* ── VERSUS Strategy Brand Theme ── */
+
+/* Dark mode (default) */
 :root {
+  --vs-purple: #5b4af7;
+  --vs-purple-hover: #4a3ad4;
+  --vs-bg: #0a0a0f;
+  --vs-bg-card: #0f0f14;
+  --vs-border: #1e1e2e;
+  --vs-heading: #f1f1f6;
+  --vs-body: #8b8b9b;
+  --vs-muted: #5a5a6e;
+  --vs-input-bg: #0a0a0f;
+  --vs-input-border: #1e1e2e;
+  --vs-code-bg: #08080c;
+  --vs-code-text: #d4d4e0;
+  --vs-hover: rgba(255,255,255,0.02);
+  --vs-btn-secondary: #161622;
+  --vs-btn-secondary-hover: #222233;
+  --vs-btn-secondary-text: #8b8b9b;
+  --vs-shadow: none;
+  --vs-token-bg: rgba(91,74,247,0.06);
+  --vs-token-border: rgba(91,74,247,0.15);
+  --vs-playbook-bg: #0a0a0f;
+  --vs-playbook-border: #1e1e2e;
+  --vs-stat-bg: #0f0f14;
+  --vs-stat-border: #1e1e2e;
+  --vs-stat-active-bg: rgba(91,74,247,0.08);
+  --vs-stat-active-border: rgba(91,74,247,0.2);
+  --vs-red-bg: rgba(239,68,68,0.08);
+  --vs-red-border: rgba(239,68,68,0.15);
+  --vs-red-text: #f87171;
+  --vs-emerald-bg: rgba(5,150,105,0.08);
+  --vs-emerald-text: #34d399;
+  --vs-warning-bg: rgba(245,158,11,0.08);
+  --vs-warning-border: rgba(245,158,11,0.15);
+  --vs-warning-text: #fbbf24;
   color-scheme: dark;
 }
 
-body {
-  @apply bg-slate-950 text-slate-100 antialiased;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+/* Light mode */
+html.light {
+  --vs-purple: #533afd;
+  --vs-purple-hover: #4434d4;
+  --vs-bg: #f8fafd;
+  --vs-bg-card: #ffffff;
+  --vs-border: #e2e8f0;
+  --vs-heading: #0f172a;
+  --vs-body: #475569;
+  --vs-muted: #94a3b8;
+  --vs-input-bg: #ffffff;
+  --vs-input-border: #e2e8f0;
+  --vs-code-bg: #f1f5f9;
+  --vs-code-text: #334155;
+  --vs-hover: rgba(0,0,0,0.02);
+  --vs-btn-secondary: #f1f5f9;
+  --vs-btn-secondary-hover: #e2e8f0;
+  --vs-btn-secondary-text: #64748b;
+  --vs-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  --vs-token-bg: #f5f3ff;
+  --vs-token-border: #ddd6fe;
+  --vs-playbook-bg: #f8fafd;
+  --vs-playbook-border: #e2e8f0;
+  --vs-stat-bg: #ffffff;
+  --vs-stat-border: #e2e8f0;
+  --vs-stat-active-bg: #f5f3ff;
+  --vs-stat-active-border: #c4b5fd;
+  --vs-red-bg: #fef2f2;
+  --vs-red-border: #fecaca;
+  --vs-red-text: #dc2626;
+  --vs-emerald-bg: rgba(5,150,105,0.05);
+  --vs-emerald-text: #059669;
+  --vs-warning-bg: #fffbeb;
+  --vs-warning-border: #fde68a;
+  --vs-warning-text: #d97706;
+  color-scheme: light;
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #0f172a; }
-::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #475569; }
+html.dark { color-scheme: dark; }
 
-/* Console log styling */
-.log-stdout { @apply text-slate-300; }
-.log-stderr { @apply text-red-400; }
-.log-system { @apply text-amber-400; }
+body {
+  margin: 0;
+  background-color: var(--vs-bg);
+  color: var(--vs-body);
+  font-family: 'Source Sans 3', 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.versus-logo-text {
+  font-family: 'Source Sans 3', sans-serif;
+  font-weight: 900;
+  letter-spacing: 0.25em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+.versus-logo-sub {
+  font-family: 'Source Sans 3', sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--vs-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--vs-muted); }
+
+code, pre, .font-mono {
+  font-family: 'Source Code Pro', 'JetBrains Mono', monospace;
+}
