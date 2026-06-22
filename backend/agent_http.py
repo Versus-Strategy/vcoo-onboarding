@@ -13,7 +13,7 @@ Usage: python3 agent_http.py <control_plane_url> <provision_token>
 - Cleans up and self-deletes on finalize.
 """
 
-import sys, os, time, json, subprocess, random, select
+import sys, os, time, json, subprocess, random, select, threading
 
 try:
     import requests
@@ -63,11 +63,28 @@ TUI = {
     "vcoo_id": "",
     "status": "Conectando...",
     "step": "",
+    "step_label": "",
+    "step_instructions": [],
+    "auth_url": "",
     "progress_done": 0,
     "progress_total": 0,
     "last_heartbeat": "",
     "last_poll": "",
     "log": [],
+    "debug": os.environ.get("VCOO_DEBUG", "") == "1",
+}
+
+# ── Step labels & instructions ──
+STEP_INFO = {
+    "bootstrap":      ("Instalación base",        ["Ejecuta el one-liner en tu VPS", "El agente verificará la instalación"]),
+    "google-oauth":   ("Google Workspace",         ["Abre el enlace de autorización", "Inicia sesión y concede permisos"]),
+    "gmail-setup":    ("Gmail",                    ["Incluido en la autorización de Google", "Se completa automáticamente"]),
+    "trello-setup":   ("Trello",                   ["Abre el enlace de autorización de Trello", "Concede permisos de lectura/escritura"]),
+    "github-setup":   ("GitHub",                   ["Ejecuta: gh auth login", "El agente verificará la conexión"]),
+    "vercel-setup":   ("Vercel",                   ["Ejecuta: vercel login", "El agente verificará la conexión"]),
+    "supabase-setup": ("Supabase",                 ["Ejecuta: supabase login", "El agente verificará la conexión"]),
+    "finalize":       ("Finalizar",                ["Todos los pasos completados", "El agente limpiará y MAGI estará lista"]),
+    "done":           ("Completado",               ["¡MAGI está lista!", "Pulsa Ctrl+C para salir"]),
 }
 
 
@@ -110,15 +127,23 @@ def save_credentials(service, data):
 
     if service == "google":
         token_path = os.path.join(hermes_dir, "google_token.json")
+        # Use real tokens from backend exchange (preferred) or fall back to raw code
+        access_token = data.get("access_token", "")
+        refresh_token = data.get("refresh_token", "")
+        code = data.get("code", "")
         token_data = {
-            "access_token": data.get("access_token", ""),
-            "refresh_token": data.get("refresh_token", ""),
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "code": code if not access_token else "",  # keep code only if exchange failed
             "token_type": "Bearer",
             "scope": "https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/gmail.readonly",
         }
         with open(token_path, "w") as f:
             json.dump(token_data, f)
-        log("Token Google guardado en google_token.json")
+        if access_token:
+            log("Token Google guardado (access_token + refresh_token)")
+        else:
+            log("Token Google guardado (solo code — el agente debera intercambiarlo)")
 
     elif service == "trello":
         env_path = os.path.join(hermes_dir, ".env")
@@ -140,12 +165,18 @@ def save_credentials(service, data):
 
 # ── Rich TUI rendering ──
 
-def generate_tui(debug=False):
-    """Genera el layout Rich. Simple por defecto, debug con F1."""
+def generate_tui(debug=None):
+    """Genera el layout Rich. Simple por defecto, debug con VCOO_DEBUG=1."""
+    if debug is None:
+        debug = TUI.get("debug", False)
     layout = Layout()
 
     done = TUI["progress_done"]
     total = TUI["progress_total"]
+    step = TUI["step"] or "Conectando..."
+    label, instructions = STEP_INFO.get(step, (step.replace("-", " ").title(), []))
+    TUI["step_label"] = label
+    TUI["step_instructions"] = instructions
 
     if debug:
         # Vista debug: full info + logs
@@ -153,18 +184,19 @@ def generate_tui(debug=False):
             f"[bold white]Control Plane:[/] [cyan]{TUI['base']}[/]\n"
             f"[bold white]Agent:[/] [dim]{TUI['agent_id'][:24]}...[/]  "
             f"[bold white]VCOO:[/] [dim]{TUI['vcoo_id'][:12]}...[/]\n"
-            f"[bold white]Estado:[/] [green]{TUI['status']}[/]",
+            f"[bold white]Estado:[/] [green]{TUI['status']}[/]  "
+            f"[bold white]Paso:[/] [yellow]{step}[/]",
             title="[bold cyan]VCOO Agent v3 — DEBUG[/]", border_style="cyan"
         )
-        log_lines = TUI["log"][-20:]
+        log_lines = TUI["log"][-30:]
         if not log_lines:
             log_lines = ["[dim](sin eventos)[/]"]
-        log_panel = Panel("\n".join(log_lines), title="[bold]Logs[/]", border_style="green")
-        layout.split_column(Layout(header, size=8), Layout(log_panel))
+        log_panel = Panel("\n".join(log_lines), title="[bold]Logs (últimos 30)[/]", border_style="green")
+        layout.split_column(Layout(header, size=6), Layout(log_panel))
     else:
-        # Vista cliente: limpia y sencilla
+        # Vista cliente: progreso + instrucciones del paso actual
         if total > 0:
-            bar_w = 50
+            bar_w = 40
             pct = done / total if total > 0 else 0
             filled = int(bar_w * pct)
             bar = "█" * filled + "░" * (bar_w - filled)
@@ -173,13 +205,29 @@ def generate_tui(debug=False):
             prog_line = "[dim]Preparando...[/]"
 
         status_color = "green" if TUI["status"] == "Online" else "yellow"
+
+        # Build instructions text
+        instr_text = ""
+        for i, instr in enumerate(instructions[:3]):
+            instr_text += f"  [dim]{i+1}.[/] {instr}\n"
+        if not instr_text:
+            instr_text = "  [dim]Esperando comandos...[/]\n"
+
+        # Auth URL hint for OAuth steps
+        auth_hint = ""
+        if step in ("google-oauth", "trello-setup"):
+            setup_url = f"{TUI['base'].replace('vcoo-onboarding.vercel.app', 'frontend-ivory-seven-d0aw1wzkae.vercel.app')}/setup/{TUI.get('vcoo_id','')}"
+            auth_hint = f"\n[bold yellow]⚠[/] [cyan]Abre el wizard para autorizar:[/]\n[dim]{setup_url}[/]\n"
+
         body = (
-            f"[bold]VCOO Onboarding[/]\n\n"
+            f"[bold]Paso {done+1}/{total}: [yellow]{label}[/yellow][/]\n\n"
             f"{prog_line}\n\n"
-            f"[bold]Paso:[/] [yellow]{TUI['step'] or 'Conectando...'}[/]\n"
-            f"[bold]Estado:[/] [{status_color}]{TUI['status']}[/]\n\n"
-            f"[dim]♥ {TUI['last_heartbeat'] or '—'}  |  Poll {TUI['last_poll'] or '—'}[/]\n\n"
-            f"[dim]Pulsa Ctrl+C para cancelar[/]"
+            f"[bold]Instrucciones:[/]\n{instr_text}\n"
+            f"{auth_hint}"
+            f"[dim]♥ {TUI['last_heartbeat'] or '—'}  |  Poll {TUI['last_poll'] or '—'}  |  "
+            f"{'[red]DEBUG[/]' if debug else '[dim]D=debug[/]'}"
+            f"[/]\n"
+            f"[dim]Ctrl+C para cancelar[/]"
         )
         panel = Panel(body, title="[bold cyan]⚡ VCOO Agent[/]", border_style="cyan")
         layout.split_column(Layout(panel))
@@ -330,9 +378,13 @@ def report_with_retry(agent_id, agent_token, result, max_retries=3):
                 BASE + "/agent/" + agent_id + "/result",
                 json=payload, headers=headers, timeout=10
             )
-            if resp.status_code in (200, 201, 409):
+            # Accept any 2xx status (200, 201, 202, etc.) and 409 (already reported)
+            if 200 <= resp.status_code < 300 or resp.status_code == 409:
                 log("ACK para " + result["cmd_id"][:12])
-                data = resp.json() if resp.text else {}
+                try:
+                    data = resp.json() if resp.text else {}
+                except Exception:
+                    data = {}
                 return True, data.get("next_step")
             if resp.status_code == 404:
                 log("Cmd " + result["cmd_id"][:12] + " no encontrado, descartando")
@@ -420,6 +472,28 @@ def poll_commands(agent_id, agent_token, vcoo_id):
     return [], None
 
 
+# ── Keyboard listener thread (bypasses Rich screen mode) ──
+
+_keyboard_toggle = threading.Event()
+
+def _keyboard_listener():
+    """Lee stdin sin raw mode — compatible con Rich Live (screen=False)."""
+    try:
+        while True:
+            # Non-blocking check every 200ms
+            import select as _sel
+            r, _, _ = _sel.select([sys.stdin], [], [], 0.2)
+            if r:
+                ch = os.read(sys.stdin.fileno(), 1)
+                if ch == b'd' or ch == b'D':
+                    _keyboard_toggle.set()
+                    # Drain queued bytes
+                    while _sel.select([sys.stdin], [], [], 0.05)[0]:
+                        os.read(sys.stdin.fileno(), 1)
+    except (OSError, Exception):
+        pass
+
+
 # ── Bucle principal ──
 
 def main_loop(agent_id, agent_token, vcoo_id):
@@ -431,6 +505,14 @@ def main_loop(agent_id, agent_token, vcoo_id):
     while True:
         now = time.time()
 
+        # Check for keyboard toggle (thread-driven, works with Rich screen=True)
+        if _keyboard_toggle.is_set():
+            _keyboard_toggle.clear()
+            TUI["debug"] = not TUI.get("debug", False)
+            log("Debug: " + ("ON" if TUI["debug"] else "OFF"))
+            if LIVE:
+                LIVE.update(generate_tui(debug=TUI["debug"]))
+
         if now - last_heartbeat >= 60:
             heartbeat(agent_id, vcoo_id, agent_token)
             last_heartbeat = now
@@ -441,6 +523,18 @@ def main_loop(agent_id, agent_token, vcoo_id):
 
         for cmd in cmds:
             command = cmd.get("command", "")
+            cmd_id = cmd.get("cmd_id", "")
+
+            # Defense in depth: filter invalid commands client-side too
+            if command not in COMMAND_MAP:
+                log("Ignorado: " + command + " (no esta en COMMAND_MAP)")
+                report_with_retry(agent_id, agent_token, {
+                    "cmd_id": cmd_id,
+                    "step": cmd.get("step", ""),
+                    "exit_code": -1,
+                    "output": "Comando no soportado: " + command
+                })
+                continue
 
             if command == "finalize":
                 log("Recibido comando finalize")
@@ -460,28 +554,39 @@ def main_loop(agent_id, agent_token, vcoo_id):
             if command == "save-creds":
                 # Guardar credenciales en ~/.hermes/
                 payload_data = cmd.get("payload", {})
+                step = cmd.get("step", "save-creds")  # Usar el step real (ej: google-oauth)
                 if payload_data:
                     service = payload_data.get("service", "unknown")
                     log("save-creds: guardando credenciales para " + service)
                     save_credentials(service, payload_data)
-                    report_with_retry(agent_id, agent_token, {
+                    ok, next_step = report_with_retry(agent_id, agent_token, {
                         "cmd_id": cmd.get("cmd_id", ""),
-                        "step": "save-creds",
+                        "step": step,
                         "exit_code": 0,
                         "output": "Credenciales guardadas para " + service
                     })
                 else:
                     log("save-creds: sin payload, ignorando")
-                    report_with_retry(agent_id, agent_token, {
+                    ok, next_step = report_with_retry(agent_id, agent_token, {
                         "cmd_id": cmd.get("cmd_id", ""),
-                        "step": "save-creds",
+                        "step": step,
                         "exit_code": 0,
                         "output": "Sin credenciales que guardar"
                     })
+                # Update TUI with next step from server
+                if ok and next_step:
+                    TUI["step"] = next_step
+                    if LIVE:
+                        LIVE.update(generate_tui())
                 continue
 
             result = execute_command(cmd, agent_id, agent_token)
             ok, next_step = report_with_retry(agent_id, agent_token, result)
+            # Update TUI with next step from server
+            if ok and next_step:
+                TUI["step"] = next_step
+            if LIVE:
+                LIVE.update(generate_tui())
 
         time.sleep(POLL_INTERVAL + jitter())
 
@@ -501,6 +606,7 @@ def main():
 
     loaded = load_agent()
 
+    # Si hay PROVISION_TOKEN, SIEMPRE intentamos registrar (sobrescribe estado anterior)
     if PROV:
         meta = register_agent()
         if meta:
@@ -509,12 +615,17 @@ def main():
             vcoo_id = meta["vcoo_id"]
             TUI["agent_id"] = agent_id
             TUI["vcoo_id"] = vcoo_id
-            if loaded and loaded.get("vcoo_id") != vcoo_id:
-                log("Token nuevo (VCOO " + vcoo_id[:12] + "), sobrescribiendo anterior")
+            if loaded:
+                old_vcoo = loaded.get("vcoo_id", "")
+                if old_vcoo != vcoo_id:
+                    log("Token nuevo (VCOO " + vcoo_id[:12] + "), sobrescribiendo anterior (" + old_vcoo[:12] + ")")
+                else:
+                    log("Re-registrado: agente " + agent_id[:20])
+            else:
+                log("Registrado: agente " + agent_id[:20])
             save_agent(agent_id, agent_token, vcoo_id)
-            log("Registrado: agente " + agent_id[:20])
         elif loaded:
-            log("Registro fallido, restaurando estado guardado")
+            log("Registro fallido (token expirado/invalido), restaurando estado guardado")
             agent_id = loaded["agent_id"]
             agent_token = loaded["agent_token"]
             vcoo_id = loaded["vcoo_id"]
@@ -538,9 +649,13 @@ def main():
     # ── Iniciar TUI (si Rich + TTY) o modo texto ──
     use_tui = RICH_OK and sys.stdout.isatty()
 
+    # Start keyboard listener thread for debug toggle (works even with Rich screen=True)
+    kb_thread = threading.Thread(target=_keyboard_listener, daemon=True)
+    kb_thread.start()
+
     if use_tui:
         console = Console()
-        LIVE = RichLive(generate_tui(), console=console, refresh_per_second=4, screen=True)
+        LIVE = RichLive(generate_tui(), console=console, refresh_per_second=4, screen=False)
         try:
             with LIVE:
                 main_loop(agent_id, agent_token, vcoo_id)
