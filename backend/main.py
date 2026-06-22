@@ -69,6 +69,23 @@ def create_vcoo(db: Session = Depends(get_db)):
     vcoo = crud.create_vcoo(db)
     return {"id": str(vcoo.id)}
 
+@app.get("/vcoos")
+def list_vcoos(db: Session = Depends(get_db)):
+    """List all VCOOs with agent status."""
+    vcoos = crud.list_vcoos(db)
+    return [
+        {
+            "id": str(v.id),
+            "created_at": v.created_at.isoformat() if v.created_at else None,
+            "agent": {
+                "id": str(v.agent.id),
+                "status": v.agent.status,
+                "last_seen": v.agent.last_seen.isoformat() if v.agent.last_seen else None,
+            } if v.agent else None,
+        }
+        for v in vcoos
+    ]
+
 @app.get("/vcoo/{vcoo_id}/provision-token")
 def get_provision_token(vcoo_id: str, db: Session = Depends(get_db)):
     v = crud.get_vcoo(db, vcoo_id)

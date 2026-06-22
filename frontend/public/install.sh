@@ -6,7 +6,7 @@
 set -e
 
 CONTROL_PLANE="${CONTROL_PLANE:-https://vcoo-onboarding.vercel.app}"
-AGENT_URL="${AGENT_URL:-https://vcoo-onboarding.vercel.app/agent_http.py}"
+AGENT_URL="${AGENT_URL:-https://frontend-ivory-seven-d0aw1wzkae.vercel.app/agent_http.py}"
 AGENT_SHA256="${AGENT_SHA256:-SKIP}"
 
 echo "=== VCOO Agent Installer ==="
@@ -42,8 +42,14 @@ fi
 # Install requests if not available
 python3 -c "import requests" 2>/dev/null || {
     echo "Installing requests module..."
-    python3 -m pip install --user requests 2>/dev/null || {
-        echo "WARNING: Could not install requests, agent may fail"
+    python3 -m pip install --user requests 2>/dev/null || \
+    python3 -m pip install requests 2>/dev/null || \
+    apt-get install -y -qq python3-requests 2>/dev/null || \
+    pip3 install requests 2>/dev/null || {
+        echo "ERROR: Could not install requests. Install it manually:"
+        echo "  apt install python3-requests   (Debian/Ubuntu)"
+        echo "  pip install requests           (pip)"
+        exit 1
     }
 }
 

@@ -15,6 +15,22 @@ def get_vcoo(db: Session, vcoo_id: str):
     return db.query(models.VCOO).filter(models.VCOO.id == vcoo_id).first()
 
 
+def list_vcoos(db: Session, limit: int = 50):
+    """List VCOOs with their latest agent, ordered by creation date."""
+    from sqlalchemy.orm import joinedload
+    vcoos = (
+        db.query(models.VCOO)
+        .order_by(models.VCOO.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    # Attach latest agent for each VCOO
+    for v in vcoos:
+        agent = get_agent_by_vcoo(db, str(v.id))
+        v.agent = agent  # attach dynamically
+    return vcoos
+
+
 # Agent CRUD
 def create_agent(db: Session, vcoo_id: str, info: str = None):
     a = models.Agent(vcoo_id=vcoo_id, info=info, status='online')

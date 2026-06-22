@@ -30,6 +30,14 @@ async function api(path: string, options: RequestInit = {}): Promise<any> {
 export const createVCOO = () =>
   api('/vcoo', { method: 'POST' });
 
+export const listVCOOs = (): Promise<
+  Array<{
+    id: string;
+    created_at: string;
+    agent: { id: string; status: string; last_seen: string } | null;
+  }>
+> => api('/vcoos');
+
 export const getProvisionToken = (vcooId: string): Promise<{ token: string; install_command: string }> =>
   api(`/vcoo/${vcooId}/provision-token`);
 

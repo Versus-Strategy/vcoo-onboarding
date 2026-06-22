@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { setMasterKey, healthCheck } from '../api/client';
+import { setMasterKey, healthCheck, listVCOOs } from '../api/client';
 import CreateVCOO from '../components/CreateVCOO';
 import VCOOList from '../components/VCOOList';
 import { LogIn, LogOut, ShieldCheck } from 'lucide-react';
@@ -9,6 +9,16 @@ export default function Dashboard() {
   const [key, setKey] = useState('');
   const [error, setError] = useState('');
   const [vcooIds, setVcooIds] = useState<string[]>([]);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const loadVCOOs = async () => {
+    try {
+      const data = await listVCOOs();
+      setVcooIds(data.map((v) => v.id));
+    } catch {
+      // backend might not be reachable yet
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,6 +29,7 @@ export default function Dashboard() {
       if (health.status === 'ok') {
         setAuthenticated(true);
         sessionStorage.setItem('vcoo_master_key', key);
+        loadVCOOs();
       }
     } catch (err: any) {
       setError('Clave inválida o el backend no responde');
@@ -41,15 +52,20 @@ export default function Dashboard() {
       setMasterKey(saved);
       setKey(saved);
       setAuthenticated(true);
+      loadVCOOs();
     }
   }, []);
 
-  // Load VCOO list from local state
+  // Poll for updates every 5s
+  useEffect(() => {
+    if (!authenticated) return;
+    const interval = setInterval(loadVCOOs, 5000);
+    return () => clearInterval(interval);
+  }, [authenticated, refreshKey]);
+
   const handleVCOOCreated = () => {
-    // In a full implementation we'd fetch all VCOOs from the backend
-    // For now, generate a placeholder ID and add it
-    const id = crypto.randomUUID().split('-')[0];
-    setVcooIds((prev) => [...prev, id]);
+    loadVCOOs();
+    setRefreshKey((k) => k + 1);
   };
 
   if (!authenticated) {
