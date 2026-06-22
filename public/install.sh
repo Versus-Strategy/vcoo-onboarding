@@ -39,18 +39,37 @@ if ! command -v python3 >/dev/null 2>&1; then
     exit 1
 fi
 
-# Install requests if not available
-python3 -c "import requests" 2>/dev/null || {
-    echo "Installing requests module..."
-    python3 -m pip install --user requests 2>/dev/null || \
-    python3 -m pip install requests 2>/dev/null || \
-    apt-get install -y -qq python3-requests 2>/dev/null || \
-    pip3 install requests 2>/dev/null || {
-        echo "ERROR: Could not install requests. Install it manually:"
-        echo "  apt install python3-requests   (Debian/Ubuntu)"
-        echo "  pip install requests           (pip)"
-        exit 1
+# Install requirements
+echo "Checking Python dependencies..."
+
+MISSING=""
+python3 -c "import requests" 2>/dev/null || MISSING="$MISSING requests"
+python3 -c "import rich" 2>/dev/null || MISSING="$MISSING rich"
+
+if [ -n "$MISSING" ]; then
+    echo "  Installing:$MISSING"
+    # Try pip first
+    python3 -m pip install --user $MISSING 2>/dev/null || \
+    python3 -m pip install $MISSING 2>/dev/null || \
+    pip3 install $MISSING 2>/dev/null || {
+        # Fallback: try apt for requests, pip for rich
+        echo "  pip not available, trying apt..."
+        apt-get update -qq 2>/dev/null
+        apt-get install -y -qq python3-requests 2>/dev/null || true
+        # For rich, we need pip
+        if echo "$MISSING" | grep -q "rich"; then
+            echo "  Installing pip to get rich..."
+            apt-get install -y -qq python3-pip 2>/dev/null && \
+            pip3 install rich 2>/dev/null || \
+            echo "  WARNING: rich not available, agent will run in plain-text mode"
+        fi
     }
+fi
+
+# Verify
+python3 -c "import requests" 2>/dev/null || {
+    echo "ERROR: requests module is required. Install manually: apt install python3-requests"
+    exit 1
 }
 
 echo "Starting agent in foreground..."
