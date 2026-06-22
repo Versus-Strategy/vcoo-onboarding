@@ -75,7 +75,8 @@ def get_provision_token(vcoo_id: str, db: Session = Depends(get_db)):
     if not v:
         raise HTTPException(status_code=404, detail="VCOO not found")
     token = crud.create_provision_for_vcoo(db, vcoo_id)
-    install_cmd = f"curl -sSL https://example.com/install.sh | PROVISION_TOKEN=*** bash -"
+    frontend_url = _os.getenv('FRONTEND_URL', 'https://frontend-ivory-seven-d0aw1wzkae.vercel.app')
+    install_cmd = f"curl -sSL {frontend_url}/install.sh | PROVISION_TOKEN={token} bash -"
     return {"token": token, "install_command": install_cmd}
 
 
