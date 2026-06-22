@@ -18,7 +18,12 @@ async function api(path: string, options: RequestInit = {}): Promise<any> {
     headers['Authorization'] = `Bearer ${masterKey}`;
   }
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  } catch (e: any) {
+    throw new Error(e.message || 'Error de conexión — ¿el servidor está caído?');
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || `HTTP ${res.status}`);
@@ -127,6 +132,18 @@ export const listPlaybooks = (): Promise<{ playbooks: string[] }> =>
 
 export const getPlaybook = (name: string): Promise<{ name: string; script: string }> =>
   api(`/playbooks/${name}`);
+
+// ── Logs ────────────────────────────────────────────────
+export const getVCOOLogs = (vcooId: string): Promise<{
+  commands: Array<{
+    cmd_id: string;
+    command: string;
+    step: string;
+    status: string;
+    result: string;
+    logs: Array<{ chunk: string; stream: string }>;
+  }>;
+}> => api('/vcoo/' + vcooId + '/logs');
 
 // ── Health ─────────────────────────────────────────────
 export const healthCheck = (): Promise<{ status: string }> =>

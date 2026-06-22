@@ -311,6 +311,9 @@ def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session
                 # Continue — store the code as fallback so the agent can retry
 
     if agent:
+        # Map service to the correct onboarding step
+        step_map = {"google": "google-oauth", "trello": "trello-setup"}
+        mapped_step = step_map.get(service, "save-creds")
         creds_data = {
             "service": service,
             "code": code,
@@ -318,7 +321,7 @@ def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session
             "refresh_token": refresh_token,
         }
         crud.create_command(
-            db, agent_id=str(agent.id), command="save-creds", step="save-creds",
+            db, agent_id=str(agent.id), command="save-creds", step=mapped_step,
             result=json.dumps(creds_data),
         )
 
@@ -614,7 +617,7 @@ def agent_report_result(agent_id: str, payload: dict, db: Session = Depends(get_
     return JSONResponse(content=result, status_code=status_code)
 
 
-# ── Agent heartbeat (SPEC v2 §4.6) ───────────────────────
+# ── VCOO Logs ────────────────────────────────────────────\n\n@app.get(\"/vcoo/{vcoo_id}/logs\")\ndef get_vcoo_logs(vcoo_id: str, db: Session = Depends(get_db)):\n    \"\"\"Retrieve all command logs for a VCOO (across all its agents).\"\"\"\n    agent = crud.get_agent_by_vcoo(db, vcoo_id)\n    if not agent:\n        return {\"commands\": []}\n    commands = crud.get_agent_commands(db, str(agent.id), limit=50)\n    result = []\n    for cmd in commands:\n        logs = crud.get_command_logs(db, str(cmd.id))\n        result.append({\n            \"cmd_id\": str(cmd.id),\n            \"command\": cmd.command,\n            \"step\": cmd.step,\n            \"status\": cmd.status,\n            \"result\": (cmd.result or \"\")[:500],\n            \"logs\": logs[-100:] if logs else [],\n        })\n    return {\"commands\": result}\n\n\n# ── Agent heartbeat (SPEC v2 §4.6) ───────────────────────
 
 @app.post("/agent/heartbeat")
 def agent_heartbeat_endpoint(payload: dict, db: Session = Depends(get_db)):

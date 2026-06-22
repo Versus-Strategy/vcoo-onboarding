@@ -484,28 +484,39 @@ def main_loop(agent_id, agent_token, vcoo_id):
             if command == "save-creds":
                 # Guardar credenciales en ~/.hermes/
                 payload_data = cmd.get("payload", {})
+                step = cmd.get("step", "save-creds")  # Usar el step real (ej: google-oauth)
                 if payload_data:
                     service = payload_data.get("service", "unknown")
                     log("save-creds: guardando credenciales para " + service)
                     save_credentials(service, payload_data)
-                    report_with_retry(agent_id, agent_token, {
+                    ok, next_step = report_with_retry(agent_id, agent_token, {
                         "cmd_id": cmd.get("cmd_id", ""),
-                        "step": "save-creds",
+                        "step": step,
                         "exit_code": 0,
                         "output": "Credenciales guardadas para " + service
                     })
                 else:
                     log("save-creds: sin payload, ignorando")
-                    report_with_retry(agent_id, agent_token, {
+                    ok, next_step = report_with_retry(agent_id, agent_token, {
                         "cmd_id": cmd.get("cmd_id", ""),
-                        "step": "save-creds",
+                        "step": step,
                         "exit_code": 0,
                         "output": "Sin credenciales que guardar"
                     })
+                # Update TUI with next step from server
+                if ok and next_step:
+                    TUI["step"] = next_step
+                    if LIVE:
+                        LIVE.update(generate_tui())
                 continue
 
             result = execute_command(cmd, agent_id, agent_token)
             ok, next_step = report_with_retry(agent_id, agent_token, result)
+            # Update TUI with next step from server
+            if ok and next_step:
+                TUI["step"] = next_step
+            if LIVE:
+                LIVE.update(generate_tui())
 
         time.sleep(POLL_INTERVAL + jitter())
 

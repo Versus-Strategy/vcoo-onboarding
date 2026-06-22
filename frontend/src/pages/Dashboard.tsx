@@ -27,6 +27,7 @@ export default function Dashboard() {
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('vcoo_theme') as Theme) || 'auto');
   const [toast, setToast] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const pendingDeletes = useRef<Set<string>>(new Set());
 
   const resolvedTheme = resolveTheme(theme);
@@ -57,9 +58,9 @@ export default function Dashboard() {
   const loadVCOOs = useCallback(async () => {
     try {
       const data = await listVCOOs();
-      // Filter out pending deletes
       setVcoos(data.filter(v => !pendingDeletes.current.has(v.id)));
     } catch {}
+    finally { setLoading(false); }
   }, []);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
@@ -189,54 +190,76 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-4 gap-3">
-          {[
-            { label: 'Online', value: totalOnline, f: 'online' as Filter, color: 'text-emerald-400' },
-            { label: 'Activos', value: totalActive, f: 'active' as Filter, color: 'text-[var(--vs-purple)]' },
-            { label: 'Completados', value: totalCompleted, f: 'completed' as Filter, color: 'text-(--vs-muted)' },
-            { label: 'Total', value: vcoos.length, f: 'all' as Filter, color: 'text-(--vs-heading)' },
-          ].map(stat => (
-            <button key={stat.label} onClick={() => setFilter(filter === stat.f ? 'all' : stat.f)}
-              className="rounded-xl p-4 text-left transition cursor-pointer"
-              style={{
-                background: filter === stat.f ? 'var(--vs-stat-active-bg)' : 'var(--vs-stat-bg)',
-                border: filter === stat.f ? '1px solid var(--vs-stat-active-border)' : '1px solid var(--vs-stat-border)',
-                boxShadow: 'var(--vs-shadow)'
-              }}>
-              <div className="text-xs text-(--vs-muted) mb-1">{stat.label}</div>
-              <div className={`text-2xl font-bold ${stat.color}`}>{stat.value}</div>
-            </button>
-          ))}
-        </div>
-
-        {/* Filter badge */}
-        {filter !== 'all' && (
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm" style={{background:'var(--vs-stat-active-bg)', color:'var(--vs-purple)'}}>
-            Filtrando: {filter === 'active' ? 'Activos' : filter === 'completed' ? 'Completados' : 'Online'}
-            <button onClick={() => setFilter('all')} className="hover:opacity-70"><X className="w-3.5 h-3.5" /></button>
+        {/* Loading skeleton */}
+        {loading ? (
+          <div className="space-y-4 animate-pulse">
+            <div className="grid grid-cols-4 gap-3">
+              {[1,2,3,4].map(i => (
+                <div key={i} className="rounded-xl p-4 border border-(--vs-border) bg-(--vs-bg-card)" style={{boxShadow: 'var(--vs-shadow)'}}>
+                  <div className="h-3 w-12 bg-(--vs-border) rounded mb-2" />
+                  <div className="h-6 w-8 bg-(--vs-border) rounded" />
+                </div>
+              ))}
+            </div>
+            <div className="h-10 bg-(--vs-bg-card) rounded-xl border border-(--vs-border)" />
+            <div className="space-y-3">
+              {[1,2,3].map(i => (
+                <div key={i} className="h-20 bg-(--vs-bg-card) rounded-xl border border-(--vs-border)" style={{boxShadow: 'var(--vs-shadow)'}} />
+              ))}
+            </div>
           </div>
+        ) : (
+          <>
+            {/* Stats */}
+            <div className="grid grid-cols-4 gap-3">
+              {[
+                { label: 'Online', value: totalOnline, f: 'online' as Filter, color: 'text-emerald-400' },
+                { label: 'Activos', value: totalActive, f: 'active' as Filter, color: 'text-[var(--vs-purple)]' },
+                { label: 'Completados', value: totalCompleted, f: 'completed' as Filter, color: 'text-(--vs-muted)' },
+                { label: 'Total', value: vcoos.length, f: 'all' as Filter, color: 'text-(--vs-heading)' },
+              ].map(stat => (
+                <button key={stat.label} onClick={() => setFilter(filter === stat.f ? 'all' : stat.f)}
+                  className="rounded-xl p-4 text-left transition cursor-pointer"
+                  style={{
+                    background: filter === stat.f ? 'var(--vs-stat-active-bg)' : 'var(--vs-stat-bg)',
+                    border: filter === stat.f ? '1px solid var(--vs-stat-active-border)' : '1px solid var(--vs-stat-border)',
+                    boxShadow: 'var(--vs-shadow)'
+                  }}>
+                  <div className="text-xs text-(--vs-muted) mb-1">{stat.label}</div>
+                  <div className={`text-2xl font-bold ${stat.color}`}>{stat.value}</div>
+                </button>
+              ))}
+            </div>
+
+            {/* Filter badge */}
+            {filter !== 'all' && (
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm" style={{background:'var(--vs-stat-active-bg)', color:'var(--vs-purple)'}}>
+                Filtrando: {filter === 'active' ? 'Activos' : filter === 'completed' ? 'Completados' : 'Online'}
+                <button onClick={() => setFilter('all')} className="hover:opacity-70"><X className="w-3.5 h-3.5" /></button>
+              </div>
+            )}
+
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-(--vs-muted)" />
+              <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar por nombre o ID..."
+                className="w-full bg-(--vs-input-bg) border border-(--vs-input-border) rounded-lg pl-10 pr-8 py-2.5 text-sm text-(--vs-heading) focus:outline-none focus:border-[var(--vs-purple)] focus:ring-1 focus:ring-[var(--vs-purple)]/20 transition" />
+              {search && <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-(--vs-muted) hover:text-(--vs-heading)"><X className="w-3.5 h-3.5" /></button>}
+            </div>
+
+            {/* Create */}
+            <CreateVCOO onCreated={handleVCOOCreated} />
+
+            {/* Sections — always visible */}
+            <VCOOList vcoos={onlineVCOOs} label="Online" icon="wifi" expandedId={expandedId} onToggle={setExpandedId}
+              onRefresh={loadVCOOs} onComplete={handleComplete} onDelete={handleDelete} onReactivate={handleReactivate} />
+            <VCOOList vcoos={activeVCOOs} label="Activos" icon="zap" expandedId={expandedId} onToggle={setExpandedId}
+              onRefresh={loadVCOOs} onComplete={handleComplete} onDelete={handleDelete} onReactivate={handleReactivate} />
+            <VCOOList vcoos={completedVCOOs} label="Completados" icon="archive" expandedId={expandedId} onToggle={setExpandedId}
+              onRefresh={loadVCOOs} onComplete={handleComplete} onDelete={handleDelete} onReactivate={handleReactivate} />
+          </>
         )}
-
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-(--vs-muted)" />
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nombre o ID..."
-            className="w-full bg-(--vs-input-bg) border border-(--vs-input-border) rounded-lg pl-10 pr-8 py-2.5 text-sm text-(--vs-heading) focus:outline-none focus:border-[var(--vs-purple)] focus:ring-1 focus:ring-[var(--vs-purple)]/20 transition" />
-          {search && <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-(--vs-muted) hover:text-(--vs-heading)"><X className="w-3.5 h-3.5" /></button>}
-        </div>
-
-        {/* Create */}
-        <CreateVCOO onCreated={handleVCOOCreated} />
-
-        {/* Sections — always visible */}
-        <VCOOList vcoos={onlineVCOOs} label="Online" icon="wifi" expandedId={expandedId} onToggle={setExpandedId}
-          onRefresh={loadVCOOs} onComplete={handleComplete} onDelete={handleDelete} onReactivate={handleReactivate} />
-        <VCOOList vcoos={activeVCOOs} label="Activos" icon="zap" expandedId={expandedId} onToggle={setExpandedId}
-          onRefresh={loadVCOOs} onComplete={handleComplete} onDelete={handleDelete} onReactivate={handleReactivate} />
-        <VCOOList vcoos={completedVCOOs} label="Completados" icon="archive" expandedId={expandedId} onToggle={setExpandedId}
-          onRefresh={loadVCOOs} onComplete={handleComplete} onDelete={handleDelete} onReactivate={handleReactivate} />
 
         {/* Toast */}
         {toast && (
