@@ -5,10 +5,10 @@ import {
   Zap, AlertTriangle, SkipForward, RefreshCw, Server,
   Key, ExternalLink, ChevronDown,
 } from 'lucide-react';
-import { getSetupInfo, verifyStep } from '../api/client';
+import { getSetupInfo, verifyStep, getAuthUrl } from '../api/client';
 import type { SetupInfo } from '../api/client';
 
-type StepState = 'pending' | 'active' | 'verifying' | 'done' | 'error' | 'blocked' | 'skipped';
+type StepState = 'pending' | 'active' | 'verifying' | 'waiting' | 'done' | 'error' | 'blocked' | 'skipped';
 
 interface StepDef {
   id: string;
@@ -159,6 +159,45 @@ function ErrorDetail({ error, idx }: { error: ErrorItem; idx: number }) {
   );
 }
 
+// ── Service auth button ──
+
+const SERVICE_AUTH: Record<string, { label: string; service: string; icon: string }> = {
+  'google-oauth': { label: 'Autorizar con Google', service: 'google', icon: 'Shield' },
+  'gmail-setup': { label: 'Autorizar Gmail', service: 'google', icon: 'Mail' },
+  'trello-setup': { label: 'Autorizar con Trello', service: 'trello', icon: 'Trello' },
+  'github-setup': { label: 'Autorizar con GitHub', service: 'github', icon: 'Github' },
+  'vercel-setup': { label: 'Autorizar con Vercel', service: 'vercel', icon: 'Zap' },
+  'supabase-setup': { label: 'Autorizar con Supabase', service: 'supabase', icon: 'Database' },
+};
+
+function ServiceAuthButton({ stepId, token }: { stepId: string; token: string }) {
+  const info = SERVICE_AUTH[stepId];
+  if (!info) return null;
+
+  const handleAuth = async () => {
+    try {
+      const { url } = await getAuthUrl(token, info.service);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (e: any) {
+      console.error('Error getting auth URL:', e);
+    }
+  };
+
+  return (
+    <div className="mt-3 pt-3 border-t border-(--vs-border)">
+      <button
+        onClick={handleAuth}
+        className="inline-flex items-center gap-2 px-4 py-2 bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 rounded-lg text-sm font-medium transition border border-amber-600/30"
+      >
+        <ExternalLink className="w-4 h-4" /> {info.label}
+      </button>
+      <p className="text-xs text-(--vs-muted) mt-2">
+        Se abrirá una pestaña para autorizar. Después haz clic en "Verificar conexión".
+      </p>
+    </div>
+  );
+}
+
 const STEP_ORDER = [
   'bootstrap', 'provider-config', 'google-oauth', 'gmail-setup',
   'trello-setup', 'github-setup', 'vercel-setup',
@@ -171,11 +210,13 @@ function getStepState(
   completed: string[],
   errors: { step: string; error: string; skipped_by_operator?: boolean }[],
   status: string,
+  waitingStep: string,
 ): StepState {
   if (completed.includes(stepId)) return 'done';
   const skippedErr = errors.find(e => e.step === stepId && e.skipped_by_operator);
   if (skippedErr) return 'skipped';
   if (stepId === currentStep && status === 'blocked') return 'blocked';
+  if (stepId === currentStep && waitingStep === stepId) return 'waiting';
   if (stepId === currentStep) return 'active';
   const hasError = errors.some(e => e.step === stepId);
   if (hasError && status === 'blocked') return 'blocked';
@@ -194,6 +235,7 @@ export default function Setup() {
   const [verifying, setVerifying] = useState(false);
   const [verifyMsg, setVerifyMsg] = useState('');
   const [showVPSInfo, setShowVPSInfo] = useState(false);
+  const [waitingStep, setWaitingStep] = useState<string>('');
 
   const loadData = useCallback(async () => {
     if (!token) return;
@@ -212,9 +254,20 @@ export default function Setup() {
 
   useEffect(() => {
     if (!token || error) return;
-    const interval = setInterval(loadData, 3000);
+    const interval = setInterval(async () => {
+      const info = await getSetupInfo(token).catch(() => null);
+      if (info) {
+        setData(info);
+        // Si el paso cambió, limpiar el spinner de espera
+        if (waitingStep && info.step !== waitingStep) {
+          setWaitingStep('');
+          setVerifying(false);
+          setVerifyMsg('');
+        }
+      }
+    }, 3000);
     return () => clearInterval(interval);
-  }, [token, error, loadData]);
+  }, [token, error, waitingStep]);
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -229,19 +282,20 @@ export default function Setup() {
     try {
       const result = await verifyStep(token);
       if (result.status === 'auto_completed') {
-        setVerifyMsg('Verificación completada. Pasando al siguiente paso...');
-        loadData(); // immediate reload to show new step
-        setTimeout(() => loadData(), 1500);
+        setVerifyMsg('Completado. Pasando al siguiente paso...');
+        loadData();
+        setTimeout(() => { setVerifying(false); setVerifyMsg(''); }, 2000);
       } else if (result.status === 'enqueued') {
-        setVerifyMsg('Comando encolado. El agente lo ejecutará en breve...');
-        setTimeout(() => loadData(), 2000);
+        // Spinner persistente — no limpiar, el polling detectará el avance
+        setWaitingStep(step);
+        setVerifyMsg('');
       } else if (result.status === 'skip') {
         setVerifyMsg('Onboarding ya completado.');
+        setTimeout(() => { setVerifying(false); setVerifyMsg(''); }, 2000);
       }
     } catch (e: any) {
       setVerifyMsg('Error: ' + (e.message || 'No se pudo verificar'));
-    } finally {
-      setTimeout(() => setVerifying(false), 2000);
+      setTimeout(() => { setVerifying(false); setVerifyMsg(''); }, 3000);
     }
   };
 
@@ -487,7 +541,7 @@ export default function Setup() {
         {relevantSteps.map((stepId, idx) => {
           const def = STEP_DEFS[stepId];
           if (!def) return null;
-          const state = getStepState(stepId, step, completed, errors, status);
+          const state = getStepState(stepId, step, completed, errors, status, waitingStep);
           const isCurrent = stepId === step && !isComplete;
           const stepErrors = errors.filter(e => e.step === stepId);
 
@@ -503,6 +557,7 @@ export default function Setup() {
               <div className="flex items-center gap-3">
                 <div className="shrink-0">
                   {state === 'done' && <CheckCircle className="w-6 h-6 text-emerald-400" />}
+                  {state === 'waiting' && <Loader2 className="w-6 h-6 text-(--vs-accent) animate-spin" />}
                   {state === 'active' && (verifying ? <Loader2 className="w-6 h-6 text-(--vs-accent) animate-spin" /> :
                     <div className="w-6 h-6 rounded-full border-2 border-(--vs-accent) flex items-center justify-center">
                       <div className="w-3 h-3 rounded-full bg-(--vs-accent)" />
@@ -550,6 +605,20 @@ export default function Setup() {
                             <p className="text-xs mt-2 text-(--vs-muted)">{verifyMsg}</p>
                           )}
                         </div>
+                      )}
+                      {state === 'waiting' && (
+                        <div>
+                          <button
+                            disabled
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-(--vs-accent)/50 text-white/70 rounded-lg text-sm font-medium cursor-wait"
+                          >
+                            <Loader2 className="w-4 h-4 animate-spin" /> Esperando al agente...
+                          </button>
+                        </div>
+                      )}
+                      {/* Auth buttons for OAuth/service steps */}
+                      {(state === 'active' || state === 'waiting') && stepId !== 'bootstrap' && stepId !== 'provider-config' && stepId !== 'finalize' && (
+                        <ServiceAuthButton stepId={stepId} token={token} />
                       )}
                     </div>
                   )}

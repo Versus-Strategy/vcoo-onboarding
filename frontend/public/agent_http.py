@@ -103,6 +103,41 @@ def jitter():
     return random.uniform(0, POLL_INTERVAL * 0.3)
 
 
+def save_credentials(service, data):
+    """Guarda credenciales OAuth/API en ~/.hermes/"""
+    hermes_dir = os.path.expanduser("~/.hermes")
+    os.makedirs(hermes_dir, exist_ok=True)
+
+    if service == "google":
+        token_path = os.path.join(hermes_dir, "google_token.json")
+        token_data = {
+            "access_token": data.get("access_token", ""),
+            "refresh_token": data.get("refresh_token", ""),
+            "token_type": "Bearer",
+            "scope": "https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/gmail.readonly",
+        }
+        with open(token_path, "w") as f:
+            json.dump(token_data, f)
+        log("Token Google guardado en google_token.json")
+
+    elif service == "trello":
+        env_path = os.path.join(hermes_dir, ".env")
+        api_key = data.get("api_key", data.get("access_token", ""))
+        api_token = data.get("api_token", data.get("code", ""))
+        with open(env_path, "a") as f:
+            f.write(f"\nTRELLO_API_KEY={api_key}\nTRELLO_API_TOKEN={api_token}\n")
+        log("Token Trello guardado en .env")
+
+    else:
+        # Generic: save to .env
+        env_path = os.path.join(hermes_dir, ".env")
+        with open(env_path, "a") as f:
+            for k, v in data.items():
+                if k not in ("service",):
+                    f.write(f"\n{k.upper()}={v}\n")
+        log("Credenciales guardadas en .env para " + service)
+
+
 # ── Rich TUI rendering ──
 
 def generate_tui():
@@ -426,7 +461,26 @@ def main_loop(agent_id, agent_token, vcoo_id):
                 return
 
             if command == "save-creds":
-                log("save-creds manejado por el frontend, ignorando")
+                # Guardar credenciales en ~/.hermes/
+                payload_data = cmd.get("payload", {})
+                if payload_data:
+                    service = payload_data.get("service", "unknown")
+                    log("save-creds: guardando credenciales para " + service)
+                    save_credentials(service, payload_data)
+                    report_with_retry(agent_id, agent_token, {
+                        "cmd_id": cmd.get("cmd_id", ""),
+                        "step": "save-creds",
+                        "exit_code": 0,
+                        "output": "Credenciales guardadas para " + service
+                    })
+                else:
+                    log("save-creds: sin payload, ignorando")
+                    report_with_retry(agent_id, agent_token, {
+                        "cmd_id": cmd.get("cmd_id", ""),
+                        "step": "save-creds",
+                        "exit_code": 0,
+                        "output": "Sin credenciales que guardar"
+                    })
                 continue
 
             result = execute_command(cmd, agent_id, agent_token)

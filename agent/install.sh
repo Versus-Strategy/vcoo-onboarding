@@ -132,7 +132,7 @@ for script in $VCOO_SCRIPTS; do
     dest="$VCOO_DIR/$script"
     if [ -f "$dest" ]; then
         echo "  [OK] $script (ya existe)"
-    elif curl -sSf -o "$dest" "$CONTROL_PLANE/playbooks/$script" 2>/dev/null; then
+    elif curl -sSf -o "$dest" "$CONTROL_PLANE/playbooks/$script/raw" 2>/dev/null; then
         chmod 700 "$dest"
         echo "  [OK] $script descargado"
     else

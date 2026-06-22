@@ -104,6 +104,12 @@ export const getSetupInfo = (token: string): Promise<SetupInfo> =>
 export const verifyStep = (token: string): Promise<{ status: string; cmd_id?: string; step?: string; command?: string; message?: string }> =>
   api('/setup/' + token + '/verify', { method: 'POST' });
 
+export const getAuthUrl = (token: string, service: string): Promise<{ url: string; service: string }> =>
+  api('/setup/' + token + '/auth-url?service=' + encodeURIComponent(service));
+
+export const getHermesCommands = (token: string, service: string): Promise<{ commands: string[]; service: string }> =>
+  api('/setup/' + token + '/hermes-commands?service=' + encodeURIComponent(service));
+
 // ── Agent ──────────────────────────────────────────────
 export const registerAgent = (token: string, info: Record<string, any> = {}) =>
   api('/register', {

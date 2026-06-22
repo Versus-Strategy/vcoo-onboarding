@@ -197,6 +197,76 @@ def trigger_step_verification(token: str, db: Session = Depends(get_db)):
         }
 
 
+# ── Auth URL generation (dynamic OAuth tabs) ────────────
+
+@app.get("/setup/{token}/auth-url")
+def get_auth_url(token: str, service: str = "", db: Session = Depends(get_db)):
+    """Generates an OAuth authorization URL for the given service."""
+    vcoo_id = crud.lookup_provision_token(db, token)
+    if not vcoo_id:
+        raise HTTPException(status_code=404, detail="Token invalido o expirado")
+    service = service.lower().strip()
+    if service == "google":
+        client_id = _os.getenv("GOOGLE_CLIENT_ID", "")
+        redirect = _os.getenv("GOOGLE_REDIRECT_URI", "https://vcoo-onboarding.vercel.app/auth/callback?service=google")
+        if not client_id:
+            url = "https://accounts.google.com/o/oauth2/v2/auth?client_id=vcoo-dev&redirect_uri={}&response_type=code&scope=https://www.googleapis.com/auth/drive.readonly+https://www.googleapis.com/auth/gmail.readonly&access_type=offline&prompt=consent&state={}".format(redirect, vcoo_id)
+        else:
+            url = "https://accounts.google.com/o/oauth2/v2/auth?client_id={}&redirect_uri={}&response_type=code&scope=https://www.googleapis.com/auth/drive.readonly+https://www.googleapis.com/auth/gmail.readonly&access_type=offline&prompt=consent&state={}".format(client_id, redirect, vcoo_id)
+        return {"url": url, "service": "google"}
+    elif service == "trello":
+        api_key = _os.getenv("TRELLO_API_KEY", "vcoo-dev-key")
+        url = "https://trello.com/1/authorize?expiration=never&name=VCOO&scope=read,write&response_type=token&key={}&return_url={}".format(api_key, "https://vcoo-onboarding.vercel.app/auth/callback?service=trello")
+        return {"url": url, "service": "trello"}
+    elif service == "github":
+        return {"url": "https://cli.github.com/manual/gh_auth_login", "service": "github", "instructions": "Ejecuta 'gh auth login' en tu VPS."}
+    elif service == "vercel":
+        return {"url": "https://vercel.com/login", "service": "vercel", "instructions": "Ejecuta 'vercel login' en tu VPS."}
+    elif service == "supabase":
+        return {"url": "https://supabase.com/dashboard/login", "service": "supabase", "instructions": "Ejecuta 'supabase login' en tu VPS."}
+    else:
+        raise HTTPException(status_code=400, detail="Servicio no soportado: " + service)
+
+
+# ── OAuth callback ─────────────────────────────────────
+
+@app.get("/auth/callback")
+def oauth_callback(service: str = "", code: str = "", state: str = "", db: Session = Depends(get_db)):
+    """Receives OAuth callback. Queues save-creds for the agent."""
+    if not service or not code:
+        return HTMLResponse("<html><body><h1>Error</h1><p>Falta service o code</p></body></html>", status_code=400)
+    service = service.lower().strip()
+    vcoo_id = state
+    agent = crud.get_agent_by_vcoo(db, vcoo_id) if vcoo_id else None
+    if agent:
+        creds_data = json.dumps({"service": service, "access_token": code[:50] + "...", "code": code})
+        crud.create_command(db, agent_id=str(agent.id), command="save-creds", step="save-creds")
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse("""<html><body style="background:#0a0a0f;color:#e2e8f0;font-family:sans-serif;text-align:center;padding:60px"><h1 style="color:#533afd">Autorizacion recibida</h1><p>Vuelve al wizard para continuar.</p><script>setTimeout(function(){window.close()},3000)</script></body></html>""")
+
+
+# ── Hermes CLI commands (dynamic) ──────────────────────
+
+@app.get("/setup/{token}/hermes-commands")
+def get_hermes_commands_endpoint(token: str, service: str = "", db: Session = Depends(get_db)):
+    """Returns Hermes CLI config commands for a service."""
+    vcoo_id = crud.lookup_provision_token(db, token)
+    if not vcoo_id:
+        raise HTTPException(status_code=404, detail="Token invalido o expirado")
+    service = service.lower().strip()
+    commands_map = {
+        "google": ["hermes config set google.client_id TU_CLIENT_ID", "hermes config set google.client_secret TU_CLIENT_SECRET"],
+        "trello": ["hermes config set trello.api_key TU_API_KEY", "hermes config set trello.api_token TU_TOKEN"],
+        "github": ["gh auth login", "hermes config set github.token $(gh auth token)"],
+        "vercel": ["vercel login", "hermes config set vercel.token TU_TOKEN"],
+        "supabase": ["supabase login", "hermes config set supabase.access_token TU_ACCESS_TOKEN"],
+        "opencode": ["hermes config set model.provider opencode", "hermes config set model.default opencode/claude-sonnet-4"],
+        "anthropic": ["export ANTHROPIC_API_KEY=sk-ant-tu-clave", "hermes config set model.provider anthropic"],
+        "openai": ["export OPENAI_API_KEY=sk-tu-clave", "hermes config set model.provider openai"],
+    }
+    return {"commands": commands_map.get(service, []), "service": service}
+
+
 @app.get("/vcoo/{vcoo_id}/provision-token")
 def get_provision_token(vcoo_id: str, db: Session = Depends(get_db)):
     """Return existing active token for this VCOO, or create one if none exists."""
@@ -297,7 +367,14 @@ def agent_poll(agent_id: str, authorization: str = Header(None), db: Session = D
         if cmd.command not in VALID_COMMANDS:
             crud.mark_command_done(db, cmd.id, result="BLOCKED: comando no reconocido, descartado")
             continue
-        result.append({"cmd_id": str(cmd.id), "command": cmd.command, "step": cmd.step})
+        entry = {"cmd_id": str(cmd.id), "command": cmd.command, "step": cmd.step}
+        # Include payload for save-creds and other data-carrying commands
+        if cmd.command == "save-creds" and cmd.result:
+            try:
+                entry["payload"] = json.loads(cmd.result)
+            except Exception:
+                entry["payload"] = {"raw": cmd.result}
+        result.append(entry)
         crud.mark_command_sent(db, cmd.id)
 
     # Incluir progreso del onboarding para la TUI
