@@ -318,6 +318,11 @@ def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session
     if vcoo_id:
         try:
             crud.advance_onboarding_step(db, vcoo_id, mapped_step)
+            # Google OAuth includes gmail scope — also complete gmail-setup if mail module is active
+            if service == "google":
+                st = crud.get_onboarding_state(db, vcoo_id)
+                if st and "mail" in (st.modules or []) and "gmail-setup" not in (st.completed or []):
+                    crud.advance_onboarding_step(db, vcoo_id, "gmail-setup")
         except Exception:
             pass  # best-effort — command queue is the fallback
 

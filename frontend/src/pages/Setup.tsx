@@ -26,7 +26,7 @@ const STEP_DEFS: Record<string, StepDef> = {
     instructions: [
       'Ejecuta el comando de instalación en la terminal de tu servidor.',
       'El agente verificará que Python, Hermes y los scripts VCOO están instalados.',
-      'Haz clic en "Verificar" cuando hayas ejecutado el comando.',
+      'La verificación es automática — no necesitas hacer clic en nada.',
     ],
     extra: 'vps-recommendation',
   },
@@ -46,8 +46,8 @@ const STEP_DEFS: Record<string, StepDef> = {
     label: 'Gmail',
     icon: 'Mail',
     instructions: [
-      'Asegúrate de haber completado la autorización de Google.',
-      'Haz clic en "Verificar" para comprobar el acceso a Gmail.',
+      'El acceso a Gmail ya está incluido en la autorización de Google.',
+      'Si contrataste el módulo mail, este paso se completa automáticamente.',
     ],
   },
   'trello-setup': {
@@ -57,7 +57,7 @@ const STEP_DEFS: Record<string, StepDef> = {
     instructions: [
       'Abre el enlace de autorización de Trello.',
       'Autoriza a VCOO para acceder a tus tableros.',
-      'Haz clic en "Verificar" para comprobar la conexión.',
+      'La verificación se hará automáticamente.',
     ],
   },
   'github-setup': {
@@ -67,7 +67,7 @@ const STEP_DEFS: Record<string, StepDef> = {
     instructions: [
       'Asegúrate de tener GitHub CLI instalado.',
       'Ejecuta "gh auth login" en tu servidor.',
-      'Haz clic en "Verificar" para comprobar la conexión.',
+      'La verificación se hará automáticamente.',
     ],
   },
   'vercel-setup': {
@@ -77,7 +77,7 @@ const STEP_DEFS: Record<string, StepDef> = {
     instructions: [
       'Asegúrate de tener Vercel CLI instalado.',
       'Ejecuta "vercel login" en tu servidor.',
-      'Haz clic en "Verificar" para comprobar la conexión.',
+      'La verificación se hará automáticamente.',
     ],
   },
   'supabase-setup': {
@@ -87,7 +87,7 @@ const STEP_DEFS: Record<string, StepDef> = {
     instructions: [
       'Asegúrate de tener Supabase CLI instalado.',
       'Ejecuta "supabase login" en tu servidor.',
-      'Haz clic en "Verificar" para comprobar la conexión.',
+      'La verificación se hará automáticamente.',
     ],
   },
   'provider-config': {
@@ -97,7 +97,7 @@ const STEP_DEFS: Record<string, StepDef> = {
     instructions: [
       'Configura el modelo de IA que usará tu VCOO.',
       'Recomendamos OpenCode Go (mejor calidad-precio) o Anthropic (más potente).',
-      'Haz clic en "Verificar" cuando hayas configurado tu proveedor.',
+      'La verificación se hará automáticamente.',
     ],
     extra: 'provider-config',
   },
@@ -192,7 +192,7 @@ function ServiceAuthButton({ stepId, token }: { stepId: string; token: string })
         <ExternalLink className="w-4 h-4" /> {info.label}
       </button>
       <p className="text-xs text-(--vs-muted) mt-2">
-        Se abrirá una pestaña para autorizar. Después haz clic en "Verificar conexión".
+        Se abrirá una pestaña para autorizar. La verificación será automática.
       </p>
     </div>
   );
@@ -510,7 +510,7 @@ export default function Setup() {
           </div>
 
           <p className="text-xs text-(--vs-muted)">
-            Ejecuta estos comandos en la terminal de tu servidor VPS. Luego haz clic en "Verificar".
+            Ejecuta estos comandos en la terminal de tu servidor VPS. El agente verificará automáticamente.
           </p>
         </div>
       )}

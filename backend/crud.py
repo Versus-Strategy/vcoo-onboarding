@@ -63,6 +63,10 @@ def delete_vcoo(db: Session, vcoo_id: str) -> bool:
     v = get_vcoo(db, vcoo_id)
     if not v:
         return False
+    # Delete onboarding state first (FK to vcoos)
+    db.query(models.OnboardingState).filter(
+        models.OnboardingState.vcoo_id == vcoo_id
+    ).delete()
     # Delete related records
     db.query(models.ProvisionToken).filter(
         models.ProvisionToken.vcoo_id == vcoo_id
