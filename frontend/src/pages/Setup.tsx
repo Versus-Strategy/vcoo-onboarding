@@ -20,7 +20,7 @@ export default function Setup() {
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
 
-  const installCommand = `curl -sSL https://vcoo-onboarding.vercel.app/install.sh | bash -s -- ${token}`;
+  const installCommand = `curl -sSL https://vcoo-onboarding.vercel.app/install.sh | PROVISION_TOKEN=${token} bash -`;
 
   useEffect(() => {
     if (!token) {
