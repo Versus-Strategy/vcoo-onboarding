@@ -617,7 +617,30 @@ def agent_report_result(agent_id: str, payload: dict, db: Session = Depends(get_
     return JSONResponse(content=result, status_code=status_code)
 
 
-# ── VCOO Logs ────────────────────────────────────────────\n\n@app.get(\"/vcoo/{vcoo_id}/logs\")\ndef get_vcoo_logs(vcoo_id: str, db: Session = Depends(get_db)):\n    \"\"\"Retrieve all command logs for a VCOO (across all its agents).\"\"\"\n    agent = crud.get_agent_by_vcoo(db, vcoo_id)\n    if not agent:\n        return {\"commands\": []}\n    commands = crud.get_agent_commands(db, str(agent.id), limit=50)\n    result = []\n    for cmd in commands:\n        logs = crud.get_command_logs(db, str(cmd.id))\n        result.append({\n            \"cmd_id\": str(cmd.id),\n            \"command\": cmd.command,\n            \"step\": cmd.step,\n            \"status\": cmd.status,\n            \"result\": (cmd.result or \"\")[:500],\n            \"logs\": logs[-100:] if logs else [],\n        })\n    return {\"commands\": result}\n\n\n# ── Agent heartbeat (SPEC v2 §4.6) ───────────────────────
+# ── VCOO Logs ────────────────────────────────────────────
+
+@app.get("/vcoo/{vcoo_id}/logs")
+def get_vcoo_logs(vcoo_id: str, db: Session = Depends(get_db)):
+    """Retrieve all command logs for a VCOO (across all its agents)."""
+    agent = crud.get_agent_by_vcoo(db, vcoo_id)
+    if not agent:
+        return {"commands": []}
+    commands = crud.get_agent_commands(db, str(agent.id), limit=50)
+    result = []
+    for cmd in commands:
+        logs = crud.get_command_logs(db, str(cmd.id))
+        result.append({
+            "cmd_id": str(cmd.id),
+            "command": cmd.command,
+            "step": cmd.step,
+            "status": cmd.status,
+            "result": (cmd.result or "")[:500],
+            "logs": logs[-100:] if logs else [],
+        })
+    return {"commands": result}
+
+
+# ── Agent heartbeat (SPEC v2 §4.6) ───────────────────────
 
 @app.post("/agent/heartbeat")
 def agent_heartbeat_endpoint(payload: dict, db: Session = Depends(get_db)):
