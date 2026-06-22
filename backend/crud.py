@@ -84,7 +84,7 @@ def validate_provision_token(db: Session, token: str):
         return None
     if pt.used:
         return None
-    if pt.expires_at and pt.expires_at < datetime.utcnow():
+    if pt.expires_at and pt.expires_at.replace(tzinfo=None) < datetime.utcnow():
         return None
     # mark used and return vcoo_id
     pt.used = True
