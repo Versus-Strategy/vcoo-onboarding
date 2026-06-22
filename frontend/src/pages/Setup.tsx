@@ -395,40 +395,40 @@ export default function Setup() {
         </div>
       )}
 
-      {/* VPS Recommendation (during bootstrap) */}
-      {isBootstrap && !isComplete && (
+      {/* VPS Recommendation — always visible during onboarding */}
+      {!isComplete && (
         <div className="mb-6 rounded-xl border border-(--vs-border) bg-(--vs-bg-card) p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <div className="p-1.5 bg-blue-950/30 rounded-lg"><Server className="w-4 h-4 text-blue-400" /></div>
               <div>
-                <span className="text-sm font-medium text-(--vs-heading)">¿No tienes servidor?</span>
-                <span className="text-xs text-(--vs-muted) ml-2">Te recomendamos un VPS</span>
+                <span className="text-sm font-semibold text-(--vs-heading)">¿No tienes servidor?</span>
+                <span className="text-xs text-(--vs-muted) ml-2">Te recomendamos un VPS económico</span>
               </div>
             </div>
             <a
               href="https://www.ovhcloud.com/es-es/vps/"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-(--vs-accent) hover:bg-(--vs-accent)/80 text-white rounded-lg text-sm font-medium transition shrink-0"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#533afd] hover:bg-[#533afd]/80 text-white rounded-lg text-sm font-semibold transition shrink-0 shadow-lg shadow-[#533afd]/20"
             >
               <ExternalLink className="w-4 h-4" /> Ver OVHcloud VPS
             </a>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
             {[
-              { label: 'Precio', value: 'Desde 3,81 €/mes' },
-              { label: 'vCores', value: '2' },
-              { label: 'RAM', value: '4 GB' },
-              { label: 'Almacenamiento', value: '40 GB SSD NVMe' },
-              { label: 'Backup', value: 'Diario (24h)' },
-              { label: 'Tráfico', value: 'Ilimitado' },
-              { label: 'Ancho de banda', value: '200 Mbps' },
-              { label: 'SO', value: 'Linux (Ubuntu, Debian...)' },
+              { label: 'VPS-1', value: 'Desde 3,81 €/mes + IVA', highlight: true },
+              { label: 'vCores', value: '2', highlight: false },
+              { label: 'RAM', value: '4 GB', highlight: false },
+              { label: 'SSD NVMe', value: '40 GB', highlight: false },
+              { label: 'Backup', value: 'Diario (1 día)', highlight: false },
+              { label: 'Tráfico', value: 'Ilimitado', highlight: false },
+              { label: 'Ancho de banda', value: '200 Mbps', highlight: false },
+              { label: 'SO', value: 'Linux (Ubuntu, Debian...)', highlight: false },
             ].map(spec => (
-              <div key={spec.label} className="flex justify-between bg-(--vs-bg) rounded-lg px-3 py-2">
+              <div key={spec.label} className={`flex justify-between rounded-lg px-3 py-2 ${spec.highlight ? 'bg-[#533afd]/10 border border-[#533afd]/20' : 'bg-(--vs-bg)'}`}>
                 <span className="text-(--vs-muted) text-xs">{spec.label}</span>
-                <span className="font-medium text-(--vs-heading) text-xs">{spec.value}</span>
+                <span className={`text-xs ${spec.highlight ? 'font-bold text-[#533afd]' : 'font-medium text-(--vs-heading)'}`}>{spec.value}</span>
               </div>
             ))}
           </div>

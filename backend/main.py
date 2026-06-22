@@ -217,11 +217,13 @@ def get_auth_url(token: str, service: str = "", db: Session = Depends(get_db)):
     service = service.lower().strip()
     if service == "google":
         client_id = _os.getenv("GOOGLE_CLIENT_ID", "")
-        redirect = _os.getenv("GOOGLE_REDIRECT_URI", "https://vcoo-onboarding.vercel.app/auth/callback?service=google")
+        # Google strips extra query params from redirect_uri — encode service in state
+        redirect = _os.getenv("GOOGLE_REDIRECT_URI", "https://vcoo-onboarding.vercel.app/auth/callback")
+        state = f"{vcoo_id}:google"
         if not client_id:
-            url = "https://accounts.google.com/o/oauth2/v2/auth?client_id=vcoo-dev&redirect_uri={}&response_type=code&scope=https://www.googleapis.com/auth/drive.readonly+https://www.googleapis.com/auth/gmail.readonly&access_type=offline&prompt=consent&state={}".format(redirect, vcoo_id)
+            url = "https://accounts.google.com/o/oauth2/v2/auth?client_id=vcoo-dev&redirect_uri={}&response_type=code&scope=https://www.googleapis.com/auth/drive.readonly+https://www.googleapis.com/auth/gmail.readonly&access_type=offline&prompt=consent&state={}".format(redirect, state)
         else:
-            url = "https://accounts.google.com/o/oauth2/v2/auth?client_id={}&redirect_uri={}&response_type=code&scope=https://www.googleapis.com/auth/drive.readonly+https://www.googleapis.com/auth/gmail.readonly&access_type=offline&prompt=consent&state={}".format(client_id, redirect, vcoo_id)
+            url = "https://accounts.google.com/o/oauth2/v2/auth?client_id={}&redirect_uri={}&response_type=code&scope=https://www.googleapis.com/auth/drive.readonly+https://www.googleapis.com/auth/gmail.readonly&access_type=offline&prompt=consent&state={}".format(client_id, redirect, state)
         return {"url": url, "service": "google"}
     elif service == "trello":
         api_key = _os.getenv("TRELLO_API_KEY", "vcoo-dev-key")
@@ -240,18 +242,83 @@ def get_auth_url(token: str, service: str = "", db: Session = Depends(get_db)):
 # ── OAuth callback ─────────────────────────────────────
 
 @app.get("/auth/callback")
-def oauth_callback(service: str = "", code: str = "", state: str = "", db: Session = Depends(get_db)):
-    """Receives OAuth callback. Queues save-creds for the agent."""
-    if not service or not code:
-        return HTMLResponse("<html><body><h1>Error</h1><p>Falta service o code</p></body></html>", status_code=400)
-    service = service.lower().strip()
+def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session = Depends(get_db)):
+    """Receives OAuth callback from Google. Exchanges code for tokens, queues save-creds."""
+    # Handle user denial / errors
+    if error:
+        return HTMLResponse(
+            "<html><body style=\"background:#0a0a0f;color:#e2e8f0;font-family:sans-serif;text-align:center;padding:60px\">"
+            f"<h1 style=\"color:#ef4444\">Autorizacion denegada</h1><p>{error}</p>"
+            "<script>setTimeout(function(){window.close()},5000)</script></body></html>"
+        )
+    if not code:
+        return HTMLResponse(
+            "<html><body style=\"background:#0a0a0f;color:#e2e8f0;font-family:sans-serif;text-align:center;padding:60px\">"
+            "<h1 style=\"color:#ef4444\">Error</h1><p>Falta el codigo de autorizacion (code)</p>"
+            "<script>setTimeout(function(){window.close()},5000)</script></body></html>",
+            status_code=400,
+        )
+
+    # Parse service from state: "{vcoo_id}:{service}" — fallback to "google"
+    service = "google"
     vcoo_id = state
+    if ":" in (state or ""):
+        parts = state.split(":", 1)
+        vcoo_id = parts[0]
+        service = parts[1] if len(parts) > 1 else "google"
+
     agent = crud.get_agent_by_vcoo(db, vcoo_id) if vcoo_id else None
+
+    # Try to exchange code for real tokens
+    access_token = ""
+    refresh_token = ""
+    if service == "google":
+        client_id = _os.getenv("GOOGLE_CLIENT_ID", "")
+        client_secret = _os.getenv("GOOGLE_CLIENT_SECRET", "")
+        redirect_uri = _os.getenv("GOOGLE_REDIRECT_URI", "https://vcoo-onboarding.vercel.app/auth/callback")
+        if client_id and client_secret:
+            try:
+                import urllib.request
+                import urllib.parse
+                token_data = urllib.parse.urlencode({
+                    "code": code,
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "redirect_uri": redirect_uri,
+                    "grant_type": "authorization_code",
+                }).encode()
+                req = urllib.request.Request(
+                    "https://oauth2.googleapis.com/token",
+                    data=token_data,
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    token_resp = json.loads(resp.read())
+                    access_token = token_resp.get("access_token", "")
+                    refresh_token = token_resp.get("refresh_token", "")
+                    print(f"[oauth] Google token exchange OK, access_token={access_token[:20]}...", file=sys.stderr)
+            except Exception as e:
+                print(f"[oauth] Token exchange failed: {e}", file=sys.stderr)
+                # Continue — store the code as fallback so the agent can retry
+
     if agent:
-        creds_data = {"service": service, "access_token": code[:50] + "...", "code": code}
-        crud.create_command(db, agent_id=str(agent.id), command="save-creds", step="save-creds",
-                          result=json.dumps(creds_data))
-    return HTMLResponse("""<html><body style="background:#0a0a0f;color:#e2e8f0;font-family:sans-serif;text-align:center;padding:60px"><h1 style="color:#533afd">Autorizacion recibida</h1><p>Vuelve al wizard para continuar.</p><script>setTimeout(function(){window.close()},3000)</script></body></html>""")
+        creds_data = {
+            "service": service,
+            "code": code,
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+        }
+        crud.create_command(
+            db, agent_id=str(agent.id), command="save-creds", step="save-creds",
+            result=json.dumps(creds_data),
+        )
+
+    return HTMLResponse(
+        "<html><body style=\"background:#0a0a0f;color:#e2e8f0;font-family:sans-serif;text-align:center;padding:60px\">"
+        "<h1 style=\"color:#533afd\">Autorizacion recibida</h1>"
+        "<p>Vuelve al wizard para continuar.</p>"
+        "<script>setTimeout(function(){window.close()},3000)</script></body></html>"
+    )
 
 
 # ── Hermes CLI commands (dynamic) ──────────────────────
@@ -397,6 +464,7 @@ def agent_poll(agent_id: str, authorization: str = Header(None), db: Session = D
         crud.mark_command_sent(db, cmd.id)
 
     # Incluir progreso del onboarding para la TUI
+    st = None
     progress_data = {}
     if agent.vcoo_id:
         st = crud.get_onboarding_state(db, str(agent.vcoo_id))
@@ -411,6 +479,7 @@ def agent_poll(agent_id: str, authorization: str = Header(None), db: Session = D
         "commands": result,
         "progress": progress_data,
         "step": st.step if st else "",
+        "onboarding_status": st.status if st else "unknown",
     }
 
 @app.post("/agent/{agent_id}/complete")

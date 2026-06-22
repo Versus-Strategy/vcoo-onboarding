@@ -110,15 +110,23 @@ def save_credentials(service, data):
 
     if service == "google":
         token_path = os.path.join(hermes_dir, "google_token.json")
+        # Use real tokens from backend exchange (preferred) or fall back to raw code
+        access_token = data.get("access_token", "")
+        refresh_token = data.get("refresh_token", "")
+        code = data.get("code", "")
         token_data = {
-            "access_token": data.get("access_token", ""),
-            "refresh_token": data.get("refresh_token", ""),
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "code": code if not access_token else "",  # keep code only if exchange failed
             "token_type": "Bearer",
             "scope": "https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/gmail.readonly",
         }
         with open(token_path, "w") as f:
             json.dump(token_data, f)
-        log("Token Google guardado en google_token.json")
+        if access_token:
+            log("Token Google guardado (access_token + refresh_token)")
+        else:
+            log("Token Google guardado (solo code — el agente debera intercambiarlo)")
 
     elif service == "trello":
         env_path = os.path.join(hermes_dir, ".env")
@@ -330,9 +338,13 @@ def report_with_retry(agent_id, agent_token, result, max_retries=3):
                 BASE + "/agent/" + agent_id + "/result",
                 json=payload, headers=headers, timeout=10
             )
-            if resp.status_code in (200, 201, 409):
+            # Accept any 2xx status (200, 201, 202, etc.) and 409 (already reported)
+            if 200 <= resp.status_code < 300 or resp.status_code == 409:
                 log("ACK para " + result["cmd_id"][:12])
-                data = resp.json() if resp.text else {}
+                try:
+                    data = resp.json() if resp.text else {}
+                except Exception:
+                    data = {}
                 return True, data.get("next_step")
             if resp.status_code == 404:
                 log("Cmd " + result["cmd_id"][:12] + " no encontrado, descartando")
@@ -441,6 +453,18 @@ def main_loop(agent_id, agent_token, vcoo_id):
 
         for cmd in cmds:
             command = cmd.get("command", "")
+            cmd_id = cmd.get("cmd_id", "")
+
+            # Defense in depth: filter invalid commands client-side too
+            if command not in COMMAND_MAP:
+                log("Ignorado: " + command + " (no esta en COMMAND_MAP)")
+                report_with_retry(agent_id, agent_token, {
+                    "cmd_id": cmd_id,
+                    "step": cmd.get("step", ""),
+                    "exit_code": -1,
+                    "output": "Comando no soportado: " + command
+                })
+                continue
 
             if command == "finalize":
                 log("Recibido comando finalize")
@@ -501,6 +525,7 @@ def main():
 
     loaded = load_agent()
 
+    # Si hay PROVISION_TOKEN, SIEMPRE intentamos registrar (sobrescribe estado anterior)
     if PROV:
         meta = register_agent()
         if meta:
@@ -509,12 +534,17 @@ def main():
             vcoo_id = meta["vcoo_id"]
             TUI["agent_id"] = agent_id
             TUI["vcoo_id"] = vcoo_id
-            if loaded and loaded.get("vcoo_id") != vcoo_id:
-                log("Token nuevo (VCOO " + vcoo_id[:12] + "), sobrescribiendo anterior")
+            if loaded:
+                old_vcoo = loaded.get("vcoo_id", "")
+                if old_vcoo != vcoo_id:
+                    log("Token nuevo (VCOO " + vcoo_id[:12] + "), sobrescribiendo anterior (" + old_vcoo[:12] + ")")
+                else:
+                    log("Re-registrado: agente " + agent_id[:20])
+            else:
+                log("Registrado: agente " + agent_id[:20])
             save_agent(agent_id, agent_token, vcoo_id)
-            log("Registrado: agente " + agent_id[:20])
         elif loaded:
-            log("Registro fallido, restaurando estado guardado")
+            log("Registro fallido (token expirado/invalido), restaurando estado guardado")
             agent_id = loaded["agent_id"]
             agent_token = loaded["agent_token"]
             vcoo_id = loaded["vcoo_id"]
