@@ -8,7 +8,7 @@ import asyncio
 import json
 import os as _os
 
-app = FastAPI(title="VCOO Onboarding API")
+app = FastAPI(title="VCOO Onboarding API v2")
 
 app.add_middleware(
     CORSMiddleware,
