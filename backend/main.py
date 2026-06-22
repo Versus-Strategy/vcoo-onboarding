@@ -75,7 +75,7 @@ def get_provision_token(vcoo_id: str, db: Session = Depends(get_db)):
     if not v:
         raise HTTPException(status_code=404, detail="VCOO not found")
     token = crud.create_provision_for_vcoo(db, vcoo_id)
-    frontend_url = _os.getenv('FRONTEND_URL', 'https://frontend-ivory-seven-d0aw1wzkae.vercel.app')
+    frontend_url = _os.getenv('FRONTEND_URL', 'https://vcoo-onboarding.vercel.app')
     install_cmd = f"curl -sSL {frontend_url}/install.sh | PROVISION_TOKEN={token} bash -"
     return {"token": token, "install_command": install_cmd}
 
@@ -191,3 +191,33 @@ def get_playbook(name: str):
         raise HTTPException(status_code=404, detail='Playbook not found')
     content = open(path).read()
     return {'name': name, 'script': content}
+
+
+# ── Static assets (served alongside API) ──────────────────
+
+_STATIC_DIR = _os.path.join(_os.path.dirname(__file__))
+
+_STATIC_FILES = {
+    'install.sh': 'text/x-sh',
+    'agent_http.py': 'text/x-python',
+}
+
+
+@app.get('/install.sh')
+def get_install_script():
+    """Serve the agent one-liner installer."""
+    path = _os.path.join(_STATIC_DIR, 'install.sh')
+    if not _os.path.isfile(path):
+        raise HTTPException(status_code=404, detail='Not found')
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse(open(path).read(), media_type='text/x-sh')
+
+
+@app.get('/agent_http.py')
+def get_agent_script():
+    """Serve the agent Python script."""
+    path = _os.path.join(_STATIC_DIR, 'agent_http.py')
+    if not _os.path.isfile(path):
+        raise HTTPException(status_code=404, detail='Not found')
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse(open(path).read(), media_type='text/x-python')
