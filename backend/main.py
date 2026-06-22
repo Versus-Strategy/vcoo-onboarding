@@ -264,10 +264,19 @@ def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session
     vcoo_id = state
     if ":" in (state or ""):
         parts = state.split(":", 1)
-        vcoo_id = parts[0]
+        # vcoo_id must be a valid UUID; keep the full state if split produces garbage
+        raw_vcoo = parts[0]
+        if len(raw_vcoo) >= 32:  # heuristic: UUIDs are 32+ hex chars
+            vcoo_id = raw_vcoo
         service = parts[1] if len(parts) > 1 else "google"
 
-    agent = crud.get_agent_by_vcoo(db, vcoo_id) if vcoo_id else None
+    agent = None
+    if vcoo_id:
+        try:
+            agent = crud.get_agent_by_vcoo(db, vcoo_id)
+        except Exception:
+            # Malformed UUID in state — ignore, will still return success page
+            pass
 
     # Try to exchange code for real tokens
     access_token = ""
