@@ -28,9 +28,15 @@ def get_db():
 
 @app.on_event("startup")
 async def startup():
-    Base.metadata.create_all(bind=engine)
-    # register websocket routes
-    register_ws_routes(app)
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        # In serverless, DB may not be reachable on cold start — tables should be pre-created
+        import sys as _sys
+        print(f"[startup] create_all skipped (DB unreachable): {e}", file=_sys.stderr)
+    # WebSocket routes only in dev (Vercel serverless does not support WS)
+    if _os.getenv("VERCEL_ENV") is None:
+        register_ws_routes(app)
 
 
 # ── VCOO ──────────────────────────────────────────────────
