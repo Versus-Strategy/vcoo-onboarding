@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { setMasterKey, verifyAuth, listVCOOs, completeVCOO, deleteVCOO } from '../api/client';
 import type { VCOOResult } from '../api/client';
 import CreateVCOO from '../components/CreateVCOO';
