@@ -290,8 +290,7 @@ def agent_poll(agent_id: str, authorization: str = Header(None), db: Session = D
     VALID_COMMANDS = {
         "verify-bootstrap", "verify-google", "verify-trello", "verify-email",
         "verify-github", "verify-vercel", "verify-supabase",
-        "save-creds", "finalize", "vcoo-bootstrap.py", "vcoo-google.py",
-        "vcoo-trello.py", "vcoo-email.py",
+        "save-creds", "finalize",
     }
     result = []
     for cmd in pending:
@@ -300,7 +299,23 @@ def agent_poll(agent_id: str, authorization: str = Header(None), db: Session = D
             continue
         result.append({"cmd_id": str(cmd.id), "command": cmd.command, "step": cmd.step})
         crud.mark_command_sent(db, cmd.id)
-    return {"commands": result}
+
+    # Incluir progreso del onboarding para la TUI
+    progress_data = {}
+    if agent.vcoo_id:
+        st = crud.get_onboarding_state(db, str(agent.vcoo_id))
+        if st:
+            from onboarding import get_total_steps
+            modules = list(st.modules or ["core"])
+            progress_data = {
+                "done": len(st.completed or []),
+                "total": get_total_steps(modules),
+            }
+    return {
+        "commands": result,
+        "progress": progress_data,
+        "step": st.step if agent.vcoo_id and (st := crud.get_onboarding_state(db, str(agent.vcoo_id))) else "",
+    }
 
 @app.post("/agent/{agent_id}/complete")
 def agent_setup_complete(agent_id: str, db: Session = Depends(get_db)):
@@ -321,6 +336,27 @@ def agent_logs(agent_id: str, payload: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail='cmd_id missing')
     crud.append_command_log(db, cmd_id, chunk, stream)
     return {'status': 'ok'}
+
+@app.get('/agent/{agent_id}/logs')
+def get_command_logs(agent_id: str, cmd_id: str = "", db: Session = Depends(get_db)):
+    """Retrieve command logs for a specific cmd_id (or all recent)."""
+    if cmd_id:
+        logs = crud.get_command_logs(db, cmd_id)
+        return {"cmd_id": cmd_id, "logs": logs}
+    # If no cmd_id, return recent commands with their logs for this agent
+    commands = crud.get_agent_commands(db, agent_id, limit=20)
+    result = []
+    for cmd in commands:
+        logs = crud.get_command_logs(db, str(cmd.id))
+        result.append({
+            "cmd_id": str(cmd.id),
+            "command": cmd.command,
+            "step": cmd.step,
+            "status": cmd.status,
+            "result": cmd.result[:500] if cmd.result else "",
+            "logs": logs[-50:] if logs else [],
+        })
+    return {"commands": result}
 
 
 # ── Commands ──────────────────────────────────────────────
@@ -468,6 +504,16 @@ def get_playbook(name: str):
         raise HTTPException(status_code=404, detail='Playbook not found')
     content = open(path).read()
     return {'name': name, 'script': content}
+
+@app.get('/playbooks/{name}/raw')
+def get_playbook_raw(name: str):
+    """Returns raw script content (for curl downloads from install.sh)."""
+    from fastapi.responses import PlainTextResponse
+    path = _os.path.join(_PLAYBOOKS_DIR, name)
+    if not _os.path.isfile(path):
+        raise HTTPException(status_code=404, detail='Playbook not found')
+    content = open(path).read()
+    return PlainTextResponse(content, media_type='text/x-python')
 
 
 # ── Static assets ─────────────────────────────────────────

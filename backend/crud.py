@@ -238,6 +238,21 @@ def append_command_log(db: Session, command_id: str, chunk: str, stream: str = '
     return cl
 
 
+def get_command_logs(db: Session, command_id: str) -> list[dict]:
+    """Returns log chunks for a command, ordered by timestamp."""
+    logs = db.query(models.CommandLog).filter(
+        models.CommandLog.command_id == command_id
+    ).order_by(models.CommandLog.id.asc()).all()
+    return [{"chunk": l.chunk, "stream": l.stream} for l in logs]
+
+
+def get_agent_commands(db: Session, agent_id: str, limit: int = 20):
+    """Returns recent commands for an agent, newest first."""
+    return db.query(models.Command).filter(
+        models.Command.agent_id == agent_id
+    ).order_by(models.Command.id.desc()).limit(limit).all()
+
+
 # ── Onboarding State (SPEC v2 §3.2) ─────────────────────
 
 def get_or_create_onboarding_state(

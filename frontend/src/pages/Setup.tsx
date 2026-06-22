@@ -112,6 +112,53 @@ const STEP_DEFS: Record<string, StepDef> = {
   },
 };
 
+// ── Error detail component ──
+
+interface ErrorItem {
+  step: string;
+  error: string;
+  timestamp?: string;
+  skipped_by_operator?: boolean;
+}
+
+function ErrorDetail({ error, idx }: { error: ErrorItem; idx: number }) {
+  const [expanded, setExpanded] = useState(false);
+  const maxLen = 200;
+  const isLong = error.error.length > maxLen;
+  const display = expanded || !isLong ? error.error : error.error.slice(0, maxLen) + '...';
+
+  return (
+    <div className="rounded-lg bg-red-950/30 border border-red-800/20 p-3">
+      <div className="flex items-start gap-2">
+        <XCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-medium text-red-300">
+              {error.skipped_by_operator ? 'Omitido por operador' : 'Fallo #' + (idx + 1)}
+            </span>
+            {error.timestamp && (
+              <span className="text-[10px] text-(--vs-muted)">
+                {new Date(error.timestamp).toLocaleTimeString()}
+              </span>
+            )}
+          </div>
+          <pre className="text-xs text-red-200/80 whitespace-pre-wrap break-all font-mono leading-relaxed">
+            {display}
+          </pre>
+          {isLong && (
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="text-xs text-red-400 hover:text-red-300 mt-1.5 transition"
+            >
+              {expanded ? '▼ Ver menos' : '▶ Ver más'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const STEP_ORDER = [
   'bootstrap', 'provider-config', 'google-oauth', 'gmail-setup',
   'trello-setup', 'github-setup', 'vercel-setup',
@@ -473,6 +520,9 @@ export default function Setup() {
                     {state === 'skipped' && <span className="text-xs text-(--vs-muted) bg-(--vs-bg-card) px-2 py-0.5 rounded">Omitido</span>}
                     {state === 'error' && <span className="text-xs text-red-400 bg-red-950/30 px-2 py-0.5 rounded">Error</span>}
                     {state === 'blocked' && <span className="text-xs text-amber-400 bg-amber-950/30 px-2 py-0.5 rounded">Bloqueado</span>}
+                    {stepErrors.length > 0 && (
+                      <span className="text-xs text-(--vs-muted)">({stepErrors.length} {stepErrors.length === 1 ? 'fallo' : 'fallos'})</span>
+                    )}
                   </div>
                   {(isCurrent || state === 'active') && !isComplete && (
                     <div className="mt-3">
@@ -503,12 +553,10 @@ export default function Setup() {
                       )}
                     </div>
                   )}
-                  {stepErrors.length > 0 && !isCurrent && (
-                    <div className="mt-2 space-y-1">
+                  {stepErrors.length > 0 && (
+                    <div className="mt-2 space-y-2">
                       {stepErrors.map((e, i) => (
-                        <p key={i} className="text-xs text-red-400/80 flex items-start gap-1">
-                          <XCircle className="w-3 h-3 shrink-0 mt-0.5" /> {e.error}
-                        </p>
+                        <ErrorDetail key={i} error={e} idx={i} />
                       ))}
                     </div>
                   )}
