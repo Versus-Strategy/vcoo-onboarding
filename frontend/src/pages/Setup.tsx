@@ -396,38 +396,47 @@ export default function Setup() {
 
       {/* VPS Recommendation — always visible during onboarding */}
       {!isComplete && (
-        <div className="mb-6 rounded-xl border border-(--vs-border) bg-(--vs-bg-card) p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-blue-950/30 rounded-lg"><Server className="w-4 h-4 text-blue-400" /></div>
+        <div className="mb-6 rounded-xl border border-blue-900/30 bg-gradient-to-br from-blue-950/20 to-transparent p-5">
+          {/* Header row */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
+            <div className="flex items-center gap-3 flex-1">
+              <div className="p-2 bg-blue-500/10 rounded-xl shrink-0">
+                <Server className="w-5 h-5 text-blue-400" />
+              </div>
               <div>
-                <span className="text-sm font-semibold text-(--vs-heading)">¿No tienes servidor?</span>
-                <span className="text-xs text-(--vs-muted) ml-2">Te recomendamos un VPS económico</span>
+                <h3 className="font-semibold text-sm text-(--vs-heading)">¿No tienes servidor?</h3>
+                <p className="text-xs text-(--vs-muted)">Recomendamos OVHcloud VPS-1 — económico y fiable</p>
               </div>
             </div>
             <a
               href="https://www.ovhcloud.com/es-es/vps/"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#533afd] hover:bg-[#533afd]/80 text-white rounded-lg text-sm font-semibold transition shrink-0 shadow-lg shadow-[#533afd]/20"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-[#533afd] hover:bg-[#533afd]/85 text-white rounded-lg text-sm font-semibold transition shrink-0 shadow-md shadow-[#533afd]/25 w-full sm:w-auto"
             >
-              <ExternalLink className="w-4 h-4" /> Ver OVHcloud VPS
+              <ExternalLink className="w-4 h-4" /> Ver VPS en OVHcloud
             </a>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+
+          {/* Specs grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {/* Pricing card — highlighted */}
+            <div className="col-span-2 sm:col-span-1 flex flex-col justify-center rounded-xl bg-[#533afd]/15 border border-[#533afd]/30 px-4 py-3">
+              <span className="text-[10px] uppercase tracking-wider text-[#533afd] font-semibold mb-0.5">VPS-1</span>
+              <span className="text-lg font-bold text-white leading-tight">3,81 €/mes</span>
+              <span className="text-[10px] text-(--vs-muted)">+ IVA (4,61 € IVA incl.)</span>
+            </div>
             {[
-              { label: 'VPS-1', value: 'Desde 3,81 €/mes + IVA', highlight: true },
-              { label: 'vCores', value: '2', highlight: false },
-              { label: 'RAM', value: '4 GB', highlight: false },
-              { label: 'SSD NVMe', value: '40 GB', highlight: false },
-              { label: 'Backup', value: 'Diario (1 día)', highlight: false },
-              { label: 'Tráfico', value: 'Ilimitado', highlight: false },
-              { label: 'Ancho de banda', value: '200 Mbps', highlight: false },
-              { label: 'SO', value: 'Linux (Ubuntu, Debian...)', highlight: false },
+              { label: 'vCores', value: '2' },
+              { label: 'RAM', value: '4 GB' },
+              { label: 'SSD NVMe', value: '40 GB' },
+              { label: 'Backup', value: '1 día' },
+              { label: 'Tráfico', value: 'Ilimitado' },
+              { label: 'Ancho de banda', value: '200 Mbps' },
             ].map(spec => (
-              <div key={spec.label} className={`flex justify-between rounded-lg px-3 py-2 ${spec.highlight ? 'bg-[#533afd]/10 border border-[#533afd]/20' : 'bg-(--vs-bg)'}`}>
-                <span className="text-(--vs-muted) text-xs">{spec.label}</span>
-                <span className={`text-xs ${spec.highlight ? 'font-bold text-[#533afd]' : 'font-medium text-(--vs-heading)'}`}>{spec.value}</span>
+              <div key={spec.label} className="flex flex-col justify-center rounded-lg bg-(--vs-bg) px-3 py-2.5">
+                <span className="text-[10px] text-(--vs-muted) uppercase tracking-wider">{spec.label}</span>
+                <span className="text-sm font-semibold text-(--vs-heading)">{spec.value}</span>
               </div>
             ))}
           </div>
