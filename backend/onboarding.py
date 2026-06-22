@@ -94,3 +94,15 @@ def get_step_command(step: str) -> str:
         "finalize":       "finalize",
     }
     return mapping.get(step, step)
+
+
+def has_agent_command(step: str) -> bool:
+    """Returns True if this step has a corresponding agent command."""
+    return step in {"bootstrap", "google-oauth", "gmail-setup", "trello-setup",
+                    "github-setup", "vercel-setup", "supabase-setup", "finalize"}
+
+
+def get_agent_total_steps(modules: list[str]) -> int:
+    """Number of steps that require agent verification (excludes provider-config, etc.)."""
+    steps = get_steps_for_modules(modules)
+    return sum(1 for s in steps if has_agent_command(s))

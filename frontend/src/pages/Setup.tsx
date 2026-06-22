@@ -323,7 +323,7 @@ export default function Setup() {
     );
   }
 
-  const { name, modules, step, status, completed, errors, progress, install_command } = data;
+  const { name, modules, step, status, completed, errors, progress, install_command, agent_online } = data;
   const progressPercent = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
   const isBlocked = status === 'blocked';
   const isComplete = step === 'done' || status === 'completed';
@@ -359,8 +359,9 @@ export default function Setup() {
           <div>
             <h1 className="text-2xl font-bold text-(--vs-heading)">{name || 'Configuración VCOO'}</h1>
             <p className="text-sm text-(--vs-muted)">
-              {isComplete ? 'Onboarding completado' : isBlocked ? 'Configuración bloqueada — contacta con soporte' : 'Sigue los pasos para configurar tu VCOO'}
+              {isComplete ? 'Onboarding completado' : isBlocked ? 'Configuración bloqueada — contacta con soporte' : agent_online ? 'Agente conectado — el proceso avanza automáticamente' : 'Sigue los pasos para configurar tu VCOO'}
             </p>
+            {agent_online && <span className="inline-flex items-center gap-1.5 text-xs mt-1 px-2 py-0.5 rounded-full bg-emerald-950/30 text-emerald-400 border border-emerald-800/30"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Conectado</span>}
           </div>
         </div>
         <div className="mt-6">
@@ -588,7 +589,7 @@ export default function Setup() {
                           </li>
                         ))}
                       </ul>
-                      {state === 'active' && !isBlocked && (
+                      {state === 'active' && !isBlocked && !agent_online && (
                         <div>
                           <button
                             onClick={handleVerify}

@@ -140,53 +140,50 @@ def save_credentials(service, data):
 
 # ── Rich TUI rendering ──
 
-def generate_tui():
-    """Genera el layout Rich para Live display."""
+def generate_tui(debug=False):
+    """Genera el layout Rich. Simple por defecto, debug con F1."""
     layout = Layout()
-
-    header = Panel(
-        f"[bold white]Control Plane:[/] [cyan]{TUI['base']}[/]\n"
-        f"[bold white]Agent:[/] [dim]{TUI['agent_id'][:24]}...[/]  "
-        f"[bold white]VCOO:[/] [dim]{TUI['vcoo_id'][:12]}...[/]\n"
-        f"[bold white]Estado:[/] [green]{TUI['status']}[/]",
-        title="[bold cyan]⚡ VCOO Agent v3[/]",
-        border_style="cyan"
-    )
 
     done = TUI["progress_done"]
     total = TUI["progress_total"]
-    if total > 0:
-        bar_w = 36
-        pct = done / total if total > 0 else 0
-        filled = int(bar_w * pct)
-        bar = "█" * filled + "░" * (bar_w - filled)
-        prog = f"Progreso: [{done}/{total}] [cyan]{bar}[/] [dim]{int(pct*100)}%[/]"
+
+    if debug:
+        # Vista debug: full info + logs
+        header = Panel(
+            f"[bold white]Control Plane:[/] [cyan]{TUI['base']}[/]\n"
+            f"[bold white]Agent:[/] [dim]{TUI['agent_id'][:24]}...[/]  "
+            f"[bold white]VCOO:[/] [dim]{TUI['vcoo_id'][:12]}...[/]\n"
+            f"[bold white]Estado:[/] [green]{TUI['status']}[/]",
+            title="[bold cyan]VCOO Agent v3 — DEBUG[/]", border_style="cyan"
+        )
+        log_lines = TUI["log"][-20:]
+        if not log_lines:
+            log_lines = ["[dim](sin eventos)[/]"]
+        log_panel = Panel("\n".join(log_lines), title="[bold]Logs[/]", border_style="green")
+        layout.split_column(Layout(header, size=8), Layout(log_panel))
     else:
-        prog = "[dim]Esperando comandos...[/]"
+        # Vista cliente: limpia y sencilla
+        if total > 0:
+            bar_w = 50
+            pct = done / total if total > 0 else 0
+            filled = int(bar_w * pct)
+            bar = "█" * filled + "░" * (bar_w - filled)
+            prog_line = f"[cyan]{bar}[/] [bold white]{done}/{total}[/] [dim]({int(pct*100)}%)[/]"
+        else:
+            prog_line = "[dim]Preparando...[/]"
 
-    info = Panel(
-        f"{prog}\n"
-        f"[bold]Paso actual:[/] [yellow]{TUI['step'] or '—'}[/]  "
-        f"[bold]♥:[/] [dim]{TUI['last_heartbeat'] or '—'}[/]  "
-        f"[bold]Poll:[/] [dim]{TUI['last_poll'] or '—'}[/]",
-        title="[bold]Onboarding[/]",
-        border_style="blue"
-    )
+        status_color = "green" if TUI["status"] == "Online" else "yellow"
+        body = (
+            f"[bold]VCOO Onboarding[/]\n\n"
+            f"{prog_line}\n\n"
+            f"[bold]Paso:[/] [yellow]{TUI['step'] or 'Conectando...'}[/]\n"
+            f"[bold]Estado:[/] [{status_color}]{TUI['status']}[/]\n\n"
+            f"[dim]♥ {TUI['last_heartbeat'] or '—'}  |  Poll {TUI['last_poll'] or '—'}[/]\n\n"
+            f"[dim]Pulsa Ctrl+C para cancelar[/]"
+        )
+        panel = Panel(body, title="[bold cyan]⚡ VCOO Agent[/]", border_style="cyan")
+        layout.split_column(Layout(panel))
 
-    log_lines = TUI["log"][-18:]
-    if not log_lines:
-        log_lines = ["[dim](sin eventos aún)[/]"]
-    log_panel = Panel(
-        "\n".join(log_lines),
-        title="[bold]Eventos[/]",
-        border_style="green"
-    )
-
-    layout.split_column(
-        Layout(header, size=8),
-        Layout(info, size=5),
-        Layout(log_panel),
-    )
     return layout
 
 

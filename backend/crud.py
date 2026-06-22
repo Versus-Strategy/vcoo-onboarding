@@ -411,8 +411,13 @@ def process_agent_result(
     vcoo_id = str(agent.vcoo_id)
 
     if status == "ok":
-        # Advance onboarding
+        # Advance onboarding + auto-enqueue next step
         st = advance_onboarding_step(db, vcoo_id, step)
+        if st and st.step not in ("finalize", "done", step):
+            from onboarding import get_step_command
+            cmd_name = get_step_command(st.step)
+            if cmd_name:
+                create_command(db, agent_id=agent_id, command=cmd_name, step=st.step)
         next_step = st.step if st and st.step != "done" else None
         return cmd, True, next_step, 201
     else:

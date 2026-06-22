@@ -138,6 +138,13 @@ def get_setup_info(token: str, db: Session = Depends(get_db)):
     done = len(st.completed or [])
     frontend_url = _os.getenv('FRONTEND_URL', 'https://vcoo-onboarding.vercel.app')
     install_cmd = f"curl -sSL {frontend_url}/install.sh | PROVISION_TOKEN={token} bash -"
+    # Check if agent is online
+    agent = crud.get_agent_by_vcoo(db, vcoo_id)
+    agent_online = False
+    if agent and agent.last_seen:
+        import datetime as dt
+        ago = (dt.datetime.utcnow() - agent.last_seen.replace(tzinfo=None)).total_seconds()
+        agent_online = ago < 120
     return {
         "vcoo_id": str(v.id),
         "name": v.name,
@@ -149,6 +156,7 @@ def get_setup_info(token: str, db: Session = Depends(get_db)):
         "retry_count": st.retry_count or {},
         "progress": {"total": total, "done": done},
         "install_command": install_cmd,
+        "agent_online": agent_online,
     }
 
 
@@ -338,6 +346,16 @@ def register_agent(payload: dict, db: Session = Depends(get_db)):
     jti = payload_token.get('jti') if payload_token else None
     if jti:
         crud.set_agent_token_jti(db, str(agent.id), jti)
+
+    # ── Auto-trigger: encolar primer comando si hay onboarding pendiente ──
+    st = crud.get_onboarding_state(db, vcoo_id)
+    if st and st.status not in ("blocked", "completed") and st.step not in ("finalize", "done"):
+        from onboarding import get_step_command
+        cmd_name = get_step_command(st.step)
+        if cmd_name:
+            crud.create_command(db, agent_id=str(agent.id), command=cmd_name, step=st.step)
+    # ────────────────────────────────────────────────────────────────
+
     return {"agent_id": str(agent.id), "vcoo_id": str(vcoo_id), "agent_token": agent_token}
 
 
@@ -382,11 +400,11 @@ def agent_poll(agent_id: str, authorization: str = Header(None), db: Session = D
     if agent.vcoo_id:
         st = crud.get_onboarding_state(db, str(agent.vcoo_id))
         if st:
-            from onboarding import get_total_steps
+            from onboarding import get_agent_total_steps
             modules = list(st.modules or ["core"])
             progress_data = {
-                "done": len(st.completed or []),
-                "total": get_total_steps(modules),
+                "done": len([s for s in (st.completed or []) if onboarding.has_agent_command(s)]),
+                "total": get_agent_total_steps(modules),
             }
     return {
         "commands": result,

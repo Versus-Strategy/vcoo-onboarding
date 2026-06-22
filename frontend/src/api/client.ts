@@ -96,6 +96,7 @@ export interface SetupInfo {
   retry_count: Record<string, number>;
   progress: { total: number; done: number };
   install_command: string;
+  agent_online?: boolean;
 }
 
 export const getSetupInfo = (token: string): Promise<SetupInfo> =>
