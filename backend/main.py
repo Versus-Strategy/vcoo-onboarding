@@ -39,6 +39,29 @@ async def startup():
         register_ws_routes(app)
 
 
+# ── Health / Debug ────────────────────────────────────────────
+
+@app.get("/health")
+def health():
+    """Debug endpoint: show DB connection status (no secrets)."""
+    import os as _os
+    db_url = _os.getenv('POSTGRES_URL', 'NOT SET')
+    # Mask password for safety
+    if '@' in db_url and '://' in db_url:
+        parts = db_url.split('@')
+        prefix = parts[0].split(':')[0] + ':***'
+        masked = prefix + '@' + '@'.join(parts[1:])
+    else:
+        masked = db_url[:30] + '...'
+    return {
+        "status": "ok",
+        "vercel_env": _os.getenv('VERCEL_ENV', 'NOT SET'),
+        "db_host": db_url.split('@')[-1].split('/')[0] if '@' in db_url else 'unknown',
+        "db_url_masked": masked,
+        "supabase_detected": 'supabase.co' in db_url
+    }
+
+
 # ── VCOO ──────────────────────────────────────────────────
 
 @app.post("/vcoo")
