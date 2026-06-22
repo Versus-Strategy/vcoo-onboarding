@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Integer
+from sqlalchemy import Column, String, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 from datetime import datetime
@@ -26,6 +26,7 @@ class Agent(Base):
     info = Column(String, nullable=True)
     last_seen = Column(DateTime, default=datetime.utcnow)
     status = Column(String, default='offline')
+    token_jti = Column(String, nullable=True)  # for revocation reference
 
     def to_dict(self):
         return {
@@ -42,4 +43,5 @@ class Command(Base):
     agent_id = Column(UUID(as_uuid=True), nullable=False)
     command = Column(String, nullable=False)
     status = Column(String, default='pending')
+    result = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
