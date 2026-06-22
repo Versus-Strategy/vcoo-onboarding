@@ -5,6 +5,7 @@ if _sys_path not in sys.path:
 
 from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 import db
 from db import engine, Base, SessionLocal
@@ -247,9 +248,9 @@ def oauth_callback(service: str = "", code: str = "", state: str = "", db: Sessi
     vcoo_id = state
     agent = crud.get_agent_by_vcoo(db, vcoo_id) if vcoo_id else None
     if agent:
-        creds_data = json.dumps({"service": service, "access_token": code[:50] + "...", "code": code})
-        crud.create_command(db, agent_id=str(agent.id), command="save-creds", step="save-creds")
-    from fastapi.responses import HTMLResponse
+        creds_data = {"service": service, "access_token": code[:50] + "...", "code": code}
+        crud.create_command(db, agent_id=str(agent.id), command="save-creds", step="save-creds",
+                          result=json.dumps(creds_data))
     return HTMLResponse("""<html><body style="background:#0a0a0f;color:#e2e8f0;font-family:sans-serif;text-align:center;padding:60px"><h1 style="color:#533afd">Autorizacion recibida</h1><p>Vuelve al wizard para continuar.</p><script>setTimeout(function(){window.close()},3000)</script></body></html>""")
 
 
@@ -409,7 +410,7 @@ def agent_poll(agent_id: str, authorization: str = Header(None), db: Session = D
     return {
         "commands": result,
         "progress": progress_data,
-        "step": st.step if agent.vcoo_id and (st := crud.get_onboarding_state(db, str(agent.vcoo_id))) else "",
+        "step": st.step if st else "",
     }
 
 @app.post("/agent/{agent_id}/complete")

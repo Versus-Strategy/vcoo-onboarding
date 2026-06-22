@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import {
   Terminal, CheckCircle, XCircle, Loader2, Copy, ArrowRight,
   Zap, AlertTriangle, SkipForward, RefreshCw, Server,
-  Key, ExternalLink, ChevronDown,
+  Key, ExternalLink,
 } from 'lucide-react';
 import { getSetupInfo, verifyStep, getAuthUrl } from '../api/client';
 import type { SetupInfo } from '../api/client';
@@ -234,7 +234,6 @@ export default function Setup() {
   const [copied, setCopied] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [verifyMsg, setVerifyMsg] = useState('');
-  const [showVPSInfo, setShowVPSInfo] = useState(false);
   const [waitingStep, setWaitingStep] = useState<string>('');
 
   const loadData = useCallback(async () => {
@@ -398,11 +397,8 @@ export default function Setup() {
 
       {/* VPS Recommendation (during bootstrap) */}
       {isBootstrap && !isComplete && (
-        <div className="mb-6">
-          <button
-            onClick={() => setShowVPSInfo(!showVPSInfo)}
-            className="w-full rounded-xl border border-(--vs-border) bg-(--vs-bg-card) p-4 text-left hover:bg-(--vs-hover) transition flex items-center justify-between"
-          >
+        <div className="mb-6 rounded-xl border border-(--vs-border) bg-(--vs-bg-card) p-5">
+          <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <div className="p-1.5 bg-blue-950/30 rounded-lg"><Server className="w-4 h-4 text-blue-400" /></div>
               <div>
@@ -410,41 +406,32 @@ export default function Setup() {
                 <span className="text-xs text-(--vs-muted) ml-2">Te recomendamos un VPS</span>
               </div>
             </div>
-            <ChevronDown className={'w-4 h-4 text-(--vs-muted) transition-transform ' + (showVPSInfo ? 'rotate-180' : '')} />
-          </button>
-          {showVPSInfo && (
-            <div className="border border-(--vs-border) border-t-0 rounded-b-xl bg-(--vs-bg-card) p-5 space-y-3">
-              <div>
-                <h3 className="font-semibold text-(--vs-heading) mb-1">OVHcloud VPS Starter</h3>
-                <p className="text-xs text-(--vs-muted) mb-3">La opción que recomendamos para alojar tu VCOO:</p>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  {[
-                    { label: 'Precio', value: 'Desde $4.54/mes' },
-                    { label: 'vCores', value: '2' },
-                    { label: 'RAM', value: '4 GB' },
-                    { label: 'Almacenamiento', value: '40 GB SSD NVMe' },
-                    { label: 'Backup', value: 'Diario (24h)' },
-                    { label: 'Tráfico', value: 'Ilimitado' },
-                    { label: 'Ancho de banda', value: '200 Mbps' },
-                    { label: 'SO', value: 'Linux (Ubuntu, Debian...)' },
-                  ].map(spec => (
-                    <div key={spec.label} className="flex justify-between bg-(--vs-bg) rounded-lg px-3 py-2">
-                      <span className="text-(--vs-muted)">{spec.label}</span>
-                      <span className="font-medium text-(--vs-heading)">{spec.value}</span>
-                    </div>
-                  ))}
-                </div>
+            <a
+              href="https://www.ovhcloud.com/es-es/vps/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-(--vs-accent) hover:bg-(--vs-accent)/80 text-white rounded-lg text-sm font-medium transition shrink-0"
+            >
+              <ExternalLink className="w-4 h-4" /> Ver OVHcloud VPS
+            </a>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+            {[
+              { label: 'Precio', value: 'Desde 3,81 €/mes' },
+              { label: 'vCores', value: '2' },
+              { label: 'RAM', value: '4 GB' },
+              { label: 'Almacenamiento', value: '40 GB SSD NVMe' },
+              { label: 'Backup', value: 'Diario (24h)' },
+              { label: 'Tráfico', value: 'Ilimitado' },
+              { label: 'Ancho de banda', value: '200 Mbps' },
+              { label: 'SO', value: 'Linux (Ubuntu, Debian...)' },
+            ].map(spec => (
+              <div key={spec.label} className="flex justify-between bg-(--vs-bg) rounded-lg px-3 py-2">
+                <span className="text-(--vs-muted) text-xs">{spec.label}</span>
+                <span className="font-medium text-(--vs-heading) text-xs">{spec.value}</span>
               </div>
-              <a
-                href="https://www.ovhcloud.com/en/vps/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-sm text-(--vs-accent) hover:underline font-medium mt-2"
-              >
-                <ExternalLink className="w-3.5 h-3.5" /> Ver OVHcloud VPS
-              </a>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
       )}
 

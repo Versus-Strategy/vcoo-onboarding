@@ -155,8 +155,8 @@ def get_agent(db: Session, agent_id: str):
 
 # ── Commands ─────────────────────────────────────────────
 
-def create_command(db: Session, agent_id: str, command: str, step: str = None):
-    c = models.Command(agent_id=agent_id, command=command, step=step)
+def create_command(db: Session, agent_id: str, command: str, step: str = None, result: str = None):
+    c = models.Command(agent_id=agent_id, command=command, step=step, result=result)
     db.add(c)
     db.commit()
     db.refresh(c)
