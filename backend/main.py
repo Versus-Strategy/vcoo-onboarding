@@ -543,7 +543,7 @@ def get_command_logs(agent_id: str, cmd_id: str = "", db: Session = Depends(get_
             "command": cmd.command,
             "step": cmd.step,
             "status": cmd.status,
-            "result": cmd.result[:500] if cmd.result else "",
+            "result": (cmd.result or "")[:2000],
             "logs": logs[-50:] if logs else [],
         })
     return {"commands": result}
@@ -647,7 +647,7 @@ def get_vcoo_logs(vcoo_id: str, db: Session = Depends(get_db)):
             "command": cmd.command,
             "step": cmd.step,
             "status": cmd.status,
-            "result": (cmd.result or "")[:500],
+            "result": (cmd.result or "")[:2000],
             "logs": logs[-100:] if logs else [],
         })
     return {"commands": result}

@@ -223,10 +223,17 @@ function VCOOCard({
           {/* Logs */}
           <div>
             <label className="text-xs text-(--vs-muted) block mb-1.5 flex items-center gap-1"><Activity className="w-3 h-3" /> Logs</label>
-            <div className="bg-(--vs-code-bg) border border-(--vs-input-border) rounded-lg p-3 h-48 overflow-y-auto font-mono text-xs">
+            <div className="bg-(--vs-code-bg) border border-(--vs-input-border) rounded-lg p-3 h-48 overflow-y-auto font-mono text-xs leading-relaxed">
               {logs.length === 0 ? <p className="text-(--vs-muted) italic">Esperando logs...</p>
                 : logs.map((log, i) => (
-                  <div key={log.id || i} className={`whitespace-pre-wrap break-all ${log.stream === 'stderr' ? 'text-red-400' : log.stream === 'system' ? 'text-amber-400' : 'text-(--vs-code-text)'}`}>{log.chunk}</div>
+                  <div key={log.id || i} className={`whitespace-pre-wrap break-all ${
+                    log.stream === 'stderr' ? 'text-red-400' :
+                    log.stream === 'system' ? 'text-amber-400' :
+                    'text-(--vs-code-text)'
+                  }`}>
+                    <span className="text-(--vs-muted) select-none mr-1.5 shrink-0">{new Date(log.created_at).toLocaleTimeString()}</span>
+                    {log.chunk}
+                  </div>
                 ))}
               <div className="text-(--vs-muted) animate-pulse mt-1">▊</div>
             </div>

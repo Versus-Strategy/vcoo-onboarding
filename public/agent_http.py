@@ -63,11 +63,28 @@ TUI = {
     "vcoo_id": "",
     "status": "Conectando...",
     "step": "",
+    "step_label": "",
+    "step_instructions": [],
+    "auth_url": "",
     "progress_done": 0,
     "progress_total": 0,
     "last_heartbeat": "",
     "last_poll": "",
     "log": [],
+    "debug": os.environ.get("VCOO_DEBUG", "") == "1",
+}
+
+# ── Step labels & instructions ──
+STEP_INFO = {
+    "bootstrap":      ("Instalación base",        ["Ejecuta el one-liner en tu VPS", "El agente verificará la instalación"]),
+    "google-oauth":   ("Google Workspace",         ["Abre el enlace de autorización", "Inicia sesión y concede permisos"]),
+    "gmail-setup":    ("Gmail",                    ["Incluido en la autorización de Google", "Se completa automáticamente"]),
+    "trello-setup":   ("Trello",                   ["Abre el enlace de autorización de Trello", "Concede permisos de lectura/escritura"]),
+    "github-setup":   ("GitHub",                   ["Ejecuta: gh auth login", "El agente verificará la conexión"]),
+    "vercel-setup":   ("Vercel",                   ["Ejecuta: vercel login", "El agente verificará la conexión"]),
+    "supabase-setup": ("Supabase",                 ["Ejecuta: supabase login", "El agente verificará la conexión"]),
+    "finalize":       ("Finalizar",                ["Todos los pasos completados", "El agente limpiará y MAGI estará lista"]),
+    "done":           ("Completado",               ["¡MAGI está lista!", "Pulsa Ctrl+C para salir"]),
 }
 
 
@@ -148,12 +165,18 @@ def save_credentials(service, data):
 
 # ── Rich TUI rendering ──
 
-def generate_tui(debug=False):
-    """Genera el layout Rich. Simple por defecto, debug con F1."""
+def generate_tui(debug=None):
+    """Genera el layout Rich. Simple por defecto, debug con VCOO_DEBUG=1."""
+    if debug is None:
+        debug = TUI.get("debug", False)
     layout = Layout()
 
     done = TUI["progress_done"]
     total = TUI["progress_total"]
+    step = TUI["step"] or "Conectando..."
+    label, instructions = STEP_INFO.get(step, (step.replace("-", " ").title(), []))
+    TUI["step_label"] = label
+    TUI["step_instructions"] = instructions
 
     if debug:
         # Vista debug: full info + logs
@@ -161,18 +184,19 @@ def generate_tui(debug=False):
             f"[bold white]Control Plane:[/] [cyan]{TUI['base']}[/]\n"
             f"[bold white]Agent:[/] [dim]{TUI['agent_id'][:24]}...[/]  "
             f"[bold white]VCOO:[/] [dim]{TUI['vcoo_id'][:12]}...[/]\n"
-            f"[bold white]Estado:[/] [green]{TUI['status']}[/]",
+            f"[bold white]Estado:[/] [green]{TUI['status']}[/]  "
+            f"[bold white]Paso:[/] [yellow]{step}[/]",
             title="[bold cyan]VCOO Agent v3 — DEBUG[/]", border_style="cyan"
         )
-        log_lines = TUI["log"][-20:]
+        log_lines = TUI["log"][-30:]
         if not log_lines:
             log_lines = ["[dim](sin eventos)[/]"]
-        log_panel = Panel("\n".join(log_lines), title="[bold]Logs[/]", border_style="green")
-        layout.split_column(Layout(header, size=8), Layout(log_panel))
+        log_panel = Panel("\n".join(log_lines), title="[bold]Logs (últimos 30)[/]", border_style="green")
+        layout.split_column(Layout(header, size=6), Layout(log_panel))
     else:
-        # Vista cliente: limpia y sencilla
+        # Vista cliente: progreso + instrucciones del paso actual
         if total > 0:
-            bar_w = 50
+            bar_w = 40
             pct = done / total if total > 0 else 0
             filled = int(bar_w * pct)
             bar = "█" * filled + "░" * (bar_w - filled)
@@ -181,13 +205,29 @@ def generate_tui(debug=False):
             prog_line = "[dim]Preparando...[/]"
 
         status_color = "green" if TUI["status"] == "Online" else "yellow"
+
+        # Build instructions text
+        instr_text = ""
+        for i, instr in enumerate(instructions[:3]):
+            instr_text += f"  [dim]{i+1}.[/] {instr}\n"
+        if not instr_text:
+            instr_text = "  [dim]Esperando comandos...[/]\n"
+
+        # Auth URL hint for OAuth steps
+        auth_hint = ""
+        if step in ("google-oauth", "trello-setup"):
+            setup_url = f"{TUI['base'].replace('vcoo-onboarding.vercel.app', 'frontend-ivory-seven-d0aw1wzkae.vercel.app')}/setup/{TUI.get('vcoo_id','')}"
+            auth_hint = f"\n[bold yellow]⚠[/] [cyan]Abre el wizard para autorizar:[/]\n[dim]{setup_url}[/]\n"
+
         body = (
-            f"[bold]VCOO Onboarding[/]\n\n"
+            f"[bold]Paso {done+1}/{total}: [yellow]{label}[/yellow][/]\n\n"
             f"{prog_line}\n\n"
-            f"[bold]Paso:[/] [yellow]{TUI['step'] or 'Conectando...'}[/]\n"
-            f"[bold]Estado:[/] [{status_color}]{TUI['status']}[/]\n\n"
-            f"[dim]♥ {TUI['last_heartbeat'] or '—'}  |  Poll {TUI['last_poll'] or '—'}[/]\n\n"
-            f"[dim]Pulsa Ctrl+C para cancelar[/]"
+            f"[bold]Instrucciones:[/]\n{instr_text}\n"
+            f"{auth_hint}"
+            f"[dim]♥ {TUI['last_heartbeat'] or '—'}  |  Poll {TUI['last_poll'] or '—'}  |  "
+            f"{'[red]DEBUG[/]' if debug else '[dim]D=debug[/]'}"
+            f"[/]\n"
+            f"[dim]Ctrl+C para cancelar[/]"
         )
         panel = Panel(body, title="[bold cyan]⚡ VCOO Agent[/]", border_style="cyan")
         layout.split_column(Layout(panel))
@@ -442,6 +482,18 @@ def main_loop(agent_id, agent_token, vcoo_id):
 
     while True:
         now = time.time()
+
+        # Check for keyboard input (non-blocking) — 'd' toggles debug
+        if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+            ch = sys.stdin.read(1)
+            if ch.lower() == 'd':
+                TUI["debug"] = not TUI.get("debug", False)
+                log("Debug: " + ("ON" if TUI["debug"] else "OFF"))
+                if LIVE:
+                    LIVE.update(generate_tui(debug=TUI["debug"]))
+            # Flush any remaining chars
+            while sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+                sys.stdin.read(1)
 
         if now - last_heartbeat >= 60:
             heartbeat(agent_id, vcoo_id, agent_token)
