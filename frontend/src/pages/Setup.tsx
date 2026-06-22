@@ -344,7 +344,6 @@ export default function Setup() {
     return mod && modules.includes(mod);
   });
 
-  const isBootstrap = step === 'bootstrap';
   const isProviderConfig = step === 'provider-config';
 
   return (
