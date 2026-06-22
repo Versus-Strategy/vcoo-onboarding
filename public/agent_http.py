@@ -13,7 +13,7 @@ Usage: python3 agent_http.py <control_plane_url> <provision_token>
 - Cleans up and self-deletes on finalize.
 """
 
-import sys, os, time, json, subprocess, random, select
+import sys, os, time, json, subprocess, random, select, threading
 
 try:
     import requests
@@ -472,6 +472,28 @@ def poll_commands(agent_id, agent_token, vcoo_id):
     return [], None
 
 
+# ── Keyboard listener thread (bypasses Rich screen mode) ──
+
+_keyboard_toggle = threading.Event()
+
+def _keyboard_listener():
+    """Lee stdin sin raw mode — compatible con Rich Live (screen=False)."""
+    try:
+        while True:
+            # Non-blocking check every 200ms
+            import select as _sel
+            r, _, _ = _sel.select([sys.stdin], [], [], 0.2)
+            if r:
+                ch = os.read(sys.stdin.fileno(), 1)
+                if ch == b'd' or ch == b'D':
+                    _keyboard_toggle.set()
+                    # Drain queued bytes
+                    while _sel.select([sys.stdin], [], [], 0.05)[0]:
+                        os.read(sys.stdin.fileno(), 1)
+    except (OSError, Exception):
+        pass
+
+
 # ── Bucle principal ──
 
 def main_loop(agent_id, agent_token, vcoo_id):
@@ -483,17 +505,13 @@ def main_loop(agent_id, agent_token, vcoo_id):
     while True:
         now = time.time()
 
-        # Check for keyboard input (non-blocking) — 'd' toggles debug
-        if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
-            ch = sys.stdin.read(1)
-            if ch.lower() == 'd':
-                TUI["debug"] = not TUI.get("debug", False)
-                log("Debug: " + ("ON" if TUI["debug"] else "OFF"))
-                if LIVE:
-                    LIVE.update(generate_tui(debug=TUI["debug"]))
-            # Flush any remaining chars
-            while sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
-                sys.stdin.read(1)
+        # Check for keyboard toggle (thread-driven, works with Rich screen=True)
+        if _keyboard_toggle.is_set():
+            _keyboard_toggle.clear()
+            TUI["debug"] = not TUI.get("debug", False)
+            log("Debug: " + ("ON" if TUI["debug"] else "OFF"))
+            if LIVE:
+                LIVE.update(generate_tui(debug=TUI["debug"]))
 
         if now - last_heartbeat >= 60:
             heartbeat(agent_id, vcoo_id, agent_token)
@@ -631,9 +649,13 @@ def main():
     # ── Iniciar TUI (si Rich + TTY) o modo texto ──
     use_tui = RICH_OK and sys.stdout.isatty()
 
+    # Start keyboard listener thread for debug toggle (works even with Rich screen=True)
+    kb_thread = threading.Thread(target=_keyboard_listener, daemon=True)
+    kb_thread.start()
+
     if use_tui:
         console = Console()
-        LIVE = RichLive(generate_tui(), console=console, refresh_per_second=4, screen=True)
+        LIVE = RichLive(generate_tui(), console=console, refresh_per_second=4, screen=False)
         try:
             with LIVE:
                 main_loop(agent_id, agent_token, vcoo_id)

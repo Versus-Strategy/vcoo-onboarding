@@ -28,7 +28,7 @@ export default function Dashboard() {
   const [toast, setToast] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const pendingDeletes = useRef<Set<string>>(new Set());
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
 
   const resolvedTheme = resolveTheme(theme);
 
@@ -58,7 +58,14 @@ export default function Dashboard() {
   const loadVCOOs = useCallback(async () => {
     try {
       const data = await listVCOOs();
-      setVcoos(data.filter(v => !pendingDeletes.current.has(v.id)));
+      setVcoos(data);
+      // Clear deletingIds for VCOOs that no longer exist in backend
+      setDeletingIds(prev => {
+        const backendIds = new Set(data.map(v => v.id));
+        const next = new Set(prev);
+        for (const id of prev) { if (!backendIds.has(id)) next.delete(id); }
+        return next;
+      });
     } catch {}
     finally { setLoading(false); }
   }, []);
@@ -95,11 +102,18 @@ export default function Dashboard() {
   };
 
   const handleDelete = async (vcooId: string) => {
-    pendingDeletes.current.add(vcooId);
-    setVcoos(prev => prev.filter(v => v.id !== vcooId));
+    // Mark as deleting (visual indicator, no optimistic removal)
+    setDeletingIds(prev => { const next = new Set(prev); next.add(vcooId); return next; });
     setExpandedId(null);
-    try { await deleteVCOO(vcooId); pendingDeletes.current.delete(vcooId); }
-    catch (e: any) { pendingDeletes.current.delete(vcooId); loadVCOOs(); showToast('Error al eliminar: ' + e.message); }
+    try {
+      await deleteVCOO(vcooId);
+      // Deletion confirmed — refresh list; deletingIds auto-cleared when backend confirms gone
+      await loadVCOOs();
+    }
+    catch (e: any) {
+      setDeletingIds(prev => { const next = new Set(prev); next.delete(vcooId); return next; });
+      showToast('Error al eliminar: ' + e.message);
+    }
   };
 
   const handleReactivate = async (vcooId: string) => {
@@ -253,11 +267,11 @@ export default function Dashboard() {
 
             {/* Sections — always visible */}
             <VCOOList vcoos={onlineVCOOs} label="Online" icon="wifi" expandedId={expandedId} onToggle={setExpandedId}
-              onRefresh={loadVCOOs} onComplete={handleComplete} onDelete={handleDelete} onReactivate={handleReactivate} />
+              onRefresh={loadVCOOs} onComplete={handleComplete} onDelete={handleDelete} onReactivate={handleReactivate} deletingIds={deletingIds} />
             <VCOOList vcoos={activeVCOOs} label="Activos" icon="zap" expandedId={expandedId} onToggle={setExpandedId}
-              onRefresh={loadVCOOs} onComplete={handleComplete} onDelete={handleDelete} onReactivate={handleReactivate} />
+              onRefresh={loadVCOOs} onComplete={handleComplete} onDelete={handleDelete} onReactivate={handleReactivate} deletingIds={deletingIds} />
             <VCOOList vcoos={completedVCOOs} label="Completados" icon="archive" expandedId={expandedId} onToggle={setExpandedId}
-              onRefresh={loadVCOOs} onComplete={handleComplete} onDelete={handleDelete} onReactivate={handleReactivate} />
+              onRefresh={loadVCOOs} onComplete={handleComplete} onDelete={handleDelete} onReactivate={handleReactivate} deletingIds={deletingIds} />
           </>
         )}
 

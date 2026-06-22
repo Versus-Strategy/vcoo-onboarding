@@ -14,6 +14,7 @@ interface Props {
   onComplete: (id: string) => void;
   onDelete: (id: string) => void;
   onReactivate: (id: string) => void;
+  deletingIds: Set<string>;
 }
 
 const SectionIcon = ({ icon }: { icon: string }) => {
@@ -27,7 +28,7 @@ const SectionIcon = ({ icon }: { icon: string }) => {
 };
 
 function VCOOCard({
-  vcoo, expanded, onToggle, onRefresh, onComplete, onDelete, onReactivate,
+  vcoo, expanded, onToggle, onRefresh, onComplete, onDelete, onReactivate, deleting,
 }: {
   vcoo: VCOOResult;
   expanded: boolean;
@@ -36,6 +37,7 @@ function VCOOCard({
   onComplete: (id: string) => void;
   onDelete: (id: string) => void;
   onReactivate: (id: string) => void;
+  deleting: boolean;
 }) {
   const [token, setToken] = useState<string | null>(vcoo.active_token);
   const [copiedCmd, setCopiedCmd] = useState(false);
@@ -100,9 +102,9 @@ function VCOOCard({
 
   return (
     <div className="bg-(--vs-bg-card) border border-(--vs-border) rounded-xl overflow-hidden transition"
-      style={{ opacity: isCompleted ? 0.7 : 1, boxShadow: 'var(--vs-shadow)' }}>
+      style={{ opacity: deleting ? 0.5 : (isCompleted ? 0.7 : 1), boxShadow: 'var(--vs-shadow)' }}>
       {/* Header */}
-      <div className="p-5 flex items-center justify-between cursor-pointer transition hover:bg-(--vs-hover)" onClick={handleToggle}>
+      <div className={`p-5 flex items-center justify-between transition ${deleting ? 'pointer-events-none' : 'cursor-pointer hover:bg-(--vs-hover)'}`} onClick={deleting ? undefined : handleToggle}>
         <div className="flex items-center gap-3 min-w-0 flex-1">
           {isActive && (agentOnline ? <CircleDot className="w-4 h-4 text-emerald-400 shrink-0" /> : <Circle className="w-4 h-4 text-(--vs-muted) shrink-0" />)}
           {isCompleted && <Archive className="w-4 h-4 text-(--vs-muted) shrink-0" />}
@@ -114,6 +116,11 @@ function VCOOCard({
             {isActive && (
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 ${agentOnline ? 'bg-emerald-950/20 text-emerald-400' : 'bg-(--vs-btn-secondary) text-(--vs-muted)'}`}>
                 {agentOnline ? 'Online' : 'Sin agente'}
+              </span>
+            )}
+            {deleting && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 bg-red-950/20 text-red-400 animate-pulse">
+                Eliminando...
               </span>
             )}
           </div>
@@ -244,7 +251,7 @@ function VCOOCard({
   );
 }
 
-export default function VCOOList({ vcoos, label, icon, expandedId, onToggle, onRefresh, onComplete, onDelete, onReactivate }: Props) {
+export default function VCOOList({ vcoos, label, icon, expandedId, onToggle, onRefresh, onComplete, onDelete, onReactivate, deletingIds }: Props) {
   return (
     <div className="space-y-3">
       <h2 className="text-sm font-semibold flex items-center gap-2 uppercase tracking-wider text-(--vs-muted)">
@@ -254,7 +261,8 @@ export default function VCOOList({ vcoos, label, icon, expandedId, onToggle, onR
         <VCOOCard key={vcoo.id} vcoo={vcoo}
           expanded={expandedId === vcoo.id}
           onToggle={() => onToggle(expandedId === vcoo.id ? null : vcoo.id)}
-          onRefresh={onRefresh} onComplete={onComplete} onDelete={onDelete} onReactivate={onReactivate} />
+          onRefresh={onRefresh} onComplete={onComplete} onDelete={onDelete} onReactivate={onReactivate}
+          deleting={deletingIds.has(vcoo.id)} />
       ))}
     </div>
   );

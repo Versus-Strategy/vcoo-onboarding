@@ -323,6 +323,13 @@ def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session
                 st = crud.get_onboarding_state(db, vcoo_id)
                 if st and "mail" in (st.modules or []) and "gmail-setup" not in (st.completed or []):
                     crud.advance_onboarding_step(db, vcoo_id, "gmail-setup")
+            # Enqueue next command if the agent is connected (mirrors process_agent_result auto-trigger)
+            st = crud.get_onboarding_state(db, vcoo_id)
+            if st and agent and st.step not in ("done",):
+                from onboarding import get_step_command
+                cmd_name = get_step_command(st.step)
+                if cmd_name:
+                    crud.create_command(db, agent_id=str(agent.id), command=cmd_name, step=st.step)
         except Exception:
             pass  # best-effort — command queue is the fallback
 
@@ -442,7 +449,7 @@ def register_agent(payload: dict, db: Session = Depends(get_db)):
 
     # ── Auto-trigger: encolar primer comando si hay onboarding pendiente ──
     st = crud.get_onboarding_state(db, vcoo_id)
-    if st and st.status not in ("blocked", "completed") and st.step not in ("finalize", "done"):
+    if st and st.status not in ("blocked", "completed") and st.step != "done":
         from onboarding import get_step_command
         cmd_name = get_step_command(st.step)
         if cmd_name:
