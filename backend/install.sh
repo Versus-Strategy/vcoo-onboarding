@@ -9,14 +9,15 @@ set -euo pipefail
 #   curl -fsSL https://vcoo.dev/install | PROVISION_TOKEN=*** bash
 #
 # Este script despliega la template VCOO completa:
-#   1. Valida PROVISION_TOKEN contra el control plane
-#   2. Descarga la template (git clone → fallback ZIP)
-#   3. Configura .env con secrets del control plane
-#   4. Ejecuta install.sh de la template (Hermes + skills + cron)
-#   5. Arranca health reporter en background
-#   6. Muestra resumen final
+#   1. Verifica/instala dependencias (curl, python3, git)
+#   2. Valida PROVISION_TOKEN contra el control plane
+#   3. Descarga la template
+#   4. Configura .env con secrets del control plane
+#   5. Ejecuta install.sh de la template (Hermes + skills + cron)
+#   6. Arranca health reporter en background
+#   7. Muestra resumen final
 #
-# Sin PROVISION_TOKEN → fallback a instalación manual (solo template)
+# Sin PROVISION_TOKEN → instalación manual (solo template)
 # ═══════════════════════════════════════════════════════════════
 
 CONTROL_PLANE="${CONTROL_PLANE:-https://vcoo-onboarding.vercel.app}"
@@ -38,6 +39,66 @@ echo -e "${BLUE}║     by VERSUS Strategy SL                ║${NC}"
 echo -e "${BLUE}╚══════════════════════════════════════════╝${NC}"
 echo ""
 
+# ── 0. Dependencias ─────────────────────────────────────────
+info "Verificando dependencias del sistema..."
+
+# Detectar gestor de paquetes
+PKG_MANAGER=""
+INSTALL_CMD=""
+if command -v apt-get &>/dev/null; then
+    PKG_MANAGER="apt-get"
+    INSTALL_CMD="apt-get install -y"
+elif command -v yum &>/dev/null; then
+    PKG_MANAGER="yum"
+    INSTALL_CMD="yum install -y"
+elif command -v apk &>/dev/null; then
+    PKG_MANAGER="apk"
+    INSTALL_CMD="apk add"
+fi
+
+# Detectar si podemos instalar paquetes
+CAN_INSTALL=false
+if [ "$(id -u)" = "0" ] && [ -n "$PKG_MANAGER" ]; then
+    CAN_INSTALL=true
+elif command -v sudo &>/dev/null && [ -n "$PKG_MANAGER" ]; then
+    CAN_INSTALL=true
+    INSTALL_CMD="sudo $INSTALL_CMD"
+fi
+
+# Función para instalar o avisar
+ensure_cmd() {
+    local cmd="$1"
+    local pkg="${2:-$1}"
+    if ! command -v "$cmd" &>/dev/null; then
+        if $CAN_INSTALL; then
+            info "Instalando $pkg..."
+            $INSTALL_CMD "$pkg" || warn "No se pudo instalar $pkg automáticamente"
+        fi
+        if ! command -v "$cmd" &>/dev/null; then
+            warn "Falta $cmd. Instálalo manualmente:"
+            if [ -n "$PKG_MANAGER" ]; then
+                echo "  $INSTALL_CMD $pkg"
+            else
+                echo "  $pkg (usa el gestor de paquetes de tu distro)"
+            fi
+        fi
+    fi
+}
+
+ensure_cmd curl curl
+ensure_cmd python3 python3
+ensure_cmd git git  # opcional, si falla usamos descarga directa
+
+# Verificar que tenemos lo mínimo indispensable
+if ! command -v curl &>/dev/null; then
+    err "curl es necesario. Instálalo y vuelve a ejecutar."
+fi
+if ! command -v python3 &>/dev/null; then
+    err "python3 es necesario. Instálalo y vuelve a ejecutar."
+fi
+
+ok "Dependencias listas"
+
 # ── 1. Validar PROVISION_TOKEN (opcional) ──
 PROVISION_TOKEN="${PROVISION_TOKEN:-}"
 AGENT_ID=""
@@ -56,10 +117,9 @@ if [ -n "$PROVISION_TOKEN" ]; then
         err "Token inválido o expirado (HTTP $HTTP_CODE).\n  Verifica tu token en el panel de control (${CONTROL_PLANE})."
     fi
 
-    # Parsear JSON con bash puro (sin dependencia de python3)
-    AGENT_ID=$(echo "$BODY" | grep -o '"agent_id":"[^"]*"' | cut -d'"' -f4 || echo "")
-    VCOO_ID=$(echo "$BODY" | grep -o '"vcoo_id":"[^"]*"' | cut -d'"' -f4 || echo "")
-    AGENT_TOKEN=$(echo "$BODY" | grep -o '"agent_token":"[^"]*"' | cut -d'"' -f4 || echo "")
+    AGENT_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['agent_id'])" 2>/dev/null || echo "")
+    VCOO_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['vcoo_id'])" 2>/dev/null || echo "")
+    AGENT_TOKEN=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['agent_token'])" 2>/dev/null || echo "")
     ok "Token válido. Agente registrado (ID: ${AGENT_ID})"
 else
     warn "No se proporcionó PROVISION_TOKEN — instalación manual."
@@ -75,42 +135,44 @@ else
     info "Descargando template VCOO..."
     mkdir -p "$VCOO_HOME"
 
-    if command -v git &>/dev/null; then
-        GIT_REPO="${VCOO_GIT_REPO:-https://github.com/Versus-Strategy/vcoo-template.git}"
-        git clone --depth 1 "$GIT_REPO" "$TEMPLATE_DIR" 2>/dev/null || {
-            warn "Git clone falló, intentando descarga directa..."
-            curl -sSL "${CONTROL_PLANE}/template.tar.gz" -o /tmp/vcoo-template.tar.gz 2>/dev/null || \
-            curl -sSL "https://github.com/Versus-Strategy/vcoo-template/archive/main.tar.gz" -o /tmp/vcoo-template.tar.gz
-            mkdir -p "$TEMPLATE_DIR"
-            tar -xzf /tmp/vcoo-template.tar.gz --strip-components=1 -C "$TEMPLATE_DIR" 2>/dev/null || \
-            err "No se pudo descargar la template. Verifica conexión a GitHub."
-        }
-    else
-        warn "git no disponible — usando descarga directa..."
-        curl -sSL "https://github.com/Versus-Strategy/vcoo-template/archive/main.tar.gz" -o /tmp/vcoo-template.tar.gz
-        mkdir -p "$TEMPLATE_DIR"
-        tar -xzf /tmp/vcoo-template.tar.gz --strip-components=1 -C "$TEMPLATE_DIR" || \
-        err "No se pudo descargar la template."
-    fi
-    ok "Template descargada en $TEMPLATE_DIR"
-fi
+    # Opción 1: descarga directa desde el control plane (siempre funciona)
+    info "  Descargando ${CONTROL_PLANE}/template.tar.gz ..."
+    curl -sSL "${CONTROL_PLANE}/template.tar.gz" -o /tmp/vcoo-template.tar.gz || {
+        # Opción 2: git clone como fallback
+        if command -v git &>/dev/null; then
+            warn "Descarga directa falló, intentando git clone..."
+            git clone --depth 1 "https://github.com/Versus-Strategy/vcoo-template.git" "$TEMPLATE_DIR" 2>/dev/null || \
+            err "No se pudo descargar la template. Verifica conexión a Internet."
+        else
+            err "No se pudo descargar la template. Verifica conexión a Internet."
+        fi
+    }
 
-if [ ! -f "$TEMPLATE_DIR/install.sh" ]; then
-    err "La template descargada no contiene install.sh — descarga corrupta."
+    # Si descargamos el tar.gz, extraerlo
+    if [ -f /tmp/vcoo-template.tar.gz ]; then
+        mkdir -p "$TEMPLATE_DIR"
+        tar -xzf /tmp/vcoo-template.tar.gz -C "$TEMPLATE_DIR" || \
+        err "Error al extraer la template (descarga corrupta)."
+    fi
+
+    # Verificar que se descargó correctamente
+    if [ -f "$TEMPLATE_DIR/install.sh" ]; then
+        ok "Template descargada en $TEMPLATE_DIR"
+    else
+        err "La template descargada no contiene install.sh — descarga corrupta."
+    fi
 fi
 
 # ── 3. Configurar .env ──
 if [ -n "$VCOO_ID" ]; then
     if [ ! -f "$TEMPLATE_DIR/.env" ]; then
         info "Configurando .env con secrets del control plane..."
-        # Intentar obtener secrets — fallback silencioso a vacío
         ENV_RESP=$(curl -sS "${CONTROL_PLANE}/vcoo/${VCOO_ID}/secrets" 2>/dev/null || echo "{}")
 
-        # Extraer secrets con grep (bash puro, sin python3)
-        OPENROUTER_KEY=$(echo "$ENV_RESP" | grep -o '"OPENROUTER_API_KEY":"[^"]*"' | cut -d'"' -f4 || echo "")
-        DISCORD_TOKEN=$(echo "$ENV_RESP" | grep -o '"DISCORD_BOT_TOKEN":"[^"]*"' | cut -d'"' -f4 || echo "")
-        TELEGRAM_TOKEN=$(echo "$ENV_RESP" | grep -o '"TELEGRAM_BOT_TOKEN":"[^"]*"' | cut -d'"' -f4 || echo "")
-        HOME_CHANNEL=$(echo "$ENV_RESP" | grep -o '"DISCORD_HOME_CHANNEL":"[^"]*"' | cut -d'"' -f4 || echo "")
+        OPENROUTER_KEY=$(echo "$ENV_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('OPENROUTER_API_KEY',''))" 2>/dev/null || echo "")
+        DISCORD_TOKEN=$(echo "$ENV_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('DISCORD_BOT_TOKEN',''))" 2>/dev/null || echo "")
+        TELEGRAM_TOKEN=$(echo "$ENV_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('TELEGRAM_BOT_TOKEN',''))" 2>/dev/null || echo "")
+        HOME_CHANNEL=$(echo "$ENV_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('DISCORD_HOME_CHANNEL',''))" 2>/dev/null || echo "")
 
         cat > "$TEMPLATE_DIR/.env" << EOF
 # VCOO — Generado por instalador unificado v1.0
