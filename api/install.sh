@@ -1,216 +1,185 @@
 #!/usr/bin/env bash
 set -euo pipefail
-shopt -s inherit_errexit 2>/dev/null || true
-
-# ── VCOO Agent Installer v2.4 ──
-# One-liner: curl -sSL <url>/install.sh | PROVISION_TOKEN=*** bash -
+# ═══════════════════════════════════════════════════════════════
+# VCOO Virtual — Unified One-Line Installer v1.0
+# ═══════════════════════════════════════════════════════════════
+# by VERSUS Strategy SL
 #
-# Features:
-#   • Venv auto-reparador (3-tier fallback)
-#   • uv opcional (10x más rápido)
-#   • Descarga scripts VCOO del control plane
-#   • Funciona sin sudo (user-level install)
-#   • Feedback claro si algo falla
-#   • Ejecuta el agente en foreground
+# Uso:
+#   curl -fsSL https://vcoo.dev/install | PROVISION_TOKEN=*** bash
+#
+# Este script despliega la template VCOO completa:
+#   1. Valida PROVISION_TOKEN contra el control plane
+#   2. Descarga la template (git clone → fallback ZIP)
+#   3. Configura .env con secrets del control plane
+#   4. Ejecuta install.sh de la template (Hermes + skills + cron)
+#   5. Arranca health reporter en background
+#   6. Muestra resumen final
+#
+# Sin PROVISION_TOKEN → fallback a instalación manual (solo template)
+# ═══════════════════════════════════════════════════════════════
 
 CONTROL_PLANE="${CONTROL_PLANE:-https://vcoo-onboarding.vercel.app}"
-AGENT_URL="${AGENT_URL:-${CONTROL_PLANE}/agent_http.py}"
-AGENT_HOME="${AGENT_HOME:-$HOME/.vcoo-agent}"
-VENV_DIR="$AGENT_HOME/venv"
-HERMES_DIR="${HERMES_DIR:-$HOME/.hermes}"
-VCOO_DIR="$HERMES_DIR/scripts/vcoo"
-USE_VENV=true
-HAD_ERRORS=false
+VCOO_HOME="${VCOO_HOME:-$HOME/.vcoo}"
+HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
+
+# ── Colores ──
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'
+info()  { echo -e "${BLUE}[VCOO]${NC} $1"; }
+ok()    { echo -e "${GREEN}[✓]${NC} $1"; }
+warn()  { echo -e "${YELLOW}[!]${NC} $1"; }
+err()   { echo -e "${RED}[✗]${NC} $1"; exit 1; }
 
 echo ""
-echo "=== VCOO Agent Installer v2.4 ==="
-echo "Control plane: $CONTROL_PLANE"
+echo -e "${BLUE}╔══════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}║     VCOO Virtual — Instalador            ║${NC}"
+echo -e "${BLUE}║     by VERSUS Strategy SL                ║${NC}"
+echo -e "${BLUE}╚══════════════════════════════════════════╝${NC}"
+echo ""
 
-# ── Root detection ──
-IS_ROOT=false
-[ "$(id -u)" = "0" ] && IS_ROOT=true
+# ── 1. Validar PROVISION_TOKEN (opcional) ──
+PROVISION_TOKEN="${PROVISION_TOKEN:-}"
+AGENT_ID=""
+VCOO_ID=""
+AGENT_TOKEN=""
 
-SUDO=""
-if ! $IS_ROOT; then
-    if command -v sudo >/dev/null 2>&1 && sudo -v 2>/dev/null; then
-        SUDO="sudo"
-        echo "[i] Ejecutando como usuario normal (sudo disponible)"
-    else
-        echo "[i] Ejecutando como usuario normal (sin sudo — instalación user-level)"
+if [ -n "$PROVISION_TOKEN" ]; then
+    info "Validando provision token..."
+    RESP=$(curl -sS -w "\n%{http_code}" "${CONTROL_PLANE}/register" \
+      -H "Content-Type: application/json" \
+      -d "{\"token\": \"$PROVISION_TOKEN\", \"info\": {\"hostname\": \"$(hostname)\", \"platform\": \"linux\", \"installer\": \"unified-v1\"}}")
+    HTTP_CODE=$(echo "$RESP" | tail -1)
+    BODY=$(echo "$RESP" | sed '$d')
+
+    if [ "$HTTP_CODE" != "200" ]; then
+        err "Token inválido o expirado (HTTP $HTTP_CODE).\n  Verifica tu token en el panel de control (${CONTROL_PLANE})."
     fi
+
+    AGENT_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['agent_id'])" 2>/dev/null || echo "")
+    VCOO_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['vcoo_id'])" 2>/dev/null || echo "")
+    AGENT_TOKEN=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['agent_token'])" 2>/dev/null || echo "")
+    ok "Token válido. Agente registrado (ID: ${AGENT_ID})"
 else
-    echo "[i] Ejecutando como root"
+    warn "No se proporcionó PROVISION_TOKEN — instalación manual."
+    warn "El agente no se registrará automáticamente en el control plane."
+    echo ""
 fi
 
-# ── Package manager helper (user-level fallback) ──
-pkg_install() {
-    local ok=true
-    if command -v apt-get >/dev/null 2>&1; then
-        DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq "$@" 2>&1 | tail -1 || ok=false
-    elif command -v dnf >/dev/null 2>&1; then
-        $SUDO dnf install -y -q "$@" 2>&1 | tail -1 || ok=false
-    elif command -v yum >/dev/null 2>&1; then
-        $SUDO yum install -y -q "$@" 2>&1 | tail -1 || ok=false
-    elif command -v apk >/dev/null 2>&1; then
-        $SUDO apk add --no-cache "$@" 2>&1 | tail -1 || ok=false
-    else
-        ok=false
-    fi
-    if ! $ok; then
-        if [ -z "$SUDO" ] && ! $IS_ROOT; then
-            echo "  [i] Sin permisos de admin — se intentará user-level install"
-        elif [ -n "$SUDO" ]; then
-            echo "  [!] El comando sudo falló. ¿Tienes permisos de administrador?"
-        fi
-        HAD_ERRORS=true
-    fi
-    $ok
-}
+# ── 2. Descargar template VCOO ──
+TEMPLATE_DIR="${VCOO_HOME}/template"
+if [ -d "$TEMPLATE_DIR" ] && [ -f "$TEMPLATE_DIR/install.sh" ]; then
+    info "Template ya existe en $TEMPLATE_DIR (se omite descarga)"
+else
+    info "Descargando template VCOO..."
+    mkdir -p "$VCOO_HOME"
 
-# ── Asegurar python3 ──
-PYTHON="python3"
-if ! command -v python3 >/dev/null 2>&1; then
-    echo "Instalando python3..."
-    if pkg_install python3; then
-        echo "  [OK] python3 instalado"
-    else
-        echo "ERROR: No se pudo instalar python3. Instálalo manualmente:"
-        echo "  Ubuntu/Debian: sudo apt install python3 python3-venv"
-        echo "  CentOS/RHEL:   sudo dnf install python3"
-        echo "  Alpine:        apk add python3"
-        exit 1
-    fi
-fi
-
-PYVER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-
-# ── uv (preferred, optional) ──
-USE_UV=false
-if command -v uv >/dev/null 2>&1; then
-    echo "[i] uv detectado — instalación rápida"
-    USE_UV=true
-elif curl -sSL https://astral.sh/uv/install.sh 2>/dev/null | bash -s -- --no-modify-path 2>/dev/null; then
-    if [ -f "$HOME/.local/bin/uv" ]; then
-        export PATH="$HOME/.local/bin:$PATH"
-        USE_UV=true
-        echo "[i] uv instalado — instalación rápida"
-    fi
-fi
-
-# ── Venv con 3-tier fallback ──
-ensure_venv() {
-    if [ -f "$VENV_DIR/bin/python" ]; then return 0; fi
-    echo "Creando entorno virtual..."
-
-    # Attempt 0: uv venv (much faster)
-    if $USE_UV; then
-        if uv venv "$VENV_DIR" --python python3 2>/dev/null; then
-            echo "  [OK] venv creado con uv"
-            return 0
-        fi
-    fi
-
-    # Attempt 1: standard
-    if python3 -m venv "$VENV_DIR" 2>/dev/null; then
-        echo "  [OK] venv creado"
-        return 0
-    fi
-
-    # Attempt 2: install python3-venv
-    echo "  Instalando python${PYVER}-venv..."
-    pkg_install "python${PYVER}-venv" 2>/dev/null || pkg_install python3-venv 2>/dev/null || true
-    if python3 -m venv "$VENV_DIR" 2>/dev/null; then
-        echo "  [OK] venv creado (tras instalar python3-venv)"
-        return 0
-    fi
-
-    # Attempt 3: --without-pip + bootstrap
-    echo "  Intentando venv --without-pip..."
-    if python3 -m venv --without-pip "$VENV_DIR" 2>/dev/null; then
-        if curl -sSL https://bootstrap.pypa.io/get-pip.py | "$VENV_DIR/bin/python" 2>/dev/null; then
-            echo "  [OK] venv creado con pip bootstrap"
-            return 0
-        fi
-    fi
-
-    echo "  [!] No se pudo crear venv. Usando pip --user como fallback."
-    echo "      Algunas features (Rich TUI) pueden no estar disponibles."
-    USE_VENV=false
-    return 1
-}
-
-ensure_venv || true
-
-# ── Instalar dependencias Python ──
-if $USE_VENV; then
-    PIP="$VENV_DIR/bin/pip"
-    PYTHON_RUN="$VENV_DIR/bin/python"
-
-    # Bootstrap pip if missing
-    if [ ! -f "$PIP" ]; then
-        "$PYTHON_RUN" -m ensurepip --default-pip 2>/dev/null || \
-        curl -sSL https://bootstrap.pypa.io/get-pip.py | "$PYTHON_RUN" 2>/dev/null || true
-    fi
-
-    echo "Instalando dependencias (venv)..."
-    if $USE_UV; then
-        # uv pip install is faster
-        uv pip install --python "$PYTHON_RUN" requests rich 2>&1 | tail -1 && echo "  [OK] requests, rich instalados" || {
-            echo "  [!] uv falló, intentando pip..."
-            "$PIP" install -q requests rich 2>&1 | tail -1 && echo "  [OK] requests, rich instalados" || echo "  [!] Fallo al instalar dependencias"
+    if command -v git &>/dev/null; then
+        GIT_REPO="${VCOO_GIT_REPO:-https://github.com/Versus-Strategy/vcoo-template.git}"
+        git clone --depth 1 "$GIT_REPO" "$TEMPLATE_DIR" 2>/dev/null || {
+            warn "Git clone falló, intentando descarga directa..."
+            curl -sSL "${CONTROL_PLANE}/template.tar.gz" -o /tmp/vcoo-template.tar.gz 2>/dev/null || \
+            curl -sSL "https://github.com/Versus-Strategy/vcoo-template/archive/main.tar.gz" -o /tmp/vcoo-template.tar.gz
+            mkdir -p "$TEMPLATE_DIR"
+            tar -xzf /tmp/vcoo-template.tar.gz --strip-components=1 -C "$TEMPLATE_DIR" 2>/dev/null || \
+            err "No se pudo descargar la template. Verifica conexión a GitHub."
         }
     else
-        "$PIP" install -q requests rich 2>&1 | tail -1 && echo "  [OK] requests, rich instalados" || echo "  [!] Fallo al instalar dependencias"
+        warn "git no disponible — usando descarga directa..."
+        curl -sSL "https://github.com/Versus-Strategy/vcoo-template/archive/main.tar.gz" -o /tmp/vcoo-template.tar.gz
+        mkdir -p "$TEMPLATE_DIR"
+        tar -xzf /tmp/vcoo-template.tar.gz --strip-components=1 -C "$TEMPLATE_DIR" || \
+        err "No se pudo descargar la template."
     fi
-else
-    PIP="pip3"
-    PYTHON_RUN="python3"
-    echo "Instalando dependencias (--user)..."
-    $PIP install --user -q requests 2>/dev/null && echo "  [OK] requests instalado" || echo "  [!] pip --user falló"
-    $PIP install --user -q rich 2>/dev/null && echo "  [OK] rich instalado" || echo "  [i] Rich no disponible (modo texto)"
+    ok "Template descargada en $TEMPLATE_DIR"
 fi
 
-# ── Descargar scripts VCOO ──
-echo ""
-echo "Descargando scripts VCOO..."
-mkdir -p "$VCOO_DIR"
+if [ ! -f "$TEMPLATE_DIR/install.sh" ]; then
+    err "La template descargada no contiene install.sh — descarga corrupta."
+fi
 
-VCOO_SCRIPTS="vcoo-bootstrap.py vcoo-google.py vcoo-trello.py vcoo-email.py"
-for script in $VCOO_SCRIPTS; do
-    dest="$VCOO_DIR/$script"
-    if [ -f "$dest" ]; then
-        echo "  [OK] $script (ya existe)"
-    elif curl -sSf -o "$dest" "$CONTROL_PLANE/playbooks/$script/raw" 2>/dev/null; then
-        chmod 700 "$dest"
-        echo "  [OK] $script descargado"
+# ── 3. Configurar .env ──
+if [ -n "$VCOO_ID" ]; then
+    if [ ! -f "$TEMPLATE_DIR/.env" ]; then
+        info "Configurando .env con secrets del control plane..."
+        # Intentar obtener secrets — fallback silencioso a vacío
+        ENV_RESP=$(curl -sS "${CONTROL_PLANE}/vcoo/${VCOO_ID}/secrets" 2>/dev/null || echo "{}")
+
+        # Extraer secrets con python3
+        OPENROUTER_KEY=$(echo "$ENV_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('OPENROUTER_API_KEY',''))" 2>/dev/null || echo "")
+        DISCORD_TOKEN=$(echo "$ENV_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('DISCORD_BOT_TOKEN',''))" 2>/dev/null || echo "")
+        TELEGRAM_TOKEN=$(echo "$ENV_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('TELEGRAM_BOT_TOKEN',''))" 2>/dev/null || echo "")
+        HOME_CHANNEL=$(echo "$ENV_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('DISCORD_HOME_CHANNEL',''))" 2>/dev/null || echo "")
+
+        cat > "$TEMPLATE_DIR/.env" << EOF
+# VCOO — Generado por instalador unificado v1.0
+OPENROUTER_API_KEY=${OPENROUTER_KEY}
+DISCORD_BOT_TOKEN=${DISCORD_TOKEN}
+TELEGRAM_BOT_TOKEN=${TELEGRAM_TOKEN}
+DISCORD_HOME_CHANNEL=${HOME_CHANNEL}
+VCOO_ID=${VCOO_ID}
+AGENT_ID=${AGENT_ID}
+AGENT_TOKEN=${AGENT_TOKEN}
+CONTROL_PLANE_URL=${CONTROL_PLANE}
+EOF
+        chmod 600 "$TEMPLATE_DIR/.env"
+        ok ".env configurado en $TEMPLATE_DIR/.env"
     else
-        echo "  [!] No se pudo descargar $script"
-        HAD_ERRORS=true
+        info ".env ya existe — se mantiene el existente"
     fi
-done
-
-# ── Descargar el agente ──
-echo ""
-echo "Descargando agente..."
-AGENT_PATH="$AGENT_HOME/agent_http.py"
-mkdir -p "$AGENT_HOME"
-
-if curl -sSf -o "$AGENT_PATH" "$AGENT_URL" 2>/dev/null; then
-    echo "  [OK] agent_http.py descargado"
-else
-    echo "ERROR: No se pudo descargar el agente desde $AGENT_URL"
-    echo "  Verifica que el control plane está accesible: curl $CONTROL_PLANE/health"
-    exit 1
 fi
 
-# ── Arrancar agente ──
-echo ""
-if $HAD_ERRORS; then
-    echo "[!] Algunos componentes opcionales no se pudieron instalar."
-    echo "    El agente arrancará igualmente y los verificará durante el onboarding."
-fi
-echo "Iniciando agente en foreground..."
-echo "Press Ctrl+C to abort at any time."
-echo "---"
+# ── 4. Ejecutar instalador de la template ──
+export PROVISION_TOKEN="${PROVISION_TOKEN:-}"
+export VCOO_ID="${VCOO_ID:-}"
+export AGENT_ID="${AGENT_ID:-}"
+export AGENT_TOKEN="${AGENT_TOKEN:-}"
+export CONTROL_PLANE_URL="${CONTROL_PLANE}"
 
-exec "$PYTHON_RUN" "$AGENT_PATH" "$CONTROL_PLANE" "$PROVISION_TOKEN"
+info "Ejecutando instalador de la template..."
+bash "$TEMPLATE_DIR/install.sh"
+ok "Template instalada correctamente"
+
+# ── 5. Arrancar health reporter (si hay agente registrado) ──
+if [ -n "$AGENT_ID" ] && [ -f "$TEMPLATE_DIR/scripts/health-reporter.py" ]; then
+    HEALTH_SCRIPT="${HERMES_HOME}/scripts/vcoo/health-reporter.py"
+    mkdir -p "$(dirname "$HEALTH_SCRIPT")"
+    cp "$TEMPLATE_DIR/scripts/health-reporter.py" "$HEALTH_SCRIPT"
+
+    info "Arrancando health reporter..."
+    export AGENT_ID VCOO_ID AGENT_TOKEN CONTROL_PLANE
+    nohup python3 "$HEALTH_SCRIPT" > /tmp/vcoo-health.log 2>&1 &
+    HPID=$!
+    mkdir -p "$HOME/.vcoo-agent"
+    echo "$HPID" > "$HOME/.vcoo-agent/health-reporter.pid"
+    ok "Health reporter iniciado (PID $HPID)"
+    info "  Logs: /tmp/vcoo-health.log"
+    info "  PIDs: $HOME/.vcoo-agent/health-reporter.pid"
+fi
+
+# ── 6. Resumen final ──
+echo ""
+echo -e "${GREEN}╔══════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║     Instalación completada               ║${NC}"
+echo -e "${GREEN}╚══════════════════════════════════════════╝${NC}"
+echo ""
+echo "  Template:   $TEMPLATE_DIR"
+echo "  Hermes:     $HERMES_HOME"
+if [ -n "$VCOO_ID" ]; then
+    echo "  VCOO ID:    $VCOO_ID"
+fi
+if [ -n "$AGENT_ID" ]; then
+    echo "  Agent ID:   $AGENT_ID"
+    echo "  Health PID: $(cat $HOME/.vcoo-agent/health-reporter.pid 2>/dev/null || echo 'N/A')"
+fi
+echo ""
+echo "  Próximos pasos:"
+echo "  1. Configura los módulos contratados:"
+echo "     - Google OAuth:  ${CONTROL_PLANE}/setup/${PROVISION_TOKEN}"
+echo "     - Trello:        Configurar API key en el panel"
+echo "     - GitHub:        gh auth login"
+echo "  2. Inicia Hermes:   cd ~/.hermes && hermes gateway run"
+echo "  3. Envía un mensaje desde Discord al bot para probar"
+echo ""
+echo -e "${CYAN}¿Necesitas ayuda? contact@versusstrategy.com${NC}"
+echo ""
