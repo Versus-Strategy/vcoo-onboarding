@@ -40,6 +40,24 @@ async def startup():
     except Exception as e:
         import sys as _sys
         print(f"[startup] create_all skipped (DB unreachable): {e}", file=_sys.stderr)
+    # ── Schema migrations (add columns that create_all won't add) ──
+    try:
+        from sqlalchemy import text as _sql_text
+        with engine.connect() as conn:
+            # Check if health_payload column exists in agents table
+            result = conn.execute(_sql_text("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name='agents' AND column_name='health_payload'
+            """))
+            if not result.fetchone():
+                conn.execute(_sql_text(
+                    "ALTER TABLE agents ADD COLUMN health_payload TEXT"
+                ))
+                conn.commit()
+                print("[migration] Added health_payload column to agents table")
+    except Exception as e:
+        import sys as _sys
+        print(f"[migration] Skipped (non-critical): {e}", file=_sys.stderr)
     if _os.getenv("VERCEL_ENV") is None:
         register_ws_routes(app)
 
@@ -677,12 +695,14 @@ def agent_heartbeat_endpoint(payload: dict, db: Session = Depends(get_db)):
 def agent_health_report(agent_id: str, payload: dict = {}, db: Session = Depends(get_db)):
     """Receive health ping from agent's health reporter.
     Stores health data (hostname, uptime, disk, hermes_running).
-    No auth required — agent endpoint is self-authenticating via agent_id path.
     """
-    ok = crud.update_agent_health(db, agent_id, payload)
-    if not ok:
+    try:
+        ok = crud.update_agent_health(db, agent_id, payload)
+        if not ok:
+            raise HTTPException(status_code=404, detail="agent not found")
+        return {"status": "ok", "agent_id": agent_id}
+    except Exception:
         raise HTTPException(status_code=404, detail="agent not found")
-    return {"status": "ok", "agent_id": agent_id}
 
 
 # ── VCOO Secrets (for installer) ───────────────────────────
@@ -692,11 +712,14 @@ def get_vcoo_secrets_endpoint(vcoo_id: str, db: Session = Depends(get_db)):
     """Return stored secrets for installer to configure .env.
     Used by the unified one-liner install.sh after agent registration.
     """
-    v = crud.get_vcoo(db, vcoo_id)
-    if not v:
+    try:
+        v = crud.get_vcoo(db, vcoo_id)
+        if not v:
+            raise HTTPException(status_code=404, detail="VCOO not found")
+        secrets = crud.get_vcoo_secrets(db, vcoo_id)
+        return secrets
+    except Exception:
         raise HTTPException(status_code=404, detail="VCOO not found")
-    secrets = crud.get_vcoo_secrets(db, vcoo_id)
-    return secrets
 
 
 # ── Onboarding management (operator actions) ─────────────
