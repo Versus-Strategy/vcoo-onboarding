@@ -56,9 +56,10 @@ if [ -n "$PROVISION_TOKEN" ]; then
         err "Token inválido o expirado (HTTP $HTTP_CODE).\n  Verifica tu token en el panel de control (${CONTROL_PLANE})."
     fi
 
-    AGENT_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['agent_id'])" 2>/dev/null || echo "")
-    VCOO_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['vcoo_id'])" 2>/dev/null || echo "")
-    AGENT_TOKEN=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['agent_token'])" 2>/dev/null || echo "")
+    # Parsear JSON con bash puro (sin dependencia de python3)
+    AGENT_ID=$(echo "$BODY" | grep -o '"agent_id":"[^"]*"' | cut -d'"' -f4 || echo "")
+    VCOO_ID=$(echo "$BODY" | grep -o '"vcoo_id":"[^"]*"' | cut -d'"' -f4 || echo "")
+    AGENT_TOKEN=$(echo "$BODY" | grep -o '"agent_token":"[^"]*"' | cut -d'"' -f4 || echo "")
     ok "Token válido. Agente registrado (ID: ${AGENT_ID})"
 else
     warn "No se proporcionó PROVISION_TOKEN — instalación manual."
@@ -105,11 +106,11 @@ if [ -n "$VCOO_ID" ]; then
         # Intentar obtener secrets — fallback silencioso a vacío
         ENV_RESP=$(curl -sS "${CONTROL_PLANE}/vcoo/${VCOO_ID}/secrets" 2>/dev/null || echo "{}")
 
-        # Extraer secrets con python3
-        OPENROUTER_KEY=$(echo "$ENV_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('OPENROUTER_API_KEY',''))" 2>/dev/null || echo "")
-        DISCORD_TOKEN=$(echo "$ENV_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('DISCORD_BOT_TOKEN',''))" 2>/dev/null || echo "")
-        TELEGRAM_TOKEN=$(echo "$ENV_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('TELEGRAM_BOT_TOKEN',''))" 2>/dev/null || echo "")
-        HOME_CHANNEL=$(echo "$ENV_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('DISCORD_HOME_CHANNEL',''))" 2>/dev/null || echo "")
+        # Extraer secrets con grep (bash puro, sin python3)
+        OPENROUTER_KEY=$(echo "$ENV_RESP" | grep -o '"OPENROUTER_API_KEY":"[^"]*"' | cut -d'"' -f4 || echo "")
+        DISCORD_TOKEN=$(echo "$ENV_RESP" | grep -o '"DISCORD_BOT_TOKEN":"[^"]*"' | cut -d'"' -f4 || echo "")
+        TELEGRAM_TOKEN=$(echo "$ENV_RESP" | grep -o '"TELEGRAM_BOT_TOKEN":"[^"]*"' | cut -d'"' -f4 || echo "")
+        HOME_CHANNEL=$(echo "$ENV_RESP" | grep -o '"DISCORD_HOME_CHANNEL":"[^"]*"' | cut -d'"' -f4 || echo "")
 
         cat > "$TEMPLATE_DIR/.env" << EOF
 # VCOO — Generado por instalador unificado v1.0
