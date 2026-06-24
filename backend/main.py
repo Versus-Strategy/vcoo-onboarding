@@ -671,6 +671,34 @@ def agent_heartbeat_endpoint(payload: dict, db: Session = Depends(get_db)):
     return {"ack": True}
 
 
+# ── Agent health report ────────────────────────────────────
+
+@app.post("/agent/{agent_id}/health")
+def agent_health_report(agent_id: str, payload: dict = {}, db: Session = Depends(get_db)):
+    """Receive health ping from agent's health reporter.
+    Stores health data (hostname, uptime, disk, hermes_running).
+    No auth required — agent endpoint is self-authenticating via agent_id path.
+    """
+    ok = crud.update_agent_health(db, agent_id, payload)
+    if not ok:
+        raise HTTPException(status_code=404, detail="agent not found")
+    return {"status": "ok", "agent_id": agent_id}
+
+
+# ── VCOO Secrets (for installer) ───────────────────────────
+
+@app.get("/vcoo/{vcoo_id}/secrets")
+def get_vcoo_secrets_endpoint(vcoo_id: str, db: Session = Depends(get_db)):
+    """Return stored secrets for installer to configure .env.
+    Used by the unified one-liner install.sh after agent registration.
+    """
+    v = crud.get_vcoo(db, vcoo_id)
+    if not v:
+        raise HTTPException(status_code=404, detail="VCOO not found")
+    secrets = crud.get_vcoo_secrets(db, vcoo_id)
+    return secrets
+
+
 # ── Onboarding management (operator actions) ─────────────
 
 @app.post("/vcoo/{vcoo_id}/onboarding/retry")

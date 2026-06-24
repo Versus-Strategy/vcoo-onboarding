@@ -386,6 +386,34 @@ def agent_heartbeat(db: Session, agent_id: str):
     db.commit()
 
 
+def update_agent_health(db: Session, agent_id: str, payload: dict) -> bool:
+    """Update agent health payload and last_seen timestamp."""
+    import datetime as dt
+    import json
+    agent = db.query(models.Agent).filter(models.Agent.id == agent_id).first()
+    if not agent:
+        return False
+    agent.last_seen = dt.datetime.utcnow()
+    agent.status = "online"
+    agent.health_payload = json.dumps(payload)
+    db.commit()
+    return True
+
+
+def get_vcoo_secrets(db: Session, vcoo_id: str) -> dict:
+    """Return stored secrets for a VCOO (for the installer to configure .env)."""
+    vcoo = db.query(models.VCOO).filter(models.VCOO.id == vcoo_id).first()
+    if not vcoo:
+        return {}
+    secrets = {}
+    if vcoo.integrations:
+        try:
+            secrets = json.loads(vcoo.integrations)
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return secrets
+
+
 # ── Agent result (SPEC v2 §4.4) ─────────────────────────
 
 def process_agent_result(

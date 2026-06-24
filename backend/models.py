@@ -30,6 +30,7 @@ class Agent(Base):
     last_seen = Column(DateTime, default=datetime.utcnow)
     status = Column(String, default='offline')
     token_jti = Column(String, nullable=True)  # for revocation reference
+    health_payload = Column(Text, nullable=True)  # JSON blob from health reporter
 
     def to_dict(self):
         return {
