@@ -24,6 +24,7 @@ import sys
 import json
 import time
 import socket
+import signal
 import subprocess
 import urllib.request
 import urllib.error
@@ -163,6 +164,13 @@ if __name__ == "__main__":
 
     with open(LOCK_FILE, "w") as f:
         f.write(str(os.getpid()))
+
+    # Clean up lock file on SIGTERM (kill) and SIGINT (Ctrl+C)
+    def _cleanup(*_args):
+        if os.path.exists(LOCK_FILE):
+            os.unlink(LOCK_FILE)
+        sys.exit(0)
+    signal.signal(signal.SIGTERM, _cleanup)
 
     try:
         main()

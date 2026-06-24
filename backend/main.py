@@ -701,7 +701,11 @@ def agent_health_report(agent_id: str, payload: dict = {}, db: Session = Depends
         if not ok:
             raise HTTPException(status_code=404, detail="agent not found")
         return {"status": "ok", "agent_id": agent_id}
-    except Exception:
+    except HTTPException:
+        raise
+    except Exception as e:
+        import sys as _sys
+        print(f"[health] Error for agent {agent_id}: {e}", file=_sys.stderr)
         raise HTTPException(status_code=404, detail="agent not found")
 
 
@@ -718,7 +722,11 @@ def get_vcoo_secrets_endpoint(vcoo_id: str, db: Session = Depends(get_db)):
             raise HTTPException(status_code=404, detail="VCOO not found")
         secrets = crud.get_vcoo_secrets(db, vcoo_id)
         return secrets
-    except Exception:
+    except HTTPException:
+        raise
+    except Exception as e:
+        import sys as _sys
+        print(f"[secrets] Error for vcoo {vcoo_id}: {e}", file=_sys.stderr)
         raise HTTPException(status_code=404, detail="VCOO not found")
 
 

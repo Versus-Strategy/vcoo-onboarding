@@ -107,28 +107,18 @@ fi
 if ! $PYTHON_OK; then
     warn "Se necesita Python >= 3.11 (actual: $(python3 --version 2>/dev/null || echo 'no encontrado'))"
     if $CAN_INSTALL; then
-        # Intentar instalar python3.11
         if [ "$PKG_MANAGER" = "apt-get" ]; then
             info "Instalando Python 3.11..."
-            $INSTALL_CMD software-properties-common 2>/dev/null || true
-            add-apt-repository -y ppa:deadsnakes/ppa 2>/dev/null || true
-            $INSTALL_CMD python3.11 python3.11-distutils 2>/dev/null || true
+            $INSTALL_CMD python3.11 python3.11-venv 2>/dev/null || true
             if command -v python3.11 &>/dev/null; then
-                # Crear symlink para que python3 apunte a 3.11
-                update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 2>/dev/null || \
-                ln -sf /usr/bin/python3.11 /usr/local/bin/python3
                 PYTHON_OK=true
             fi
-        elif [ "$PKG_MANAGER" = "apk" ]; then
-            $INSTALL_CMD python3.11 2>/dev/null && PYTHON_OK=true || true
         fi
     fi
     if ! $PYTHON_OK; then
         echo ""
-        warn "Instala Python 3.11 o superior manualmente:"
-        echo "  sudo apt-get install software-properties-common"
-        echo "  sudo add-apt-repository ppa:deadsnakes/ppa"
-        echo "  sudo apt-get install python3.11 python3.11-distutils"
+        warn "Instala Python 3.11 manualmente:"
+        echo "  sudo apt-get install python3.11 python3.11-venv"
         err "Python >= 3.11 es necesario. Vuelve a ejecutar tras instalarlo."
     fi
 fi
@@ -177,7 +167,7 @@ else
 
     # Opción 1: descarga directa desde el control plane (siempre funciona)
     info "  Descargando ${CONTROL_PLANE}/template.tar.gz ..."
-    curl -sSL "${CONTROL_PLANE}/template.tar.gz" -o /tmp/vcoo-template.tar.gz || {
+    curl -fsSL "${CONTROL_PLANE}/template.tar.gz" -o /tmp/vcoo-template.tar.gz || {
         # Opción 2: git clone como fallback
         if command -v git &>/dev/null; then
             warn "Descarga directa falló, intentando git clone..."
@@ -214,17 +204,16 @@ if [ -n "$VCOO_ID" ]; then
         TELEGRAM_TOKEN=$(echo "$ENV_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('TELEGRAM_BOT_TOKEN',''))" 2>/dev/null || echo "")
         HOME_CHANNEL=$(echo "$ENV_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('DISCORD_HOME_CHANNEL',''))" 2>/dev/null || echo "")
 
-        cat > "$TEMPLATE_DIR/.env" << EOF
-# VCOO — Generado por instalador unificado v1.0
-OPENROUTER_API_KEY=${OPENROUTER_KEY}
-DISCORD_BOT_TOKEN=${DISCORD_TOKEN}
-TELEGRAM_BOT_TOKEN=${TELEGRAM_TOKEN}
-DISCORD_HOME_CHANNEL=${HOME_CHANNEL}
-VCOO_ID=${VCOO_ID}
-AGENT_ID=${AGENT_ID}
-AGENT_TOKEN=${AGENT_TOKEN}
-CONTROL_PLANE_URL=${CONTROL_PLANE}
-EOF
+        > "$TEMPLATE_DIR/.env"
+        echo "# VCOO — Generado por instalador unificado v1.0" >> "$TEMPLATE_DIR/.env"
+        echo "OPENROUTER_API_KEY=${OPENROUTER_KEY}" >> "$TEMPLATE_DIR/.env"
+        echo "DISCORD_BOT_TOKEN=${DISCORD_TOKEN}" >> "$TEMPLATE_DIR/.env"
+        echo "TELEGRAM_BOT_TOKEN=${TELEGRAM_TOKEN}" >> "$TEMPLATE_DIR/.env"
+        echo "DISCORD_HOME_CHANNEL=${HOME_CHANNEL}" >> "$TEMPLATE_DIR/.env"
+        echo "VCOO_ID=${VCOO_ID}" >> "$TEMPLATE_DIR/.env"
+        echo "AGENT_ID=${AGENT_ID}" >> "$TEMPLATE_DIR/.env"
+        echo "AGENT_TOKEN=${AGENT_TOKEN}" >> "$TEMPLATE_DIR/.env"
+        echo "CONTROL_PLANE_URL=${CONTROL_PLANE}" >> "$TEMPLATE_DIR/.env"
         chmod 600 "$TEMPLATE_DIR/.env"
         ok ".env configurado en $TEMPLATE_DIR/.env"
     else
