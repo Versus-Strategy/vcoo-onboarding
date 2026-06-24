@@ -87,12 +87,52 @@ ensure_cmd() {
 
 ensure_cmd curl curl
 ensure_cmd python3 python3
-ensure_cmd git git  # opcional, si falla usamos descarga directa
+ensure_cmd git git
 
 # Verificar que tenemos lo mínimo indispensable
 if ! command -v curl &>/dev/null; then
     err "curl es necesario. Instálalo y vuelve a ejecutar."
 fi
+
+# Verificar que python3 >= 3.11 (hermes-agent lo requiere)
+PYTHON_OK=false
+if command -v python3 &>/dev/null; then
+    PY_MAJOR=$(python3 -c "import sys; print(sys.version_info.major)")
+    PY_MINOR=$(python3 -c "import sys; print(sys.version_info.minor)")
+    if [ "$PY_MAJOR" -gt 3 ] || { [ "$PY_MAJOR" = "3" ] && [ "$PY_MINOR" -ge 11 ]; }; then
+        PYTHON_OK=true
+    fi
+fi
+
+if ! $PYTHON_OK; then
+    warn "Se necesita Python >= 3.11 (actual: $(python3 --version 2>/dev/null || echo 'no encontrado'))"
+    if $CAN_INSTALL; then
+        # Intentar instalar python3.11
+        if [ "$PKG_MANAGER" = "apt-get" ]; then
+            info "Instalando Python 3.11..."
+            $INSTALL_CMD software-properties-common 2>/dev/null || true
+            add-apt-repository -y ppa:deadsnakes/ppa 2>/dev/null || true
+            $INSTALL_CMD python3.11 python3.11-distutils 2>/dev/null || true
+            if command -v python3.11 &>/dev/null; then
+                # Crear symlink para que python3 apunte a 3.11
+                update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 2>/dev/null || \
+                ln -sf /usr/bin/python3.11 /usr/local/bin/python3
+                PYTHON_OK=true
+            fi
+        elif [ "$PKG_MANAGER" = "apk" ]; then
+            $INSTALL_CMD python3.11 2>/dev/null && PYTHON_OK=true || true
+        fi
+    fi
+    if ! $PYTHON_OK; then
+        echo ""
+        warn "Instala Python 3.11 o superior manualmente:"
+        echo "  sudo apt-get install software-properties-common"
+        echo "  sudo add-apt-repository ppa:deadsnakes/ppa"
+        echo "  sudo apt-get install python3.11 python3.11-distutils"
+        err "Python >= 3.11 es necesario. Vuelve a ejecutar tras instalarlo."
+    fi
+fi
+
 if ! command -v python3 &>/dev/null; then
     err "python3 es necesario. Instálalo y vuelve a ejecutar."
 fi
