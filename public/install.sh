@@ -160,15 +160,12 @@ fi
 
 # ── 2. Descargar template VCOO ──
 TEMPLATE_DIR="${VCOO_HOME}/template"
-if [ -d "$TEMPLATE_DIR" ] && [ -f "$TEMPLATE_DIR/install.sh" ]; then
-    info "Template ya existe en $TEMPLATE_DIR (se omite descarga)"
-else
-    info "Descargando template VCOO..."
-    mkdir -p "$VCOO_HOME"
+info "Descargando template VCOO..."
+mkdir -p "$VCOO_HOME"
 
-    # Opción 1: descarga directa desde el control plane (siempre funciona)
-    info "  Descargando ${CONTROL_PLANE}/template.tar.gz ..."
-    curl -fsSL "${CONTROL_PLANE}/template.tar.gz" -o /tmp/vcoo-template.tar.gz || {
+# Opción 1: descarga directa desde el control plane
+info "  Descargando ${CONTROL_PLANE}/template.tar.gz ..."
+curl -fsSL "${CONTROL_PLANE}/template.tar.gz" -o /tmp/vcoo-template.tar.gz || {
         # Opción 2: git clone como fallback
         if command -v git &>/dev/null; then
             warn "Descarga directa falló, intentando git clone..."
@@ -192,7 +189,6 @@ else
     else
         err "La template descargada no contiene install.sh — descarga corrupta."
     fi
-fi
 
 # ── 3. Configurar .env ──
 if [ -n "$VCOO_ID" ]; then
