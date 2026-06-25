@@ -106,13 +106,14 @@ fi
 
 if ! $PYTHON_OK; then
     warn "Se necesita Python >= 3.11 (actual: $(python3 --version 2>/dev/null || echo 'no encontrado'))"
-    if $CAN_INSTALL; then
-        if [ "$PKG_MANAGER" = "apt-get" ]; then
-            info "Instalando Python 3.11..."
-            $INSTALL_CMD python3.11 python3.11-venv 2>/dev/null || true
-            if command -v python3.11 &>/dev/null; then
-                PYTHON_OK=true
-            fi
+    if $CAN_INSTALL && [ "$PKG_MANAGER" = "apt-get" ]; then
+        info "Instalando Python 3.11..."
+        $INSTALL_CMD python3.11 python3.11-venv 2>/dev/null || true
+        if command -v python3.11 &>/dev/null; then
+            # Hacer que python3 apunte a 3.11 (para que el template lo use)
+            ln -sf /usr/bin/python3.11 /usr/local/bin/python3
+            hash -r
+            PYTHON_OK=true
         fi
     fi
     if ! $PYTHON_OK; then
