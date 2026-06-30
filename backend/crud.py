@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from fastapi import HTTPException
 import models
 from datetime import datetime, timedelta
@@ -69,12 +70,12 @@ def delete_vcoo(db: Session, vcoo_id: str) -> bool:
         vcoo_uuid = UUID(vcoo_id)
         
         # Use raw SQL to bypass ORM complexity
-        db.execute("DELETE FROM command_logs WHERE command_id IN (SELECT id FROM commands WHERE agent_id IN (SELECT id FROM agents WHERE vcoo_id = :vid))", {"vid": vcoo_uuid})
-        db.execute("DELETE FROM commands WHERE agent_id IN (SELECT id FROM agents WHERE vcoo_id = :vid)", {"vid": vcoo_uuid})
-        db.execute("DELETE FROM agents WHERE vcoo_id = :vid", {"vid": vcoo_uuid})
-        db.execute("DELETE FROM provision_tokens WHERE vcoo_id = :vid", {"vid": vcoo_uuid})
-        db.execute("DELETE FROM onboarding_state WHERE vcoo_id = :vid", {"vid": vcoo_uuid})
-        db.execute("DELETE FROM vcoos WHERE id = :vid", {"vid": vcoo_uuid})
+        db.execute(text("DELETE FROM command_logs WHERE command_id IN (SELECT id FROM commands WHERE agent_id IN (SELECT id FROM agents WHERE vcoo_id = :vid))"), {"vid": vcoo_uuid})
+        db.execute(text("DELETE FROM commands WHERE agent_id IN (SELECT id FROM agents WHERE vcoo_id = :vid)"), {"vid": vcoo_uuid})
+        db.execute(text("DELETE FROM agents WHERE vcoo_id = :vid"), {"vid": vcoo_uuid})
+        db.execute(text("DELETE FROM provision_tokens WHERE vcoo_id = :vid"), {"vid": vcoo_uuid})
+        db.execute(text("DELETE FROM onboarding_state WHERE vcoo_id = :vid"), {"vid": vcoo_uuid})
+        db.execute(text("DELETE FROM vcoos WHERE id = :vid"), {"vid": vcoo_uuid})
         db.commit()
         return True
     except Exception as e:
