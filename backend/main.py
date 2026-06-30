@@ -144,7 +144,14 @@ def get_setup_info(token: str, db: Session = Depends(get_db)):
     Read-only — does not consume the token."""
     vcoo_id = crud.lookup_provision_token(db, token)
     if not vcoo_id:
-        raise HTTPException(status_code=404, detail="Token invalido o expirado")
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "token_invalid",
+                "message": "El enlace de invitación ha caducado o es inválido. Por favor, solicite un nuevo enlace en el panel de control.",
+                "action": "solicitar_nuevo_enlace"
+            }
+        )
     v = crud.get_vcoo(db, vcoo_id)
     if not v:
         raise HTTPException(status_code=404, detail="VCOO not found")
@@ -185,7 +192,14 @@ def trigger_step_verification(token: str, db: Session = Depends(get_db)):
     If no agent is connected, auto-advances the step for dev/demo mode."""
     vcoo_id = crud.lookup_provision_token(db, token)
     if not vcoo_id:
-        raise HTTPException(status_code=404, detail="Token invalido o expirado")
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "token_invalid",
+                "message": "El enlace de invitación ha caducado o es inválido. Por favor, solicite un nuevo enlace en el panel de control.",
+                "action": "solicitar_nuevo_enlace"
+            }
+        )
     st = crud.get_onboarding_state(db, vcoo_id)
     if not st:
         raise HTTPException(status_code=404, detail="No hay datos de onboarding")
@@ -226,12 +240,19 @@ def trigger_step_verification(token: str, db: Session = Depends(get_db)):
 
 # ── Auth URL generation (dynamic OAuth tabs) ────────────
 
-@app.get("/setup/{token}/auth-url")
+@ app.get("/setup/{token}/auth-url")
 def get_auth_url(token: str, service: str = "", db: Session = Depends(get_db)):
     """Generates an OAuth authorization URL for the given service."""
     vcoo_id = crud.lookup_provision_token(db, token)
     if not vcoo_id:
-        raise HTTPException(status_code=404, detail="Token invalido o expirado")
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "token_invalid",
+                "message": "El enlace de invitación ha caducado o es inválido. Por favor, solicite un nuevo enlace en el panel de control.",
+                "action": "solicitar_nuevo_enlace"
+            }
+        )
     service = service.lower().strip()
     if service == "google":
         client_id = _os.getenv("GOOGLE_CLIENT_ID", "")
@@ -373,12 +394,19 @@ def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session
 
 # ── Hermes CLI commands (dynamic) ──────────────────────
 
-@app.get("/setup/{token}/hermes-commands")
+@ app.get("/setup/{token}/hermes-commands")
 def get_hermes_commands_endpoint(token: str, service: str = "", db: Session = Depends(get_db)):
     """Returns Hermes CLI config commands for a service."""
     vcoo_id = crud.lookup_provision_token(db, token)
     if not vcoo_id:
-        raise HTTPException(status_code=404, detail="Token invalido o expirado")
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "token_invalid",
+                "message": "El enlace de invitación ha caducado o es inválido. Por favor, solicite un nuevo enlace en el panel de control.",
+                "action": "solicitar_nuevo_enlace"
+            }
+        )
     service = service.lower().strip()
     commands_map = {
         "google": ["hermes config set google.client_id TU_CLIENT_ID", "hermes config set google.client_secret TU_CLIENT_SECRET"],

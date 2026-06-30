@@ -88,6 +88,7 @@ ensure_cmd() {
 ensure_cmd curl curl
 ensure_cmd python3 python3
 ensure_cmd git git
+ensure_cmd xz xz-utils
 
 # Verificar que tenemos lo mínimo indispensable
 if ! command -v curl &>/dev/null; then
@@ -229,30 +230,6 @@ info "Ejecutando instalador de la template..."
 bash "$TEMPLATE_DIR/install.sh"
 ok "Template instalada correctamente"
 
-# ── 5. Arrancar health reporter (si hay agente registrado y no está ya corriendo) ──
-if [ -n "$AGENT_ID" ] && [ -f "$TEMPLATE_DIR/scripts/health-reporter.py" ]; then
-    HEALTH_SCRIPT="${HERMES_HOME}/scripts/vcoo/health-reporter.py"
-    HEALTH_PID_FILE="$HOME/.vcoo-agent/health-reporter.pid"
-
-    # Verificar si ya está corriendo (puede haberlo arrancado template/install.sh)
-    if [ -f "$HEALTH_PID_FILE" ] && kill -0 "$(cat "$HEALTH_PID_FILE" 2>/dev/null)" 2>/dev/null; then
-        info "Health reporter ya está en ejecución (PID $(cat "$HEALTH_PID_FILE")) — omitiendo..."
-    else
-        mkdir -p "$(dirname "$HEALTH_SCRIPT")"
-        cp "$TEMPLATE_DIR/scripts/health-reporter.py" "$HEALTH_SCRIPT"
-
-        info "Arrancando health reporter..."
-        export AGENT_ID VCOO_ID AGENT_TOKEN CONTROL_PLANE
-        nohup python3 "$HEALTH_SCRIPT" > /tmp/vcoo-health.log 2>&1 &
-        HPID=$!
-        mkdir -p "$HOME/.vcoo-agent"
-        echo "$HPID" > "$HEALTH_PID_FILE"
-        ok "Health reporter iniciado (PID $HPID)"
-        info "  Logs: /tmp/vcoo-health.log"
-        info "  PIDs: $HEALTH_PID_FILE"
-    fi
-fi
-
 # ── 6. Resumen final ──
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════╗${NC}"
@@ -266,7 +243,6 @@ if [ -n "$VCOO_ID" ]; then
 fi
 if [ -n "$AGENT_ID" ]; then
     echo "  Agent ID:   $AGENT_ID"
-    echo "  Health PID: $(cat $HOME/.vcoo-agent/health-reporter.pid 2>/dev/null || echo 'N/A')"
 fi
 echo ""
 echo "  Próximos pasos:"
@@ -274,8 +250,15 @@ echo "  1. Configura los módulos contratados:"
 echo "     - Google OAuth:  ${CONTROL_PLANE}/setup/${PROVISION_TOKEN}"
 echo "     - Trello:        Configurar API key en el panel"
 echo "     - GitHub:        gh auth login"
-echo "  2. Inicia Hermes:   cd ~/.hermes && hermes gateway run"
-echo "  3. Envía un mensaje desde Discord al bot para probar"
+echo ""
+echo "  2. Verifica el estado de los servicios:"
+echo "     systemctl status vcoo-health-reporter"
+echo "     systemctl status vcoo-hermes-gateway"
+echo ""
+echo "  3. Edita tu configuración:"
+echo "      hermes config edit"
+echo ""
+echo "  4. Envía un mensaje a MAGI desde Discord o Telegram"
 echo ""
 echo -e "${CYAN}¿Necesitas ayuda? contact@versusstrategy.com${NC}"
 echo ""

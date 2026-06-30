@@ -16,7 +16,7 @@ Variables de entorno:
     AGENT_ID        (requerido) — ID del agente registrado
     AGENT_TOKEN     (requerido) — Token JWT del agente
     CONTROL_PLANE   (opcional)  — URL del control plane, default: https://vcoo-onboarding.vercel.app
-    HEALTH_INTERVAL (opcional)  — Segundos entre pings, default: 300 (5 min)
+    HEALTH_INTERVAL (opcional)  — Segundos entre pings, default: 60 (1 min)
 """
 
 import os
@@ -36,7 +36,7 @@ CONTROL_PLANE = os.environ.get(
 )
 AGENT_ID = os.environ.get("AGENT_ID", "")
 AGENT_TOKEN = os.environ.get("AGENT_TOKEN", "")
-POLL_INTERVAL = int(os.environ.get("HEALTH_INTERVAL", "300"))  # 5 min
+POLL_INTERVAL = int(os.environ.get("HEALTH_INTERVAL", "60"))  # 1 min
 
 STATE_DIR = os.path.expanduser("~/.vcoo-agent")
 STATUS_FILE = os.path.join(STATE_DIR, "health-status.json")
@@ -46,7 +46,7 @@ LOCK_FILE = os.path.join(STATE_DIR, "health-reporter.lock")
 os.makedirs(STATE_DIR, exist_ok=True)
 
 
-# ── Helpers ─────────────────────────────────────────────────
+# ── Helpers ─────────────────────────────────────────────
 
 def log(msg: str):
     """Append timestamped message to log file."""

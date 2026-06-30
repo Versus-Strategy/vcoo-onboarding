@@ -4,7 +4,6 @@ After=network.target
 
 [Service]
 Type=simple
-User=%i                     # será sustituido por el usuario de instalación
 ExecStart=/opt/vsd/versusd.sh
 Restart=on-failure
 RestartSec=5
