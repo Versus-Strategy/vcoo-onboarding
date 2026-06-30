@@ -75,6 +75,7 @@ def delete_vcoo(db: Session, vcoo_id: str) -> bool:
         db.execute(text("DELETE FROM agents WHERE vcoo_id = :vid"), {"vid": vcoo_uuid})
         db.execute(text("DELETE FROM provision_tokens WHERE vcoo_id = :vid"), {"vid": vcoo_uuid})
         db.execute(text("DELETE FROM onboarding_state WHERE vcoo_id = :vid"), {"vid": vcoo_uuid})
+        db.execute(text("DELETE FROM clients WHERE vcoo_id = :vid"), {"vid": vcoo_uuid})
         db.execute(text("DELETE FROM vcoos WHERE id = :vid"), {"vid": vcoo_uuid})
         db.commit()
         return True

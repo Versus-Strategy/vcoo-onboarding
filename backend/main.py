@@ -230,6 +230,7 @@ def create_vcoo(payload: dict = {}, db: Session = Depends(get_db)):
 def list_vcoos(db: Session = Depends(get_db)):
     """List all VCOOs with agent status and active token."""
     vcoos = crud.list_vcoos(db)
+    dashboard_url = _os.getenv('DASHBOARD_URL', 'https://vcoo-dashboard.vercel.app')
     return [
         {
             "id": str(v.id),
@@ -247,6 +248,7 @@ def list_vcoos(db: Session = Depends(get_db)):
             "active_token": v.active_token.token if v.active_token else None,
             "token_expires_at": v.active_token.expires_at.isoformat() if v.active_token and v.active_token.expires_at else None,
             "modules": v.modules if hasattr(v, 'modules') and v.modules else ["core"],
+            "onboarding_url": f"{dashboard_url}/setup/{v.active_token.token}" if v.active_token else None,
         }
         for v in vcoos
     ]
@@ -597,8 +599,10 @@ def get_provision_token(vcoo_id: str, db: Session = Depends(get_db)):
     else:
         token = crud.create_provision_for_vcoo(db, vcoo_id)
     frontend_url = _os.getenv('FRONTEND_URL', 'https://vcoo-onboarding.vercel.app')
+    dashboard_url = _os.getenv('DASHBOARD_URL', 'https://vcoo-dashboard.vercel.app')
     install_cmd = f"curl -sSL {frontend_url}/install.sh | PROVISION_TOKEN={token} bash -"
-    return {"token": token, "install_command": install_cmd}
+    onboarding_url = f"{dashboard_url}/setup/{token}"
+    return {"token": token, "install_command": install_cmd, "onboarding_url": onboarding_url}
 
 @app.post("/vcoo/{vcoo_id}/regenerate-token")
 def regenerate_token(vcoo_id: str, db: Session = Depends(get_db)):
@@ -608,8 +612,10 @@ def regenerate_token(vcoo_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="VCOO not found")
     token = crud.regenerate_token_for_vcoo(db, vcoo_id)
     frontend_url = _os.getenv('FRONTEND_URL', 'https://vcoo-onboarding.vercel.app')
-    install_cmd = f"curl -sSL {frontend_url}/install.sh | PROVISION_TOKEN={token} bash -"
-    return {"token": token, "install_command": install_cmd}
+    dashboard_url = _os.getenv('DASHBOARD_URL', 'https://vcoo-dashboard.vercel.app')
+    install_cmd = f"curl -sSL {frontend_url}/install.sh | PROVISION_TOKEN=*** bash -"
+    onboarding_url = f"{dashboard_url}/setup/{token}"
+    return {"token": token, "install_command": install_cmd, "onboarding_url": onboarding_url}
 
 @app.post("/vcoo/{vcoo_id}/complete")
 def complete_vcoo(vcoo_id: str, db: Session = Depends(get_db)):
