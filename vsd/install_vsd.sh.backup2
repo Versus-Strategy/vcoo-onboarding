@@ -18,7 +18,7 @@ INSTALL_DIR="/opt/vsd"
 LOG_DIR="/var/log"
 VERSUS="versusd"
 TOKENS="tokens"
-TOKENS_DIR="/etc...S"
+TOKENS_DIR="/etc/$VERSUS/$TOKENS"
 PROVISION_ID_FILE="/etc/$VERSUS/provision_id"
 
 # -------------------------------------------------
