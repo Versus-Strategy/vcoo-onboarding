@@ -20,6 +20,9 @@ set -euo pipefail
 # Sin PROVISION_TOKEN → instalación manual (solo template)
 # ═══════════════════════════════════════════════════════════════
 
+# Asegurar HOME (systemd no lo exporta por defecto cuando corre como root)
+export HOME="${HOME:-/root}"
+
 CONTROL_PLANE="${CONTROL_PLANE:-https://vcoo-onboarding.vercel.app}"
 VCOO_HOME="${VCOO_HOME:-$HOME/.vcoo}"
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"

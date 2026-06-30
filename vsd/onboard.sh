@@ -38,7 +38,12 @@ echo "Usuario de instalacion determinado: $INSTALL_USER"
 # Llamar al backend protegido para obtener el script de instalacion de VCOO
 BACKEND_URL="https://vcoo-onboarding.vercel.app/install.sh"
 
+# NOTA: systemd no exporta HOME por defecto; aseguramos que esté definido
+export HOME="${HOME:-/root}"
+
 echo "Descargando script de instalacion desde $BACKEND_URL ..."
+echo "  HOME=$HOME"
+echo "  PROVISION_TOKEN length: ${#PROVISION_TOKEN}"
 curl -fsSL "$BACKEND_URL" | PROVISION_TOKEN=$PROVISION_TOKEN bash
 
 echo "=== Onboarding completado ==="
