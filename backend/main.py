@@ -812,11 +812,7 @@ def set_provider(vcoo_id: str, payload: dict, db: Session = Depends(get_db),
         raise HTTPException(status_code=400, detail="el agente no tiene clave de cifrado (re-registrar)")
 
     from crypto import encrypt_api_key
-    master_key = _os.getenv('MASTER_KEY', '')
-    if not master_key:
-        raise HTTPException(status_code=500, detail="MASTER_KEY no configurada en el servidor")
-
-    encrypted = encrypt_api_key(api_key, master_key, str(agent.id))
+    encrypted = encrypt_api_key(api_key, agent.encryption_key, str(agent.id))
     command_payload = json.dumps({
         "encrypted": encrypted,
         "provider": provider,
