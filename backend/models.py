@@ -101,3 +101,22 @@ class OnboardingState(Base):
 
     # relationship
     vcoo = relationship("VCOO", backref="onboarding_state", uselist=False)
+
+
+class Client(Base):
+    __tablename__ = 'clients'
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email = Column(String, unique=True, nullable=False)
+    password_hash = Column(String, nullable=False)
+    name = Column(String, nullable=True)
+    vcoo_id = Column(UUID(as_uuid=True), ForeignKey('vcoos.id'), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "email": self.email,
+            "name": self.name,
+            "vcoo_id": str(self.vcoo_id) if self.vcoo_id else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }

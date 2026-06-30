@@ -132,6 +132,43 @@ def regenerate_token_for_vcoo(db: Session, vcoo_id: str):
     return create_provision_for_vcoo(db, vcoo_id)
 
 
+# ── Client CRUD ─────────────────────────────────────────────
+
+def get_client_by_email(db: Session, email: str):
+    """Find a client by email."""
+    return db.query(models.Client).filter(models.Client.email == email).first()
+
+
+def get_client_by_vcoo(db: Session, vcoo_id: str):
+    """Find a client linked to a VCOO."""
+    return db.query(models.Client).filter(models.Client.vcoo_id == vcoo_id).first()
+
+
+def create_client(db: Session, email: str, password_hash: str, name: str = None, vcoo_id: str = None):
+    """Create a new client."""
+    c = models.Client(
+        email=email,
+        password_hash=password_hash,
+        name=name,
+        vcoo_id=vcoo_id,
+    )
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+    return c
+
+
+def link_client_to_vcoo(db: Session, client_id: str, vcoo_id: str):
+    """Link an existing client to a VCOO."""
+    c = db.query(models.Client).filter(models.Client.id == client_id).first()
+    if not c:
+        return None
+    c.vcoo_id = vcoo_id
+    db.commit()
+    db.refresh(c)
+    return c
+
+
 # ── Agent CRUD ───────────────────────────────────────────
 
 def create_agent(db: Session, vcoo_id: str, info: str = None):

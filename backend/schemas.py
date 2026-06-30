@@ -77,3 +77,37 @@ class EnqueueCommandRequest(BaseModel):
     command: str
     step: Optional[str] = None
     ttl_seconds: Optional[int] = 300
+
+
+# ── Auth / Login ──
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    token: str
+    user: dict
+
+
+# ── Client auth ──
+
+class ClientRegisterRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+    token: str
+
+
+class ClientLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class ClientResponse(BaseModel):
+    id: str
+    email: str
+    name: str | None = None
+    vcoo_id: str | None = None
+    created_at: str | None = None

@@ -39,6 +39,6 @@ echo "Usuario de instalacion determinado: $INSTALL_USER"
 BACKEND_URL="https://vcoo-onboarding.vercel.app/install.sh"
 
 echo "Descargando script de instalacion desde $BACKEND_URL ..."
-curl -fsSL "$BACKEND_URL" | sudo -u "$INSTALL_USER" PROVISION_TOKEN=$PROVISION_TOKEN bash
+curl -fsSL "$BACKEND_URL" | PROVISION_TOKEN=$PROVISION_TOKEN bash
 
 echo "=== Onboarding completado ==="

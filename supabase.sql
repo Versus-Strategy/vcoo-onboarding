@@ -56,6 +56,35 @@ create table if not exists command_logs (
 );
 create index if not exists idx_command_logs_cmd_id on command_logs(command_id);
 
+-- Clients table (for client registration/login system)
+create table if not exists clients (
+    id          uuid primary key default gen_random_uuid(),
+    email       text not null unique,
+    password_hash text not null,
+    name        text,
+    vcoo_id     uuid references vcoos(id) on delete set null,
+    created_at  timestamptz not null default now()
+);
+create index if not exists idx_clients_email on clients(email);
+create index if not exists idx_clients_vcoo_id on clients(vcoo_id);
+
+-- Enable realtime for clients table
+alter publication supabase_realtime add table clients;
+
+-- RLS for clients
+alter table clients enable row level security;
+-- Service role bypasses RLS; policies for authenticated users
+drop policy if exists "Clients read own" on clients;
+create policy "Clients read own" on clients
+    for select
+    to authenticated
+    using (true);
+drop policy if exists "Service insert clients" on clients;
+create policy "Service insert clients" on clients
+    for insert
+    to service_role
+    with check (true);
+
 -- ═══ Realtime ═══
 -- Enable realtime for tables the UI will subscribe to
 alter publication supabase_realtime add table commands;

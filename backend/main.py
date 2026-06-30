@@ -92,8 +92,120 @@ def verify_auth(payload: dict):
         return {"status": "ok"}
     raise HTTPException(status_code=401, detail="Contraseña incorrecta")
 
-# ── VCOO ──────────────────────────────────────────────────
 
+@app.post("/auth/login")
+def operator_login(payload: schemas.LoginRequest):
+    """Operator login endpoint. Validates against DASHBOARD_PASSWORD and returns a JWT."""
+    if not auth.verify_dashboard_password(payload.password):
+        raise HTTPException(status_code=401, detail="Credenciales inválidas")
+    # Derive a display name from the email (part before @)
+    name = payload.email.split('@')[0]
+    token = auth.create_operator_token(payload.email, name)
+    return schemas.LoginResponse(
+        token=token,
+        user={"email": payload.email, "role": "operador", "name": name}
+    )
+
+
+# ── Client auth ──────────────────────────────────────────────
+
+@app.post("/auth/client/register")
+def client_register(payload: schemas.ClientRegisterRequest, db: Session = Depends(get_db)):
+    """Register a new client linked to a VCOO via a provision token."""
+    # 1. Validate the provision token (read-only, don't consume)
+    vcoo_id = crud.lookup_provision_token(db, payload.token)
+    if not vcoo_id:
+        raise HTTPException(status_code=400, detail="Token de provision inválido o expirado")
+    # 2. Check email not already registered
+    existing = crud.get_client_by_email(db, payload.email)
+    if existing:
+        raise HTTPException(status_code=409, detail="Email ya registrado")
+    # 3. Hash password
+    password_hash = auth.hash_password(payload.password)
+    # 4. Create client linked to token's vcoo_id
+    client = crud.create_client(db, email=payload.email, password_hash=password_hash,
+                                name=payload.name, vcoo_id=vcoo_id)
+    # 5. Return JWT + client info
+    token = auth.create_client_token(str(client.id), vcoo_id, client.email)
+    client_resp = schemas.ClientResponse(
+        id=str(client.id),
+        email=client.email,
+        name=client.name,
+        vcoo_id=str(client.vcoo_id) if client.vcoo_id else None,
+        created_at=client.created_at.isoformat() if client.created_at else None,
+    )
+    return {
+        "token": token,
+        "client": client_resp.model_dump() if hasattr(client_resp, 'model_dump') else client_resp.dict(),
+    }
+
+
+@app.post("/auth/client/login")
+def client_login(payload: schemas.ClientLoginRequest, db: Session = Depends(get_db)):
+    """Login for existing clients."""
+    # 1. Find client by email
+    client = crud.get_client_by_email(db, payload.email)
+    if not client:
+        raise HTTPException(status_code=401, detail="Credenciales inválidas")
+    # 2. Verify password
+    if not auth.verify_password(payload.password, client.password_hash):
+        raise HTTPException(status_code=401, detail="Credenciales inválidas")
+    # 3. Return JWT + client info
+    vcoo_id = str(client.vcoo_id) if client.vcoo_id else ""
+    token = auth.create_client_token(str(client.id), vcoo_id, client.email)
+    client_resp = schemas.ClientResponse(
+        id=str(client.id),
+        email=client.email,
+        name=client.name,
+        vcoo_id=vcoo_id or None,
+        created_at=client.created_at.isoformat() if client.created_at else None,
+    )
+    return {
+        "token": token,
+        "client": client_resp.model_dump() if hasattr(client_resp, 'model_dump') else client_resp.dict(),
+    }
+
+
+@app.get("/auth/client/me")
+def client_me(client: dict = Depends(auth.get_client_from_token), db: Session = Depends(get_db)):
+    """Get current client info plus linked VCOO state."""
+    client_obj = crud.get_client_by_email(db, client.get("email", ""))
+    if not client_obj:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    result = {
+        "id": str(client_obj.id),
+        "email": client_obj.email,
+        "name": client_obj.name,
+        "vcoo_id": str(client_obj.vcoo_id) if client_obj.vcoo_id else None,
+        "created_at": client_obj.created_at.isoformat() if client_obj.created_at else None,
+    }
+    # Add linked VCOO state if available
+    if client_obj.vcoo_id:
+        try:
+            vcoo_id = str(client_obj.vcoo_id)
+            v = crud.get_vcoo(db, vcoo_id)
+            if v:
+                agent = crud.get_agent_by_vcoo(db, vcoo_id)
+                st = crud.get_onboarding_state(db, vcoo_id)
+                result["vcoo"] = v.to_dict()
+                result["vcoo"]["agent"] = agent.to_dict() if agent else None
+                if st:
+                    from onboarding import get_total_steps
+                    modules = list(st.modules or ["core"])
+                    result["vcoo"]["modules"] = modules
+                    result["vcoo"]["step"] = st.step
+                    result["vcoo"]["onboarding_status"] = st.status
+                    result["vcoo"]["completed_steps"] = st.completed or []
+                    result["vcoo"]["progress"] = {
+                        "total": get_total_steps(modules),
+                        "done": len(st.completed or []),
+                    }
+        except Exception:
+            pass
+    return result
+
+
+# ── VCOO ──────────────────────────────────────────────────
 @app.post("/vcoo")
 def create_vcoo(payload: dict = {}, db: Session = Depends(get_db)):
     name = payload.get("name") if payload else None
@@ -139,8 +251,12 @@ def list_vcoos(db: Session = Depends(get_db)):
 # ── Setup wizard (SPEC v2 §4.2) ───────────────────────────
 
 @app.get("/setup/{token}")
-def get_setup_info(token: str, db: Session = Depends(get_db)):
+def get_setup_info(token: str, authorization: str = Header(None), db: Session = Depends(get_db)):
     """Returns onboarding state for the wizard frontend.
+    Handles 3 cases:
+    1. No auth → {requires_registration: true, token_valid, vcoo_name}
+    2. Auth but client doesn't own this VCOO → {requires_registration: false, ...state}
+    3. Auth and owns it → full onboarding state (existing behavior)
     Read-only — does not consume the token."""
     vcoo_id = crud.lookup_provision_token(db, token)
     if not vcoo_id:
@@ -155,6 +271,49 @@ def get_setup_info(token: str, db: Session = Depends(get_db)):
     v = crud.get_vcoo(db, vcoo_id)
     if not v:
         raise HTTPException(status_code=404, detail="VCOO not found")
+
+    # Determine auth state
+    client_payload = None
+    if authorization and authorization.lower().startswith('bearer '):
+        bearer_token = authorization.split(None, 1)[1]
+        client_payload = auth.verify_client_token(bearer_token)
+
+    if not client_payload:
+        # Case 1: No auth — tell frontend to show registration form
+        return {
+            "requires_registration": True,
+            "token_valid": True,
+            "vcoo_name": v.name,
+        }
+
+    # Has auth — check if this client owns the VCOO
+    client_email = client_payload.get("email", "")
+    client_obj = crud.get_client_by_email(db, client_email)
+    owns_vcoo = client_obj and client_obj.vcoo_id and str(client_obj.vcoo_id) == vcoo_id
+
+    if not owns_vcoo:
+        # Case 2: Auth but doesn't own this VCOO
+        st = crud.get_onboarding_state(db, vcoo_id)
+        from onboarding import get_total_steps
+        modules = list(st.modules or ["core"]) if st else ["core"]
+        return {
+            "requires_registration": False,
+            "token_valid": True,
+            "vcoo_name": v.name,
+            "vcoo_id": str(v.id),
+            "modules": modules,
+            "step": st.step if st else "unknown",
+            "status": st.status if st else "unknown",
+            "completed": st.completed or [] if st else [],
+            "errors": st.errors or [] if st else [],
+            "retry_count": st.retry_count or {} if st else {},
+            "progress": {
+                "total": get_total_steps(modules),
+                "done": len(st.completed or []) if st else 0,
+            },
+        }
+
+    # Case 3: Auth and owns it — full onboarding state (existing behavior)
     st = crud.get_onboarding_state(db, vcoo_id)
     if not st:
         raise HTTPException(status_code=404, detail="No hay datos de onboarding")
@@ -172,6 +331,7 @@ def get_setup_info(token: str, db: Session = Depends(get_db)):
         ago = (dt.datetime.utcnow() - agent.last_seen.replace(tzinfo=None)).total_seconds()
         agent_online = ago < 120
     return {
+        "requires_registration": False,
         "vcoo_id": str(v.id),
         "name": v.name,
         "modules": modules,
