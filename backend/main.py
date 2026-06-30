@@ -3,6 +3,7 @@ _sys_path = _os.path.dirname(__file__)
 if _sys_path not in sys.path:
     sys.path.insert(0, _sys_path)
 
+from datetime import datetime
 from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
@@ -237,7 +238,10 @@ def list_vcoos(db: Session = Depends(get_db)):
             "created_at": v.created_at.isoformat() if v.created_at else None,
             "agent": {
                 "id": str(v.agent.id),
-                "status": v.agent.status,
+                "status": 'offline' if (
+                    v.agent.last_seen and
+                    (datetime.utcnow() - v.agent.last_seen.replace(tzinfo=None)).total_seconds() >= 120
+                ) else v.agent.status if v.agent.status == 'online' else v.agent.status,
                 "last_seen": v.agent.last_seen.isoformat() if v.agent.last_seen else None,
             } if v.agent else None,
             "active_token": v.active_token.token if v.active_token else None,

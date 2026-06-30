@@ -33,12 +33,19 @@ class Agent(Base):
     health_payload = Column(Text, nullable=True)  # JSON blob from health reporter
 
     def to_dict(self):
+        # Compute effective online/offline from last_seen with 120s threshold
+        effective_status = self.status
+        if self.last_seen and effective_status == 'online':
+            now = datetime.utcnow()
+            ago = (now - self.last_seen.replace(tzinfo=None)).total_seconds()
+            if ago >= 120:
+                effective_status = 'offline'
         return {
             "id": str(self.id),
             "vcoo_id": str(self.vcoo_id),
             "info": self.info,
             "last_seen": self.last_seen.isoformat() if self.last_seen else None,
-            "status": self.status,
+            "status": effective_status,
         }
 
 class Command(Base):
