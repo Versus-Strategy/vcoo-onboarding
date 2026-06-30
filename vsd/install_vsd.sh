@@ -18,7 +18,7 @@ INSTALL_DIR="/opt/vsd"
 LOG_DIR="/var/log"
 VERSUS="versusd"
 TOKENS="tokens"
-TOKENS_DIR="/etc...S"
+TOKENS_DIR="/etc/$VERSUS/$TOKENS"
 PROVISION_ID_FILE="/etc/$VERSUS/provision_id"
 
 # -------------------------------------------------
@@ -57,11 +57,10 @@ chown "$INSTALL_USER:$INSTALL_USER" "$LOG_DIR/versusd.log" "$LOG_DIR/hermes-gate
 # 6. Almacenar el token de provisión (uno por producto)
 # -------------------------------------------------
 if [ -n "${PROVISION_TOKEN:-}" ] && [ -n "${PROVISION_ID:-}" ]; then
-    TOKEN_FILE="$TOK..."
     echo "Guardando token de provisión para el producto '$PROVISION_ID'…"
-    echo "$PROVISION_TOKEN" > "$TOKEN_FILE"
-    chmod 600 "$TOKEN_FILE"
-    chown root:root "$TOKEN_FILE"
+    echo "$PROVISION_TOKEN" > "$TOKENS_DIR/$PROVISION_ID.token"
+    chmod 600 "$TOKENS_DIR/$PROVISION_ID.token"
+    chown root:root "$TOKENS_DIR/$PROVISION_ID.token"
 
     # Guardar también el ID para que el service de onboarding lo lea
     echo "$PROVISION_ID" > "$PROVISION_ID_FILE"

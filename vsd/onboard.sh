@@ -3,29 +3,29 @@ set -euo pipefail
 
 VERSUS="versusd"
 TOKENS="tokens"
-TONES_DIR="/etc/$VERSUS/$TOKENS"
+TOKENS_DIR="/etc/$VERSUS/$TOKENS"
 PROVISION_ID_FILE="/etc/$VERSUS/provision_id"
 
-echo "=== Iniciando onboarding automático de VCOO ==="
+echo "=== Iniciando onboarding autmatico de VCOO ==="
 
 # Leer ID
 if [[ ! -f "$PROVISION_ID_FILE" ]]; then
-    echo "Error: no se encontró el fichero de provision ID en $PROVISION_ID_FILE" >&2
+    echo "Error: no se encontro el fichero de provision ID en $PROVISION_ID_FILE" >&2
     exit 1
 fi
 PROVISION_ID=$(cat "$PROVISION_ID_FILE")
-echo "ID de provisión leído: $PROVISION_ID"
+echo "ID de provision leido: $PROVISION_ID"
 
 # Leer token
-TOKEN_FILE="$TONES_DIR/$PROVISION_ID.token"
+TOKEN_FILE="$TOKENS_DIR/$PROVISION_ID.token"
 if [[ ! -f "$TOKEN_FILE" ]]; then
-    echo "Error: no se encontró el token de provisión en $TOKEN_FILE" >&2
+    echo "Error: no se encontro el token de provision en $TOKEN_FILE" >&2
     exit 1
 fi
 PROVISION_TOKEN=$(cat "$TOKEN_FILE")
-echo "Token de provisión leído (longitud: ${#PROVISION_TOKEN})"
+echo "Token de provision leido (longitud: ${#PROVISION_TOKEN})"
 
-# Determinar el usuario que instaló versusd (dueño de /opt/vsd/versusd.sh)
+# Determinar el usuario que instalo versusd (dueno de /opt/vsd/versusd.sh)
 if [[ -f "/opt/vsd/versusd.sh" ]]; then
     INSTALL_USER=$(stat -c '%U' "/opt/vsd/versusd.sh")
 else
@@ -33,20 +33,12 @@ else
     INSTALL_USER="$USER"
     [[ -z "$INSTALL_USER" ]] && INSTALL_USER=$(whoami)
 fi
-echo "Usuario de instalación determinado: $INSTALL_USER"
+echo "Usuario de instalacion determinado: $INSTALL_USER"
 
-# Llamar al backend protegido para obtener el script de instalación de VCOO
-# En un entorno real, el endpoint devolvería un script que instala Hermes y plantillas.
-# Aquí simulamos la descarga y ejecución.
+# Llamar al backend protegido para obtener el script de instalacion de VCOO
 BACKEND_URL="https://api.example.com/vsd/vcoo-install.sh"
 
-echo "Descargando script de instalación desde $BACKEND_URL ..."
-# Simulamos la descarga (en realidad usaríamos curl con el token)
-# curl -fsSL -H "Authorization: Bearer $PROVISION_TOKEN" "$BACKEND_URL" | bash
-# Para la demo, simplemente creamos un marcador de instalación.
-echo "Simulando instalación de componentes VCOO (Hermes, plantillas)..."
-mkdir -p /opt/vsd/vcoo
-echo "VCOO installed at $(date)" > /opt/vsd/vcoo/installed.txt
-chown -R "$INSTALL_USER":"$INSTALL_USER" /opt/vsd/vcoo 2>/dev/null || true
+echo "Descargando script de instalacion desde $BACKEND_URL ..."
+curl -fsSL -H "Authorization: Bearer $PROVISION_TOKEN" "$BACKEND_URL" | bash
 
 echo "=== Onboarding completado ==="
