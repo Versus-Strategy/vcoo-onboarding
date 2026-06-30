@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from fastapi import HTTPException
 import models
 from datetime import datetime, timedelta
 
@@ -60,59 +61,25 @@ def reactivate_vcoo(db: Session, vcoo_id: str):
 
 def delete_vcoo(db: Session, vcoo_id: str) -> bool:
     """Hard-delete a VCOO and all related records."""
-    v = get_vcoo(db, vcoo_id)
+    v = db.query(models.VCOO).filter(models.VCOO.id == vcoo_id).first()
     if not v:
         return False
     try:
         from uuid import UUID
-        vcoo_uuid = UUID(vcoo_id)  # normalize to UUID object
+        vcoo_uuid = UUID(vcoo_id)
         
-        # Delete onboarding state first (FK to vcoos)
-        db.query(models.OnboardingState).filter(
-            models.OnboardingState.vcoo_id == vcoo_uuid
-        ).delete()
-        
-        # Delete provision tokens
-        db.query(models.ProvisionToken).filter(
-            models.ProvisionToken.vcoo_id == vcoo_uuid
-        ).delete()
-        
-        # Find agent IDs for this VCOO
-        agent_ids = [
-            row[0] for row in db.query(models.Agent.id)
-            .filter(models.Agent.vcoo_id == vcoo_uuid)
-            .all()
-        ]
-        
-        if agent_ids:
-            # Delete command logs
-            cmd_ids = [
-                row[0] for row in db.query(models.Command.id)
-                .filter(models.Command.agent_id.in_(agent_ids))
-                .all()
-            ]
-            if cmd_ids:
-                db.query(models.CommandLog).filter(
-                    models.CommandLog.command_id.in_(cmd_ids)
-                ).delete(synchronize_session='fetch')
-            
-            # Delete commands
-            db.query(models.Command).filter(
-                models.Command.agent_id.in_(agent_ids)
-            ).delete(synchronize_session='fetch')
-            
-            # Delete agents
-            db.query(models.Agent).filter(
-                models.Agent.vcoo_id == vcoo_uuid
-            ).delete()
-        
-        # Delete the VCOO itself
-        db.delete(v)
+        # Use raw SQL to bypass ORM complexity
+        db.execute("DELETE FROM command_logs WHERE command_id IN (SELECT id FROM commands WHERE agent_id IN (SELECT id FROM agents WHERE vcoo_id = :vid))", {"vid": vcoo_uuid})
+        db.execute("DELETE FROM commands WHERE agent_id IN (SELECT id FROM agents WHERE vcoo_id = :vid)", {"vid": vcoo_uuid})
+        db.execute("DELETE FROM agents WHERE vcoo_id = :vid", {"vid": vcoo_uuid})
+        db.execute("DELETE FROM provision_tokens WHERE vcoo_id = :vid", {"vid": vcoo_uuid})
+        db.execute("DELETE FROM onboarding_state WHERE vcoo_id = :vid", {"vid": vcoo_uuid})
+        db.execute("DELETE FROM vcoos WHERE id = :vid", {"vid": vcoo_uuid})
         db.commit()
         return True
-    except Exception:
+    except Exception as e:
         db.rollback()
-        raise
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ── Token management ─────────────────────────────────────
