@@ -663,6 +663,16 @@ def register_agent(payload: dict, db: Session = Depends(get_db)):
     if jti:
         crud.set_agent_token_jti(db, str(agent.id), jti)
 
+    # Generate encryption key for remote config (Fernet-based)
+    agent_id_str = str(agent.id)
+    master_key = _os.getenv('MASTER_KEY', '')
+    if master_key:
+        from crypto import generate_encryption_key
+        enc_key = generate_encryption_key(master_key, agent_id_str)
+        crud.set_agent_encryption_key(db, agent_id_str, enc_key)
+    else:
+        enc_key = None
+
     # ── Auto-trigger: encolar primer comando si hay onboarding pendiente ──
     st = crud.get_onboarding_state(db, vcoo_id)
     if st and st.status not in ("blocked", "completed") and st.step != "done":
@@ -672,7 +682,7 @@ def register_agent(payload: dict, db: Session = Depends(get_db)):
             crud.create_command(db, agent_id=str(agent.id), command=cmd_name, step=st.step)
     # ────────────────────────────────────────────────────────────────
 
-    return {"agent_id": str(agent.id), "vcoo_id": str(vcoo_id), "agent_token": agent_token}
+    return {"agent_id": str(agent.id), "vcoo_id": str(vcoo_id), "agent_token": agent_token, "encryption_key": enc_key}
 
 
 # ── Agent polling & logs ──────────────────────────────────
@@ -694,7 +704,7 @@ def agent_poll(agent_id: str, authorization: str = Header(None), db: Session = D
     VALID_COMMANDS = {
         "verify-bootstrap", "verify-google", "verify-trello", "verify-email",
         "verify-github", "verify-vercel", "verify-supabase",
-        "save-creds", "finalize",
+        "save-creds", "finalize", "set-provider",
     }
     result = []
     for cmd in pending:
@@ -702,8 +712,8 @@ def agent_poll(agent_id: str, authorization: str = Header(None), db: Session = D
             crud.mark_command_done(db, cmd.id, result="BLOCKED: comando no reconocido, descartado")
             continue
         entry = {"cmd_id": str(cmd.id), "command": cmd.command, "step": cmd.step}
-        # Include payload for save-creds and other data-carrying commands
-        if cmd.command == "save-creds" and cmd.result:
+        # Include payload for data-carrying commands
+        if cmd.command in ("save-creds", "set-provider") and cmd.result:
             try:
                 entry["payload"] = json.loads(cmd.result)
             except Exception:
@@ -770,6 +780,50 @@ def get_command_logs(agent_id: str, cmd_id: str = "", db: Session = Depends(get_
             "logs": logs[-50:] if logs else [],
         })
     return {"commands": result}
+
+
+# ── Set Provider (remote config) ────────────────────────
+
+@app.post("/vcoo/{vcoo_id}/set-provider")
+def set_provider(vcoo_id: str, payload: dict, db: Session = Depends(get_db),
+                 operator: dict = Depends(auth.verify_operator_jwt)):
+    """Operator encrypts an AI provider API key and sends it to the agent.
+
+    Payload: {provider, model, api_key}
+      provider — e.g. "openrouter", "anthropic", "openai"
+      model — e.g. "openrouter/deepseek-v4", "claude-sonnet-4"
+      api_key — the API key to configure
+
+    The API key is encrypted with Fernet using MASTER_KEY + agent_id
+    so only the target agent can decrypt it.
+    """
+    provider = payload.get("provider", "").strip()
+    model = payload.get("model", "").strip()
+    api_key = payload.get("api_key", "").strip()
+
+    if not provider or not api_key:
+        raise HTTPException(status_code=400, detail="provider y api_key son requeridos")
+
+    agent = crud.get_agent_by_vcoo(db, vcoo_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="no se encontró agente para este VCOO")
+
+    if not agent.encryption_key:
+        raise HTTPException(status_code=400, detail="el agente no tiene clave de cifrado (re-registrar)")
+
+    from crypto import encrypt_api_key
+    master_key = _os.getenv('MASTER_KEY', '')
+    if not master_key:
+        raise HTTPException(status_code=500, detail="MASTER_KEY no configurada en el servidor")
+
+    encrypted = encrypt_api_key(api_key, master_key, str(agent.id))
+    command_payload = json.dumps({
+        "encrypted": encrypted,
+        "provider": provider,
+        "model": model,
+    })
+    cmd = crud.create_command(db, agent_id=str(agent.id), command="set-provider", result=command_payload)
+    return {"status": "command_sent", "cmd_id": str(cmd.id), "provider": provider, "model": model}
 
 
 # ── Commands ──────────────────────────────────────────────
@@ -1023,6 +1077,14 @@ def get_install_script():
 @app.get('/agent_http.py')
 def get_agent_script():
     path = _os.path.join(_STATIC_DIR, 'agent_http.py')
+    if not _os.path.isfile(path):
+        raise HTTPException(status_code=404, detail='Not found')
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse(open(path).read(), media_type='text/x-python')
+
+@app.get('/crypto.py')
+def get_crypto_module():
+    path = _os.path.join(_STATIC_DIR, 'crypto.py')
     if not _os.path.isfile(path):
         raise HTTPException(status_code=404, detail='Not found')
     from fastapi.responses import PlainTextResponse

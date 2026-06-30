@@ -14,12 +14,82 @@ Usage: python3 agent_http.py <control_plane_url> <provision_token>
 """
 
 import sys, os, time, json, subprocess, random, select, threading
+import base64
+import hashlib
 
 try:
     import requests
 except ImportError:
-    print("[FATAL] requests no instalado. Ejecuta: pip install requests", file=sys.stderr)
-    sys.exit(3)
+    # fallback handled later
+    pass
+
+# ── Remote config crypto (inline, no external module needed) ──
+# Decrypts API keys encrypted by the backend with Fernet-like AES.
+# Uses hashlib.pbkdf2_hmac for key derivation + XOR stream cipher
+# so the agent needs NO extra Python packages beyond stdlib.
+
+_CRYPTO_ITERS = 100000
+
+def _crypto_derive_key(encryption_key: str, agent_id: str, salt: bytes) -> bytes:
+    """Derive a 32-byte key from encryption_key + agent_id + salt."""
+    seed = (encryption_key + ":" + agent_id).encode("utf-8")
+    return hashlib.pbkdf2_hmac("sha256", seed, salt, _CRYPTO_ITERS, dklen=32)
+
+def _crypto_decrypt(token_b64: str, encryption_key: str, agent_id: str) -> str:
+    """Decrypt a Fernet-compatible token using PBKDF2 + AES-CTR-like XOR.
+
+    Token format (urlsafe-base64):
+      base64_urlsafe(salt(16) || iv(16) || ciphertext || hmac(32))
+    """
+    try:
+        raw = base64.urlsafe_b64decode(_crypto_pad(token_b64))
+    except Exception:
+        raise ValueError("token inválido")
+
+    if len(raw) < 48:
+        raise ValueError("token demasiado corto")
+
+    salt = raw[:16]
+    iv = raw[16:32]
+    ciphertext = raw[32:-32]
+    expected_hmac = raw[-32:]
+
+    key = _crypto_derive_key(encryption_key, agent_id, salt)
+
+    # Verify HMAC
+    h = hashlib.sha256(key + iv + ciphertext).digest()
+    if not _crypto_constant_time_compare(h, expected_hmac):
+        raise ValueError("HMAC inválido — clave incorrecta o token corrupto")
+
+    # Decrypt: XOR ciphertext with keystream = SHA-256(key + iv + counter)
+    plain = bytearray()
+    counter = 0
+    for offset in range(0, len(ciphertext), 32):
+        keystream = hashlib.sha256(key + iv + bytes([counter])).digest()
+        chunk = ciphertext[offset:offset + 32]
+        for i in range(len(chunk)):
+            plain.append(chunk[i] ^ keystream[i])
+        counter += 1
+
+    return bytes(plain).decode("utf-8")
+
+def _crypto_pad(s: str) -> str:
+    """Add base64 padding."""
+    padding = 4 - len(s) % 4
+    if padding != 4:
+        s += "=" * padding
+    return s
+
+def _crypto_constant_time_compare(a: bytes, b: bytes) -> bool:
+    """Compare two bytes in constant time."""
+    if len(a) != len(b):
+        return False
+    result = 0
+    for x, y in zip(a, b):
+        result |= x ^ y
+    return result == 0
+
+# ── End crypto ──
 
 # ── Rich TUI (optional) ──
 RICH_OK = False
@@ -237,11 +307,14 @@ def generate_tui(debug=None):
 
 # ── Persistencia ──
 
-def save_agent(agent_id, agent_token, vcoo_id):
+def save_agent(agent_id, agent_token, vcoo_id, encryption_key=None):
     os.makedirs(STORAGE_DIR, exist_ok=True)
     path = os.path.join(STORAGE_DIR, "agent.json")
+    data = {"agent_id": agent_id, "agent_token": agent_token, "vcoo_id": vcoo_id}
+    if encryption_key:
+        data["encryption_key"] = encryption_key
     with open(path, "w") as f:
-        json.dump({"agent_id": agent_id, "agent_token": agent_token, "vcoo_id": vcoo_id}, f)
+        json.dump(data, f)
 
 
 def load_agent():
@@ -580,6 +653,116 @@ def main_loop(agent_id, agent_token, vcoo_id):
                         LIVE.update(generate_tui())
                 continue
 
+            if command == "set-provider":
+                payload_data = cmd.get("payload", {})
+                step = cmd.get("step", "set-provider")
+                encrypted = payload_data.get("encrypted", "")
+                provider = payload_data.get("provider", "")
+                model = payload_data.get("model", "")
+
+                if not encrypted or not provider:
+                    log("set-provider: payload incompleto, ignorando")
+                    report_with_retry(agent_id, agent_token, {
+                        "cmd_id": cmd.get("cmd_id", ""),
+                        "step": step,
+                        "exit_code": -1,
+                        "output": "Payload incompleto"
+                    })
+                    continue
+
+                # Load encryption key
+                agent_data = load_agent()
+                enc_key = agent_data.get("encryption_key", "") if agent_data else ""
+                if not enc_key:
+                    log("set-provider: NO encryption_key disponible, abortando")
+                    report_with_retry(agent_id, agent_token, {
+                        "cmd_id": cmd.get("cmd_id", ""),
+                        "step": step,
+                        "exit_code": -1,
+                        "output": "Encryption key no disponible"
+                    })
+                    continue
+
+                # Decrypt the API key
+                try:
+                    api_key = _crypto_decrypt(encrypted, enc_key, agent_id)
+                except Exception as e:
+                    log("set-provider: error al descifrar: " + str(e))
+                    report_with_retry(agent_id, agent_token, {
+                        "cmd_id": cmd.get("cmd_id", ""),
+                        "step": step,
+                        "exit_code": -1,
+                        "output": "Error al descifrar API key: " + str(e)
+                    })
+                    continue
+
+                # Execute hermes auth add
+                log("set-provider: configurando proveedor " + provider + " modelo " + model)
+                try:
+                    import subprocess
+                    # Add API key to credential pool (non-interactive)
+                    r1 = subprocess.run(
+                        ["hermes", "auth", "add", provider, "api-key", "--key", api_key],
+                        capture_output=True, text=True, timeout=30
+                    )
+                    if r1.returncode != 0:
+                        err = (r1.stderr or r1.stdout or "error desconocido")[:200]
+                        log("set-provider: hermes auth add falló: " + err)
+                        report_with_retry(agent_id, agent_token, {
+                            "cmd_id": cmd.get("cmd_id", ""),
+                            "step": step,
+                            "exit_code": r1.returncode,
+                            "output": "Error auth add: " + err
+                        })
+                        continue
+                    log("set-provider: API key añadida correctamente")
+
+                    # Set default model
+                    if model:
+                        r2 = subprocess.run(
+                            ["hermes", "config", "set", "model.default", model],
+                            capture_output=True, text=True, timeout=15
+                        )
+                        if r2.returncode != 0:
+                            log("set-provider: config set aviso: " + (r2.stderr or "")[:200])
+                        log("set-provider: modelo default configurado: " + model)
+
+                    output = f"Proveedor {provider} configurado"
+                    if model:
+                        output += f" con modelo {model}"
+                    report_with_retry(agent_id, agent_token, {
+                        "cmd_id": cmd.get("cmd_id", ""),
+                        "step": step,
+                        "exit_code": 0,
+                        "output": output
+                    })
+                    log("set-provider: " + output)
+                except subprocess.TimeoutExpired:
+                    log("set-provider: timeout ejecutando hermes auth")
+                    report_with_retry(agent_id, agent_token, {
+                        "cmd_id": cmd.get("cmd_id", ""),
+                        "step": step,
+                        "exit_code": -1,
+                        "output": "Timeout ejecutando hermes auth"
+                    })
+                except FileNotFoundError as e:
+                    log("set-provider: hermes no encontrado: " + str(e))
+                    report_with_retry(agent_id, agent_token, {
+                        "cmd_id": cmd.get("cmd_id", ""),
+                        "step": step,
+                        "exit_code": -1,
+                        "output": "hermes CLI no encontrado. ¿Está instalado?"
+                    })
+                except Exception as e:
+                    log("set-provider: error inesperado: " + str(e))
+                    report_with_retry(agent_id, agent_token, {
+                        "cmd_id": cmd.get("cmd_id", ""),
+                        "step": step,
+                        "exit_code": -1,
+                        "output": "Error: " + str(e)
+                    })
+                continue
+
             result = execute_command(cmd, agent_id, agent_token)
             ok, next_step = report_with_retry(agent_id, agent_token, result)
             # Update TUI with next step from server
@@ -623,7 +806,7 @@ def main():
                     log("Re-registrado: agente " + agent_id[:20])
             else:
                 log("Registrado: agente " + agent_id[:20])
-            save_agent(agent_id, agent_token, vcoo_id)
+            save_agent(agent_id, agent_token, vcoo_id, meta.get("encryption_key"))
         elif loaded:
             log("Registro fallido (token expirado/invalido), restaurando estado guardado")
             agent_id = loaded["agent_id"]

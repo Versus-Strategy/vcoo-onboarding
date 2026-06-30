@@ -31,6 +31,7 @@ class Agent(Base):
     status = Column(String, default='offline')
     token_jti = Column(String, nullable=True)  # for revocation reference
     health_payload = Column(Text, nullable=True)  # JSON blob from health reporter
+    encryption_key = Column(String, nullable=True)  # Fernet key for remote config
 
     def to_dict(self):
         # Compute effective online/offline from last_seen with 120s threshold

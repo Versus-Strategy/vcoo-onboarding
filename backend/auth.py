@@ -80,6 +80,25 @@ def create_operator_token(email: str, name: str, expires_hours: int = 24):
     token = jwt.encode(payload, key, algorithm='HS256')
     return token
 
+# JWT-based operator verification (used by dashboard API calls)
+def verify_operator_jwt(authorization: str = Header(None)) -> dict:
+    """FastAPI dependency: verify operator JWT from Authorization header."""
+    if not authorization or not authorization.lower().startswith('bearer '):
+        raise HTTPException(status_code=401, detail='Autenticación requerida')
+    token = authorization.split(None, 1)[1]
+    key = os.getenv('MASTER_KEY')
+    if not key:
+        raise HTTPException(status_code=500, detail='MASTER_KEY no configurada')
+    try:
+        payload = jwt.decode(token, key, algorithms=['HS256'])
+        if payload.get('role') != 'operador':
+            raise HTTPException(status_code=403, detail='Se requiere rol de operador')
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail='Token expirado')
+    except Exception:
+        raise HTTPException(status_code=403, detail='Token inválido')
+
 # Minimal operator verification for WS UI
 def verify_operator(authorization: str = Header(None)) -> str:
     """FastAPI dependency to verify an operator token in Authorization header.

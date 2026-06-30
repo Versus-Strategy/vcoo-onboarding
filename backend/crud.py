@@ -164,8 +164,8 @@ def link_client_to_vcoo(db: Session, client_id: str, vcoo_id: str):
 
 # ── Agent CRUD ───────────────────────────────────────────
 
-def create_agent(db: Session, vcoo_id: str, info: str = None):
-    a = models.Agent(vcoo_id=vcoo_id, info=info, status='online')
+def create_agent(db: Session, vcoo_id: str, info: str = None, encryption_key: str = None):
+    a = models.Agent(vcoo_id=vcoo_id, info=info, status='online', encryption_key=encryption_key)
     db.add(a)
     db.commit()
     db.refresh(a)
@@ -174,6 +174,11 @@ def create_agent(db: Session, vcoo_id: str, info: str = None):
 
 def set_agent_token_jti(db: Session, agent_id: str, jti: str):
     db.query(models.Agent).filter(models.Agent.id == agent_id).update({"token_jti": jti})
+    db.commit()
+
+
+def set_agent_encryption_key(db: Session, agent_id: str, enc_key: str):
+    db.query(models.Agent).filter(models.Agent.id == agent_id).update({"encryption_key": enc_key})
     db.commit()
 
 
