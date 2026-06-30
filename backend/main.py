@@ -240,8 +240,9 @@ def list_vcoos(db: Session = Depends(get_db)):
             "agent": {
                 "id": str(v.agent.id),
                 "status": 'offline' if (
-                    v.agent.last_seen and
-                    (datetime.utcnow() - v.agent.last_seen.replace(tzinfo=None)).total_seconds() >= 120
+                    not v.agent.last_seen or
+                    (v.agent.last_seen and
+                    (datetime.utcnow() - v.agent.last_seen.replace(tzinfo=None)).total_seconds() >= 120)
                 ) else v.agent.status if v.agent.status == 'online' else v.agent.status,
                 "last_seen": v.agent.last_seen.isoformat() if v.agent.last_seen else None,
             } if v.agent else None,
@@ -853,6 +854,14 @@ def get_state(vcoo_id: str, db: Session = Depends(get_db)):
     agent = crud.get_agent_by_vcoo(db, vcoo_id)
     state = v.to_dict()
     state["agent"] = agent.to_dict() if agent else None
+    # Compute online/offline status from last_seen (120s threshold)
+    if agent:
+        from datetime import datetime
+        agent_dict = state["agent"]
+        if agent.last_seen and (datetime.utcnow() - agent.last_seen.replace(tzinfo=None)).total_seconds() >= 120:
+            agent_dict["status"] = "offline"
+        elif not agent.last_seen:
+            agent_dict["status"] = "offline"
     active_token = crud.get_active_token_for_vcoo(db, vcoo_id)
     state["active_token"] = active_token.token if active_token else None
     # Add onboarding state (SPEC v2)
