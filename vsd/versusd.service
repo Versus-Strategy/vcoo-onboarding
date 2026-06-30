@@ -1,0 +1,15 @@
+[Unit]
+Description=Versusd – Health Monitor for Hermes Gateway
+After=network.target
+
+[Service]
+Type=simple
+User=%i                     # será sustituido por el usuario de instalación
+ExecStart=/opt/vsd/versusd.sh
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/var/log/versusd.log
+StandardError=inherit
+
+[Install]
+WantedBy=multi-user.target

@@ -229,21 +229,28 @@ info "Ejecutando instalador de la template..."
 bash "$TEMPLATE_DIR/install.sh"
 ok "Template instalada correctamente"
 
-# ── 5. Arrancar health reporter (si hay agente registrado) ──
+# ── 5. Arrancar health reporter (si hay agente registrado y no está ya corriendo) ──
 if [ -n "$AGENT_ID" ] && [ -f "$TEMPLATE_DIR/scripts/health-reporter.py" ]; then
     HEALTH_SCRIPT="${HERMES_HOME}/scripts/vcoo/health-reporter.py"
-    mkdir -p "$(dirname "$HEALTH_SCRIPT")"
-    cp "$TEMPLATE_DIR/scripts/health-reporter.py" "$HEALTH_SCRIPT"
+    HEALTH_PID_FILE="$HOME/.vcoo-agent/health-reporter.pid"
 
-    info "Arrancando health reporter..."
-    export AGENT_ID VCOO_ID AGENT_TOKEN CONTROL_PLANE
-    nohup python3 "$HEALTH_SCRIPT" > /tmp/vcoo-health.log 2>&1 &
-    HPID=$!
-    mkdir -p "$HOME/.vcoo-agent"
-    echo "$HPID" > "$HOME/.vcoo-agent/health-reporter.pid"
-    ok "Health reporter iniciado (PID $HPID)"
-    info "  Logs: /tmp/vcoo-health.log"
-    info "  PIDs: $HOME/.vcoo-agent/health-reporter.pid"
+    # Verificar si ya está corriendo (puede haberlo arrancado template/install.sh)
+    if [ -f "$HEALTH_PID_FILE" ] && kill -0 "$(cat "$HEALTH_PID_FILE" 2>/dev/null)" 2>/dev/null; then
+        info "Health reporter ya está en ejecución (PID $(cat "$HEALTH_PID_FILE")) — omitiendo..."
+    else
+        mkdir -p "$(dirname "$HEALTH_SCRIPT")"
+        cp "$TEMPLATE_DIR/scripts/health-reporter.py" "$HEALTH_SCRIPT"
+
+        info "Arrancando health reporter..."
+        export AGENT_ID VCOO_ID AGENT_TOKEN CONTROL_PLANE
+        nohup python3 "$HEALTH_SCRIPT" > /tmp/vcoo-health.log 2>&1 &
+        HPID=$!
+        mkdir -p "$HOME/.vcoo-agent"
+        echo "$HPID" > "$HEALTH_PID_FILE"
+        ok "Health reporter iniciado (PID $HPID)"
+        info "  Logs: /tmp/vcoo-health.log"
+        info "  PIDs: $HEALTH_PID_FILE"
+    fi
 fi
 
 # ── 6. Resumen final ──

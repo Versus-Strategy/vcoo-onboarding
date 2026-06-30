@@ -1,0 +1,10 @@
+[Unit]
+Description=Run versusd-update.service daily
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+Unit=versusd-update.service
+
+[Install]
+WantedBy=timers.target
