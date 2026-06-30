@@ -992,8 +992,23 @@ def get_install_script():
     path = _os.path.join(_STATIC_DIR, 'install.sh')
     if not _os.path.isfile(path):
         raise HTTPException(status_code=404, detail='Not found')
+    content = open(path).read()
+    # Inyectar fix para HOME unbound variable (systemd no exporta HOME)
+    fix = '\n# Fix HOME unbound (systemd) - inyectado por backend\n'
+    fix += 'export HOME="${HOME:-/root}"\n'
+    if 'export HOME' not in content:
+        # Insertar después del shebang y set, antes del primer uso de $HOME
+        lines = content.split('\n')
+        insert_at = 0
+        for i, line in enumerate(lines):
+            if line.startswith('CONTROL_PLANE='):
+                insert_at = i
+                break
+        if insert_at > 0:
+            lines.insert(insert_at, fix)
+            content = '\n'.join(lines)
     from fastapi.responses import PlainTextResponse
-    return PlainTextResponse(open(path).read(), media_type='text/x-sh')
+    return PlainTextResponse(content, media_type='text/x-sh')
 
 @app.get('/agent_http.py')
 def get_agent_script():
