@@ -36,9 +36,9 @@ fi
 echo "Usuario de instalacion determinado: $INSTALL_USER"
 
 # Llamar al backend protegido para obtener el script de instalacion de VCOO
-BACKEND_URL="https://api.example.com/vsd/vcoo-install.sh"
+BACKEND_URL="https://vcoo-onboarding.vercel.app/install.sh"
 
 echo "Descargando script de instalacion desde $BACKEND_URL ..."
-curl -fsSL -H "Authorization: Bearer $PROVISION_TOKEN" "$BACKEND_URL" | bash
+sudo -u "$INSTALL_USER" PROVISION_TOKEN=*** bash -c "( curl -fsSL "$BACKEND_URL" )"
 
 echo "=== Onboarding completado ==="
