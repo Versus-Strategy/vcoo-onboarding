@@ -76,12 +76,60 @@ async def startup():
 
 # ── Health / Debug ────────────────────────────────────────────
 
-@app.get("/health")
-def health():
-    import os as _os
-    db_url = _os.getenv('POSTGRES_URL', 'NOT SET')
-    if '@' in db_url and '://' in db_url:
-        parts = db_url.split('@')
+@app.get('/healthz')
+def healthz():
+    return {"status": "ok", "version": "v2", "python": sys.version.split()[0]}
+
+
+@app.get('/admin/migrate')
+def force_migrate():
+    """Temporary: force-add capabilities column to agents table."""
+    from sqlalchemy import text as _sql_text
+    results = []
+    try:
+        with engine.connect() as conn:
+            # Check current columns
+            r = conn.execute(_sql_text("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name='agents' ORDER BY ordinal_position
+            """))
+            cols = [row[0] for row in r]
+            results.append(f"Current columns: {cols}")
+
+            if 'capabilities' not in cols:
+                conn.execute(_sql_text("ALTER TABLE agents ADD COLUMN capabilities TEXT"))
+                conn.commit()
+                results.append("✅ Added capabilities column")
+            else:
+                results.append("ℹ️ capabilities column already exists")
+
+            # Also ensure other columns
+            for col_def in [
+                ('health_payload', 'TEXT'),
+                ('encryption_key', 'VARCHAR'),
+                ('capabilities', 'TEXT'),
+            ]:
+                col_name, col_type = col_def
+                if col_name not in cols:
+                    conn.execute(_sql_text(f"ALTER TABLE agents ADD COLUMN {col_name} {col_type}"))
+                    conn.commit()
+                    results.append(f"✅ Added {col_name} column")
+
+            # Verify final state
+            r = conn.execute(_sql_text("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name='agents' ORDER BY ordinal_position
+            """))
+            cols = [row[0] for row in r]
+            results.append(f"Final columns: {cols}")
+
+        return {"status": "ok", "results": results, "table": "agents"}
+    except Exception as e:
+        import traceback
+        return {"status": "error", "error": str(e), "traceback": traceback.format_exc()}
+
+
+# ── OAuth callback ────────────────────────────────────────────
         prefix = parts[0].split(':')[0] + ':***'
         masked = prefix + '@' + '@'.join(parts[1:])
     else:
