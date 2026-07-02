@@ -1,6 +1,6 @@
 from sqlalchemy import Column, String, DateTime, Boolean, Text, ForeignKey, JSON, Integer
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, deferred
 import uuid
 from datetime import datetime
 from db import Base
@@ -32,7 +32,7 @@ class Agent(Base):
     token_jti = Column(String, nullable=True)  # for revocation reference
     health_payload = Column(Text, nullable=True)  # JSON blob from health reporter
     encryption_key = Column(String, nullable=True)  # Fernet key for remote config
-    capabilities = Column(Text, nullable=True)  # JSON blob: agent's reported capabilities
+    capabilities = deferred(Column(Text, nullable=True))  # JSON blob: agent's reported capabilities
 
     def to_dict(self):
         # Compute effective online/offline from last_seen with 120s threshold
