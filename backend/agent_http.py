@@ -567,6 +567,86 @@ def _keyboard_listener():
         pass
 
 
+# ── Reporte de capacidades (proveedores/modelos) ──
+
+def discover_capabilities():
+    """Discover available providers and models from the Hermes installation.
+    Returns a dict: {hermes_version, providers: [{id, name, description, models}]}
+    """
+    result = {
+        "hermes_version": "unknown",
+        "providers": []
+    }
+
+    try:
+        # Try to get providers from Hermes' built-in model lists
+        from hermes_cli.models import CANONICAL_PROVIDERS, _PROVIDER_MODELS
+        result["hermes_version"] = getattr(CANONICAL_PROVIDERS, "__module_ver__", "v0.17")
+
+        # Try fetching the remote model catalog for richer model lists
+        remote_catalog = {}
+        try:
+            import requests as _req
+            r = _req.get(
+                "https://hermes-agent.nousresearch.com/docs/api/model-catalog.json",
+                timeout=5
+            )
+            if r.status_code == 200:
+                remote_catalog = r.json().get("providers", {})
+        except Exception:
+            pass
+
+        for entry in CANONICAL_PROVIDERS:
+            slug = entry.slug
+            provider_info = {
+                "id": slug,
+                "name": getattr(entry, "label", slug),
+                "description": getattr(entry, "tui_desc", ""),
+                "models": []
+            }
+
+            # Models from _PROVIDER_MODELS (static fallback)
+            if slug in _PROVIDER_MODELS:
+                provider_info["models"] = list(_PROVIDER_MODELS[slug])
+
+            # If available in remote catalog, use that (more complete/current)
+            if slug in remote_catalog:
+                cat_models = remote_catalog[slug].get("models", [])
+                if cat_models:
+                    provider_info["models"] = [m["id"] for m in cat_models if isinstance(m, dict)]
+
+            result["providers"].append(provider_info)
+
+    except ImportError:
+        log("capabilities: hermes_cli no disponible, reportando vacio")
+    except Exception as e:
+        log("capabilities: error descubriendo proveedores: " + str(e))
+
+    return result
+
+
+def report_capabilities(agent_id, agent_token):
+    """Discover capabilities and report them to the backend."""
+    log("Reportando capacidades del agente...")
+    caps = discover_capabilities()
+    log("  Proveedores descubiertos: " + str(len(caps.get("providers", []))))
+
+    try:
+        import requests as _req
+        r = _req.post(
+            BASE + "/agent/" + agent_id + "/capabilities",
+            json=caps,
+            headers={"Authorization": "Bearer " + agent_token},
+            timeout=10
+        )
+        if r.status_code == 200:
+            log("  Capacidades reportadas correctamente")
+        else:
+            log("  Error reportando capacidades: HTTP " + str(r.status_code))
+    except Exception as e:
+        log("  Error reportando capacidades: " + str(e))
+
+
 # ── Bucle principal ──
 
 def main_loop(agent_id, agent_token, vcoo_id):
@@ -807,6 +887,15 @@ def main():
             else:
                 log("Registrado: agente " + agent_id[:20])
             save_agent(agent_id, agent_token, vcoo_id, meta.get("encryption_key"))
+            # Report capabilities (async — don't block startup)
+            try:
+                _cap_thread = threading.Thread(
+                    target=report_capabilities, args=(agent_id, agent_token),
+                    daemon=True
+                )
+                _cap_thread.start()
+            except Exception:
+                pass
         elif loaded:
             log("Registro fallido (token expirado/invalido), restaurando estado guardado")
             agent_id = loaded["agent_id"]
