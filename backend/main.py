@@ -854,6 +854,12 @@ def get_state(vcoo_id: str, db: Session = Depends(get_db)):
     agent = crud.get_agent_by_vcoo(db, vcoo_id)
     state = v.to_dict()
     state["agent"] = agent.to_dict() if agent else None
+    # Inject capabilities from agent JSON column
+    if agent and hasattr(agent, 'capabilities') and agent.capabilities:
+        try:
+            state["agent"]["capabilities"] = json.loads(agent.capabilities)
+        except Exception:
+            pass
     # Compute online/offline status from last_seen (120s threshold)
     if agent:
         from datetime import datetime
@@ -964,6 +970,25 @@ def agent_health_report(agent_id: str, payload: dict = {}, db: Session = Depends
         import sys as _sys
         print(f"[health] Error for agent {agent_id}: {e}", file=_sys.stderr)
         raise HTTPException(status_code=404, detail="agent not found")
+
+
+# ── Agent capabilities ────────────────────────────────────
+
+@app.post("/agent/{agent_id}/capabilities")
+def agent_capabilities_endpoint(agent_id: str, payload: dict, authorization: str = Header(None), db: Session = Depends(get_db)):
+    """Receive agent's reported capabilities (hermes_version, providers, etc.)."""
+    if not authorization or not authorization.lower().startswith('bearer '):
+        raise HTTPException(status_code=401, detail="missing auth")
+    token = authorization.split(None, 1)[1]
+    token_payload = auth.decode_agent_token(token)
+    if not token_payload or token_payload.get('agent_id') != agent_id:
+        raise HTTPException(status_code=401, detail="invalid agent token")
+    agent = crud.get_agent(db, agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="agent not found")
+    crud.set_agent_capabilities(db, agent_id, payload)
+    crud.touch_agent(db, agent_id)
+    return {"status": "ok"}
 
 
 # ── VCOO Secrets (for installer) ───────────────────────────

@@ -32,6 +32,7 @@ class Agent(Base):
     token_jti = Column(String, nullable=True)  # for revocation reference
     health_payload = Column(Text, nullable=True)  # JSON blob from health reporter
     encryption_key = Column(String, nullable=True)  # Fernet key for remote config
+    capabilities = Column(Text, nullable=True)  # JSON blob: agent's reported capabilities
 
     def to_dict(self):
         # Compute effective online/offline from last_seen with 120s threshold
@@ -41,12 +42,20 @@ class Agent(Base):
             ago = (now - self.last_seen.replace(tzinfo=None)).total_seconds()
             if ago >= 120:
                 effective_status = 'offline'
+        import json
+        caps = None
+        if self.capabilities:
+            try:
+                caps = json.loads(self.capabilities)
+            except Exception:
+                pass
         return {
             "id": str(self.id),
             "vcoo_id": str(self.vcoo_id),
             "info": self.info,
             "last_seen": self.last_seen.isoformat() if self.last_seen else None,
             "status": effective_status,
+            "capabilities": caps,
         }
 
 class Command(Base):

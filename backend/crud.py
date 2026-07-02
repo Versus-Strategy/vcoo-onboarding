@@ -182,6 +182,14 @@ def set_agent_encryption_key(db: Session, agent_id: str, enc_key: str):
     db.commit()
 
 
+def set_agent_capabilities(db: Session, agent_id: str, capabilities: dict):
+    import json
+    db.query(models.Agent).filter(models.Agent.id == agent_id).update(
+        {"capabilities": json.dumps(capabilities)}
+    )
+    db.commit()
+
+
 def get_agent_by_vcoo(db: Session, vcoo_id: str):
     return db.query(models.Agent).filter(
         models.Agent.vcoo_id == vcoo_id
