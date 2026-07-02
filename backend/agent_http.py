@@ -579,46 +579,62 @@ def discover_capabilities():
     }
 
     try:
-        # Try to get providers from Hermes' built-in model lists
-        from hermes_cli.models import CANONICAL_PROVIDERS, _PROVIDER_MODELS
-        result["hermes_version"] = getattr(CANONICAL_PROVIDERS, "__module_ver__", "v0.17")
-
-        # Try fetching the remote model catalog for richer model lists
-        remote_catalog = {}
-        try:
-            import requests as _req
-            r = _req.get(
-                "https://hermes-agent.nousresearch.com/docs/api/model-catalog.json",
-                timeout=5
-            )
-            if r.status_code == 200:
-                remote_catalog = r.json().get("providers", {})
-        except Exception:
-            pass
-
-        for entry in CANONICAL_PROVIDERS:
-            slug = entry.slug
-            provider_info = {
-                "id": slug,
-                "name": getattr(entry, "label", slug),
-                "description": getattr(entry, "tui_desc", ""),
-                "models": []
-            }
-
-            # Models from _PROVIDER_MODELS (static fallback)
-            if slug in _PROVIDER_MODELS:
-                provider_info["models"] = list(_PROVIDER_MODELS[slug])
-
-            # If available in remote catalog, use that (more complete/current)
-            if slug in remote_catalog:
-                cat_models = remote_catalog[slug].get("models", [])
-                if cat_models:
-                    provider_info["models"] = [m["id"] for m in cat_models if isinstance(m, dict)]
-
-            result["providers"].append(provider_info)
-
-    except ImportError:
-        log("capabilities: hermes_cli no disponible, reportando vacio")
+        # Use subprocess to get providers from Hermes' Python (works from any venv)
+        import subprocess as _sp
+        import json as _json
+        _script = """
+import sys, json
+sys.path.insert(0, '/usr/local/lib/hermes-agent/venv/lib/python3.11/site-packages')
+try:
+    from hermes_cli.models import CANONICAL_PROVIDERS, _PROVIDER_MODELS
+except ImportError:
+    # Try different Python paths
+    for p in [
+        '/usr/local/lib/hermes-agent/venv/lib/python3.12/site-packages',
+        '/usr/lib/python3/dist-packages',
+        '/usr/local/lib/python3.11/dist-packages',
+    ]:
+        sys.path.insert(0, p)
+    from hermes_cli.models import CANONICAL_PROVIDERS, _PROVIDER_MODELS
+providers = []
+for entry in CANONICAL_PROVIDERS:
+    slug = entry.slug
+    models = list(_PROVIDER_MODELS.get(slug, []))
+    providers.append({
+        "id": slug,
+        "name": getattr(entry, "label", slug),
+        "description": getattr(entry, "tui_desc", ""),
+        "models": models
+    })
+print(json.dumps({"providers": providers, "hermes_version": "v0.17"}))
+"""
+        for _python in ["python3", "/usr/local/lib/hermes-agent/venv/bin/python3", "python3.11", "python3.12"]:
+            try:
+                _result = _sp.run([_python, "-c", _script], capture_output=True, text=True, timeout=10)
+                if _result.returncode == 0 and _result.stdout.strip():
+                    _caps = _json.loads(_result.stdout.strip())
+                    if "providers" in _caps and len(_caps["providers"]) > 0:
+                        result["providers"] = _caps["providers"]
+                        log("capabilities: " + str(len(result["providers"])) + " proveedores via " + _python)
+                        break
+            except Exception:
+                continue
+        else:
+            # Fallback: try direct import (inside Hermes venv)
+            try:
+                from hermes_cli.models import CANONICAL_PROVIDERS, _PROVIDER_MODELS
+                for entry in CANONICAL_PROVIDERS:
+                    slug = entry.slug
+                    provider_info = {
+                        "id": slug,
+                        "name": getattr(entry, "label", slug),
+                        "description": getattr(entry, "tui_desc", ""),
+                        "models": list(_PROVIDER_MODELS.get(slug, []))
+                    }
+                    result["providers"].append(provider_info)
+                log("capabilities: " + str(len(result["providers"])) + " proveedores via direct import")
+            except ImportError:
+                log("capabilities: hermes_cli no disponible, reportando vacio")
     except Exception as e:
         log("capabilities: error descubriendo proveedores: " + str(e))
 
