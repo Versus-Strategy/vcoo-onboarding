@@ -56,6 +56,17 @@ async def startup():
                 ))
                 conn.commit()
                 print("[migration] Added health_payload column to agents table")
+            # Check if capabilities column exists
+            result = conn.execute(_sql_text("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name='agents' AND column_name='capabilities'
+            """))
+            if not result.fetchone():
+                conn.execute(_sql_text(
+                    "ALTER TABLE agents ADD COLUMN capabilities TEXT"
+                ))
+                conn.commit()
+                print("[migration] Added capabilities column to agents table")
     except Exception as e:
         import sys as _sys
         print(f"[migration] Skipped (non-critical): {e}", file=_sys.stderr)
