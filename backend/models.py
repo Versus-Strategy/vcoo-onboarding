@@ -44,9 +44,10 @@ class Agent(Base):
                 effective_status = 'offline'
         import json
         caps = None
-        if self.capabilities:
+        capabilities_str = getattr(self, 'capabilities', None)
+        if capabilities_str:
             try:
-                caps = json.loads(self.capabilities)
+                caps = json.loads(capabilities_str)
             except Exception:
                 pass
         return {
