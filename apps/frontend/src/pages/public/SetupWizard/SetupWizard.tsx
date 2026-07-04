@@ -990,7 +990,7 @@ const SetupWizard = () => {
             : renderPasoInstalacion()}
         </div>
 
-        {!completado && (
+        {onboarding && (
           <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-100">
             <div className="flex gap-2">
               {pasoActual > 0 && (
@@ -1011,26 +1011,19 @@ const SetupWizard = () => {
                 </svg>
                 Refrescar
               </Button>
-              {pasoActual === 0 ? (
+              {pasoActual === 0 && pasoActual === pasoBackend ? (
                 <Button onClick={manejarVerificar} disabled={verificando} loading={verificando} variant="primary" size="sm">
                   {verificando ? 'Verificando...' : 'Verificar instalación'}
                 </Button>
-              ) : pasoActual === 3 ? null : (
-                <Button onClick={async () => {
-                  if (pasoActual === 1 && pasoActual >= pasoBackend) {
-                    // Avanzar paso en backend (verify)
-                    try {
-                      await apiClient.post(`/setup/${token}/verify`);
-                      await fetchOnboarding();
-                      setVistaActual(null);
-                    } catch {}
-                  } else {
-                    setVistaActual(pasoActual + 1);
-                  }
-                }} variant="primary" size="sm">
+              ) : pasoActual < 3 && pasoActual < pasoBackend ? (
+                <Button onClick={() => setVistaActual(pasoActual + 1)} variant="ghost" size="sm">
                   Siguiente →
                 </Button>
-              )}
+              ) : pasoActual === 3 ? (
+                <Button onClick={() => { fetchOnboarding(); setVistaActual(null); }} variant="ghost" size="sm">
+                  Ir al inicio
+                </Button>
+              ) : null}
             </div>
           </div>
         )}
