@@ -351,7 +351,10 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
     all_done = is_onboarding_complete(current_step, completed_steps, modules)
     control_plane = _os.getenv('CONTROL_PLANE', 'http://localhost:8000')
     active_token_obj = crud.get_active_token_for_vcoo(db, vcoo_id)
-    raw_token = active_token_obj.token if active_token_obj else ''
+    if not active_token_obj:
+        raw_token = crud.create_provision_for_vcoo(db, vcoo_id)
+    else:
+        raw_token = active_token_obj.token
     install_cmd = f"curl -sSL {control_plane}/install.sh | CONTROL_PLANE={control_plane} PROVISION_TOKEN={raw_token} bash -"
     agent = crud.get_agent_by_vcoo(db, vcoo_id)
     agent_online = False
