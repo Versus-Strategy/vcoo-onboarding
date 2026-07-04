@@ -229,6 +229,7 @@ const SetupWizard = () => {
   const [enviando, setEnviando] = useState(false);
   const [moduloSeleccionado, setModuloSeleccionado] = useState<string | null>(null);
   const [fetchCargando, setFetchCargando] = useState(false);
+  const [vistaActual, setVistaActual] = useState<number | null>(null);
 
   // Check localStorage directly on mount for existing auth
   useEffect(() => {
@@ -335,8 +336,9 @@ const SetupWizard = () => {
 
   // ── Wizard steps ──
 
-  const pasoActual = onboarding.wizard_step ?? 0;
+  const pasoActual = vistaActual ?? onboarding.wizard_step ?? 0;
   const completado = onboarding.all_done ?? false;
+  const pasoBackend = onboarding.wizard_step ?? 0;
 
   // ── Verificar instalación del agente ──
 
@@ -540,17 +542,6 @@ const SetupWizard = () => {
             {error}
           </div>
         )}
-
-        <div className="flex justify-end pt-2">
-          <Button
-            onClick={manejarVerificar}
-            disabled={verificando}
-            variant="primary"
-            size="lg"
-          >
-            {verificando ? 'Verificando...' : 'Verificar instalación'}
-          </Button>
-        </div>
       </div>
     );
   };
@@ -991,14 +982,48 @@ const SetupWizard = () => {
             : renderPasoInstalacion()}
         </div>
 
-        {!completado && pasoActual > 0 && pasoActual < 4 && (
-          <div className="flex gap-3 mt-4">
-            <Button variant="ghost" size="sm" onClick={fetchOnboarding}>
-              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              Refrescar
-            </Button>
+        {!completado && (
+          <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-100">
+            <div className="flex gap-2">
+              {pasoActual > 0 && (
+                <Button variant="ghost" size="sm" onClick={() => {
+                  setVistaActual(pasoActual - 1);
+                  setProveedorSeleccionado(null);
+                  setModuloSeleccionado(null);
+                  setError(null);
+                }}>
+                  ← Anterior
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={() => { fetchOnboarding(); setVistaActual(null); }}>
+                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refrescar
+              </Button>
+              {pasoActual === 0 ? (
+                <Button onClick={manejarVerificar} disabled={verificando} loading={verificando} variant="primary" size="sm">
+                  {verificando ? 'Verificando...' : 'Verificar instalación'}
+                </Button>
+              ) : pasoActual === 3 ? null : (
+                <Button onClick={async () => {
+                  if (pasoActual === 1 && pasoActual >= pasoBackend) {
+                    // Avanzar paso en backend (verify)
+                    try {
+                      await apiClient.post(`/setup/${token}/verify`);
+                      await fetchOnboarding();
+                      setVistaActual(null);
+                    } catch {}
+                  } else {
+                    setVistaActual(pasoActual + 1);
+                  }
+                }} variant="primary" size="sm">
+                  Siguiente →
+                </Button>
+              )}
+            </div>
           </div>
         )}
       </div>
