@@ -8,6 +8,7 @@ CONFIG_PATHS = [
     "/etc/vcoo/supervisor.json",
     os.path.expanduser("~/.vcoo/supervisor.json"),
     "supervisor.json",
+    "/opt/vcoo-supervisor/config.json",
 ]
 
 class Supervisor:
