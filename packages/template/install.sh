@@ -47,7 +47,12 @@ if [ -d "$VCOO_SUPERVISOR_DIR" ] || systemctl list-unit-files 2>/dev/null | grep
     echo ""
     echo -e "${YELLOW}⚠ Se detectó una instalación previa de VCOO.${NC}"
     echo -n -e "${YELLOW}¿Deseas reinstalar los servicios VCOO? (se conservarán las dependencias del sistema) [s/N]: ${NC}"
-    read -r REINSTALL
+    REINSTALL=""
+    if [ -t 0 ]; then
+        read -r REINSTALL
+    elif [ -e /dev/tty ]; then
+        read -r REINSTALL < /dev/tty
+    fi
     if [ "$REINSTALL" != "s" ] && [ "$REINSTALL" != "S" ]; then
         echo ""
         info "Reinstalación cancelada por el usuario."
