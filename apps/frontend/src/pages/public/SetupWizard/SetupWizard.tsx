@@ -536,6 +536,13 @@ const SetupWizard = () => {
         </div>
       )}
 
+      {(onboarding.providers || []).length === 0 ? (
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-500 mx-auto mb-4" />
+          <p className="text-gray-500">Esperando a que el agente reporte los proveedores disponibles...</p>
+          <p className="text-gray-400 text-sm mt-2">Completa el paso 1 (Instalar Agente) para continuar.</p>
+        </div>
+      ) : (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {(onboarding.providers || []).map((proveedor, idx) => (
           <div
@@ -564,6 +571,7 @@ const SetupWizard = () => {
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 

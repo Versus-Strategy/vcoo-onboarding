@@ -1,24 +1,4 @@
 import os, json, socket, subprocess, time, urllib.request
-import re as _re
-
-# Proveedores que Hermes soporta, extraídos de su config.yaml
-HERMES_PROVIDERS = [
-    {"id": "anthropic",    "nombre": "Anthropic",   "descripcion": "Claude — modelos de última generación"},
-    {"id": "openai",       "nombre": "OpenAI",      "descripcion": "GPT-4, GPT-4o y más"},
-    {"id": "google",       "nombre": "Google IA",   "descripcion": "Gemini y modelos de Google"},
-    {"id": "mistral",      "nombre": "Mistral AI",  "descripcion": "Modelos abiertos y eficientes"},
-    {"id": "xai",          "nombre": "xAI",         "descripcion": "Grok y modelos de xAI"},
-    {"id": "cohere",       "nombre": "Cohere",      "descripcion": "Modelos empresariales"},
-    {"id": "openrouter",   "nombre": "OpenRouter",  "descripcion": "Múltiples modelos en un solo API"},
-    {"id": "copilot",      "nombre": "GitHub Copilot", "descripcion": "Modelos de GitHub y socios"},
-    {"id": "gemini",       "nombre": "Google Gemini","descripcion": "Modelos Gemini de Google"},
-    {"id": "huggingface",  "nombre": "Hugging Face", "descripcion": "Modelos open source"},
-    {"id": "nvidia",       "nombre": "NVIDIA NIM",  "descripcion": "Modelos acelerados por NVIDIA"},
-    {"id": "ollama-cloud", "nombre": "Ollama Cloud","descripcion": "Modelos locales en la nube"},
-    {"id": "azure-foundry","nombre": "Azure Foundry","descripcion": "Microsoft Azure OpenAI"},
-    {"id": "lmstudio",     "nombre": "LM Studio",   "descripcion": "Servidor local OpenAI-compatible"},
-    {"id": "custom",       "nombre": "Custom API",  "descripcion": "Cualquier endpoint OpenAI-compatible"},
-]
 
 COMMAND_MAP = {
     "verify-bootstrap": ["python3", os.path.expanduser("~/.hermes/scripts/vcoo/vcoo-bootstrap.py")],
@@ -120,6 +100,27 @@ class Plugin:
         except Exception:
             pass
 
+    def _discover_providers(self):
+        """Read providers dynamically from Hermes' CANONICAL_PROVIDERS."""
+        hermes_dir = os.path.expanduser("~/.hermes/hermes-agent")
+        models_path = os.path.join(hermes_dir, "hermes_cli", "models.py")
+        if not os.path.isfile(models_path):
+            return []
+        try:
+            import importlib.util as _iu
+            spec = _iu.spec_from_file_location("_hermes_models", models_path)
+            if not spec or not spec.loader:
+                return []
+            mod = _iu.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            entries = getattr(mod, "CANONICAL_PROVIDERS", [])
+            return [
+                {"id": e.slug, "nombre": e.label, "descripcion": e.tui_desc}
+                for e in entries if not e.slug.startswith("_")
+            ]
+        except Exception:
+            return []
+
     def _detect_hermes_config(self):
         """Returns (hermes_version, current_provider) or (None, None)."""
         config_path = os.path.expanduser("~/.hermes/config.yaml")
@@ -136,7 +137,8 @@ class Plugin:
         try:
             with open(config_path) as f:
                 content = f.read()
-            m = _re.search(r"default:\s*['\"]?(\w[\w./-]*)", content)
+            import re as _re
+            m = _re.search(r"default:\s*['\"](\w[\w./-]*)", content)
             if m:
                 full = m.group(1)
                 if "/" in full:
@@ -151,14 +153,12 @@ class Plugin:
         if getattr(self, "_caps_reported", False):
             return
         version, current_provider = self._detect_hermes_config()
-        if version is None and current_provider is None:
-            caps = {"providers": HERMES_PROVIDERS}
-        else:
-            caps = {
-                "hermes_version": version,
-                "providers": HERMES_PROVIDERS,
-                "current_provider": current_provider,
-            }
+        providers = self._discover_providers()
+        caps = {"providers": providers}
+        if version:
+            caps["hermes_version"] = version
+        if current_provider:
+            caps["current_provider"] = current_provider
         data = json.dumps(caps).encode()
         req = urllib.request.Request(
             f"{self.control_plane}/agent/{self.agent_id}/capabilities",
