@@ -108,7 +108,9 @@ class Plugin:
             return []
         try:
             import importlib.util as _iu
-            spec = _iu.spec_from_file_location("_hermes_models", models_path)
+            import sys as _sys
+            _sys.path.insert(0, hermes_dir)
+            spec = _iu.spec_from_file_location("hermes_cli.models", models_path)
             if not spec or not spec.loader:
                 return []
             mod = _iu.module_from_spec(spec)
