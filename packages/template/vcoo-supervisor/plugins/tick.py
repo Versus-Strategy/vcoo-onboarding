@@ -12,6 +12,46 @@ COMMAND_MAP = {
     "finalize":         None,
 }
 
+# Qué tipo de autenticación requiere cada proveedor
+PROVIDER_AUTH: dict[str, dict] = {
+    "opencode-zen":     {"type": "oauth",   "hint": "Autentícate con OpenCode Zen"},
+    "opencode-go":      {"type": "oauth",   "hint": "Autentícate con OpenCode Go"},
+    "nous":             {"type": "oauth",   "hint": "Autentícate con Nous Portal"},
+    "openai-codex":     {"type": "oauth",   "hint": "Autentícate con OpenAI Codex (hermes auth add openai-codex)"},
+    "anthropic":        {"type": "api_key", "credential": "ANTHROPIC_API_KEY",  "hint": "Consigue tu API key en https://console.anthropic.com"},
+    "openai-api":       {"type": "api_key", "credential": "OPENAI_API_KEY",    "hint": "Consigue tu API key en https://platform.openai.com"},
+    "openrouter":       {"type": "api_key", "credential": "OPENROUTER_API_KEY","hint": "Consigue tu API key en https://openrouter.ai/keys"},
+    "copilot":          {"type": "api_key", "credential": "GITHUB_TOKEN",      "hint": "Genera un token en https://github.com/settings/tokens"},
+    "gemini":           {"type": "api_key", "credential": "GOOGLE_API_KEY",    "hint": "Consigue tu API key en https://aistudio.google.com"},
+    "huggingface":      {"type": "api_key", "credential": "HF_TOKEN",          "hint": "Consigue tu token en https://huggingface.co/settings/tokens"},
+    "nvidia":           {"type": "api_key", "credential": "NVIDIA_API_KEY",    "hint": "Consigue tu API key en https://build.nvidia.com"},
+    "deepseek":         {"type": "api_key", "credential": "DEEPSEEK_API_KEY",  "hint": "Consigue tu API key en platform.deepseek.com"},
+    "xai":              {"type": "api_key", "credential": "XAI_API_KEY",       "hint": "Consigue tu API key en https://console.x.ai"},
+    "bedrock":          {"type": "manual",  "hint": "Configura AWS credentials en tu VPS (aws configure)"},
+    "azure-foundry":    {"type": "api_key", "credential": "AZURE_API_KEY",     "hint": "Consigue tu API key en portal.azure.com"},
+    "ollama-cloud":     {"type": "api_key", "credential": "OLLAMA_API_KEY",    "hint": "Consigue tu API key en https://ollama.com/settings"},
+    "lmstudio":         {"type": "manual",  "hint": "LM Studio corre localmente, no requiere API key"},
+    "custom":           {"type": "manual",  "hint": "Configura OPENAI_BASE_URL y OPENAI_API_KEY en tu VPS"},
+    "zai":              {"type": "api_key", "credential": "GLM_API_KEY",       "hint": "Consigue tu API key en zai.plus"},
+    "kimi-coding":      {"type": "api_key", "credential": "KIMI_API_KEY",      "hint": "Consigue tu API key en kimi.com"},
+    "minimax":          {"type": "api_key", "credential": "MINIMAX_API_KEY",   "hint": "Consigue tu API key en minimax.io"},
+    "xai-oauth":        {"type": "oauth",   "hint": "Autentícate con xAI Grok (SuperGrok / Premium+)"},
+    "minimax-oauth":    {"type": "oauth",   "hint": "Autentícate con MiniMax OAuth"},
+    "qwen-oauth":       {"type": "oauth",   "hint": "Autentícate con Qwen OAuth"},
+    "alibaba":          {"type": "api_key", "credential": "ALIBABA_API_KEY",   "hint": "Consigue tu API key en aliyun.com"},
+    "stepfun":          {"type": "api_key", "credential": "STEP_API_KEY",      "hint": "Consigue tu API key en stepfun.com"},
+    "tencent-tokenhub": {"type": "api_key", "credential": "TENCENT_API_KEY",   "hint": "Consigue tu API key en tencent.com"},
+    "xiaomi":           {"type": "api_key", "credential": "XIAOMI_API_KEY",    "hint": "Consigue tu API key en xiaomi.com"},
+    "arcee":            {"type": "api_key", "credential": "ARCEEAI_API_KEY",   "hint": "Consigue tu API key en arcee.ai"},
+    "gmi":              {"type": "api_key", "credential": "GMI_API_KEY",       "hint": "Consigue tu API key en gmi.cloud"},
+    "kilocode":         {"type": "api_key", "credential": "KILOCODE_API_KEY",   "hint": "Consigue tu API key en kilocode.ai"},
+    "novita":           {"type": "api_key", "credential": "NOVITA_API_KEY",    "hint": "Consigue tu API key en novita.ai"},
+    "moa":              {"type": "manual",  "hint": "Mixture of Agents usa múltiples providers"},
+    "alibaba-coding-plan": {"type": "api_key", "credential": "ALIBABA_API_KEY","hint": "Consigue tu API key en aliyun.com"},
+    "vertex":           {"type": "manual",  "hint": "Configura Google Vertex AI en tu VPS (gcloud auth)"},
+}
+
+
 class Plugin:
     name = "tick"
     interval = 60
@@ -55,10 +95,46 @@ class Plugin:
             "template_version": os.environ.get("TEMPLATE_VERSION", ""),
         }
 
+    def _handle_set_provider(self, payload: dict) -> dict:
+        provider = payload.get("provider", "")
+        encrypted = payload.get("encrypted", "")
+        if not provider or not encrypted:
+            return {"status": "error", "output": "missing provider or key"}
+        auth = PROVIDER_AUTH.get(provider, {})
+        if auth.get("type") == "oauth":
+            return {"status": "ok", "output": f"OAuth para {provider} pendiente"}
+        # Decrypt if needed
+        api_key = encrypted
+        if payload.get("has_encryption"):
+            try:
+                from crypto import decrypt_api_key
+                api_key = decrypt_api_key(encrypted)
+            except Exception as e:
+                return {"status": "error", "output": f"decrypt failed: {e}"}
+        # Run hermes auth add
+        try:
+            r = subprocess.run(
+                ["hermes", "auth", "add", provider, "--type", "api-key", "--api-key", api_key],
+                capture_output=True, text=True, timeout=30
+            )
+            if r.returncode == 0:
+                return {"status": "ok", "output": r.stdout.strip() or f"Provider {provider} configurado"}
+            return {"status": "error", "output": r.stderr.strip() or f"hermes auth add exit={r.returncode}"}
+        except FileNotFoundError:
+            return {"status": "error", "output": "hermes command not found"}
+        except Exception as e:
+            return {"status": "error", "output": str(e)}
+
     def _execute_command(self, cmd):
         command = cmd.get("command", "")
         step = cmd.get("step", "")
         cmd_id = cmd.get("cmd_id", "")
+        # set-provider uses payload, not subprocess
+        if command == "set-provider":
+            result = self._handle_set_provider(cmd.get("payload", {}))
+            result["cmd_id"] = cmd_id
+            result["step"] = step
+            return result
         args = COMMAND_MAP.get(command)
         if args is None:
             return {"cmd_id": cmd_id, "step": step, "status": "ignored", "output": "no handler"}
@@ -116,10 +192,16 @@ class Plugin:
             mod = _iu.module_from_spec(spec)
             spec.loader.exec_module(mod)
             entries = getattr(mod, "CANONICAL_PROVIDERS", [])
-            return [
-                {"id": e.slug, "nombre": e.label, "descripcion": e.tui_desc}
-                for e in entries if not e.slug.startswith("_")
-            ]
+            result = []
+            for e in entries:
+                if e.slug.startswith("_"):
+                    continue
+                provider = {"id": e.slug, "nombre": e.label, "descripcion": e.tui_desc}
+                auth = PROVIDER_AUTH.get(e.slug)
+                if auth:
+                    provider["auth"] = auth
+                result.append(provider)
+            return result
         except Exception:
             return []
 

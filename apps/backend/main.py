@@ -969,6 +969,53 @@ def agent_report_result(agent_id: str, payload: dict, db: Session = Depends(get_
     return JSONResponse(content=result, status_code=status_code)
 
 
+@app.post("/setup/{identifier}/set-provider")
+def setup_set_provider(identifier: str, payload: dict, authorization: str = Header(None), db: Session = Depends(get_db)):
+    """Client sets provider credentials from onboarding wizard.
+    Payload: {provider, api_key}
+    """
+    if not authorization or not authorization.lower().startswith('bearer '):
+        raise HTTPException(status_code=401, detail="auth required")
+    bearer = authorization.split(None, 1)[1]
+    client_payload = auth.verify_client_token(bearer)
+    if not client_payload:
+        raise HTTPException(status_code=401, detail="invalid token")
+
+    v = crud.get_vcoo(db, identifier)
+    if not v:
+        raise HTTPException(status_code=400, detail="invalid identifier")
+    vcoo_id = str(v.id)
+
+    client_email = client_payload.get("email", "")
+    client_obj = crud.get_client_by_email(db, client_email)
+    owns = client_obj and client_obj.vcoo_id and str(client_obj.vcoo_id) == vcoo_id
+    if not owns:
+        raise HTTPException(status_code=403, detail="not your VCOO")
+
+    provider = payload.get("provider", "").strip()
+    api_key = payload.get("api_key", "").strip()
+    if not provider or not api_key:
+        raise HTTPException(status_code=400, detail="provider and api_key required")
+
+    agent = crud.get_agent_by_vcoo(db, vcoo_id)
+    if not agent:
+        raise HTTPException(status_code=400, detail="agent not installed yet")
+
+    if agent.encryption_key:
+        from crypto import encrypt_api_key
+        encrypted = encrypt_api_key(api_key, agent.encryption_key, str(agent.id))
+    else:
+        encrypted = api_key
+
+    command_payload = json.dumps({
+        "encrypted": encrypted,
+        "provider": provider,
+        "has_encryption": bool(agent.encryption_key),
+    })
+    cmd = crud.create_command(db, agent_id=str(agent.id), command="set-provider", result=command_payload)
+    return {"status": "command_sent", "cmd_id": str(cmd.id), "provider": provider}
+
+
 # ── VCOO Logs ────────────────────────────────────────────
 
 @app.get("/vcoo/{vcoo_id}/audit")

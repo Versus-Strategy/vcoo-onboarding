@@ -225,6 +225,8 @@ const SetupWizard = () => {
   const [subPaso, setSubPaso] = useState(1);
   const [proveedorSeleccionado, setProveedorSeleccionado] = useState<string | null>(null);
   const [verMas, setVerMas] = useState(false);
+  const [apiKeyValue, setApiKeyValue] = useState('');
+  const [enviando, setEnviando] = useState(false);
 
   // Check localStorage directly on mount for existing auth
   useEffect(() => {
@@ -373,21 +375,22 @@ const SetupWizard = () => {
     setConectando(null);
   };
 
-  const CONFIG_INSTRUCTIONS: Record<string, { titulo: string; pasos: string[] }> = {
-    anthropic: { titulo: "Anthropic (Claude)", pasos: [
-      "1. Obtén tu API key en console.anthropic.com",
-      "2. Ejecuta en tu VPS: export ANTHROPIC_API_KEY=sk-ant-tu-clave",
-      '3. Ejecuta: hermes config set model.provider anthropic',
-    ]},
-    openai: { titulo: "OpenAI", pasos: [
-      "1. Obtén tu API key en platform.openai.com",
-      "2. Ejecuta en tu VPS: export OPENAI_API_KEY=sk-tu-clave",
-      '3. Ejecuta: hermes config set model.provider openai',
-    ]},
-    opencode: { titulo: "OpenCode", pasos: [
-      '1. Ejecuta en tu VPS: hermes config set model.provider opencode',
-      '2. Ejecuta: hermes config set model.default opencode/claude-sonnet-4',
-    ]},
+  const enviarApiKey = async (providerId: string) => {
+    if (!apiKeyValue.trim() || !token) return;
+    setEnviando(true);
+    try {
+      await apiClient.post(`/setup/${token}/set-provider`, {
+        provider: providerId,
+        api_key: apiKeyValue.trim(),
+      });
+      setProveedorSeleccionado(null);
+      setApiKeyValue('');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error al conectar';
+      setError(msg);
+    } finally {
+      setEnviando(false);
+    }
   };
 
   // ── Conectar módulo ──
@@ -549,10 +552,10 @@ const SetupWizard = () => {
 
     if (proveedorSeleccionado) {
       const prov = raw.find(p => p.id === proveedorSeleccionado);
-      const instr = CONFIG_INSTRUCTIONS[proveedorSeleccionado];
+      const auth = prov?.auth as { type?: string; credential?: string; hint?: string } | undefined;
       return (
         <div className="space-y-6 max-w-2xl">
-          <button onClick={() => setProveedorSeleccionado(null)}
+          <button onClick={() => { setProveedorSeleccionado(null); setError(null); }}
             className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -566,25 +569,45 @@ const SetupWizard = () => {
             </h3>
             <p className="text-sm text-gray-500 mb-4">{prov?.descripcion}</p>
 
-            {instr ? (
-              <div className="space-y-3">
-                <p className="text-sm font-medium text-gray-700">Pasos para configurar:</p>
-                {instr.pasos.map((paso, i) => (
-                  <div key={i} className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3 border border-gray-100">
-                    {paso}
-                  </div>
-                ))}
-              </div>
-            ) : (
+            {!auth || auth.type === 'manual' ? (
               <div className="text-sm text-gray-500 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <p className="font-medium text-yellow-800 mb-1">Configuración manual requerida</p>
-                <p>Para usar {prov?.nombre || proveedorSeleccionado}, configura la API key en tu VPS:</p>
-                <code className="block mt-2 bg-gray-800 text-gray-100 rounded-lg p-3 font-mono text-xs">
-                  hermes config set model.provider {proveedorSeleccionado}
-                </code>
-                <p className="mt-2 text-yellow-700">Luego vuelve aquí y haz clic en "Verificar" para continuar.</p>
+                <p className="font-medium text-yellow-800 mb-1">Configuración manual</p>
+                <p className="text-yellow-700 mb-2">{auth?.hint || 'Conecta este proveedor directamente en tu VPS.'}</p>
+                {prov && (
+                  <code className="block bg-gray-800 text-gray-100 rounded-lg p-3 font-mono text-xs">
+                    hermes auth add {prov.id}
+                  </code>
+                )}
               </div>
-            )}
+            ) : auth.type === 'api_key' ? (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600">{auth.hint}</p>
+                <input type="password"
+                  placeholder={`API Key (${auth.credential || ''})`}
+                  value={apiKeyValue}
+                  onChange={e => setApiKeyValue(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 outline-none"
+                />
+                {error && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>
+                )}
+                <Button onClick={() => enviarApiKey(prov!.id)}
+                  disabled={!apiKeyValue.trim() || enviando}
+                  loading={enviando}
+                  variant="primary" size="lg" className="w-full"
+                >
+                  {enviando ? 'Conectando...' : 'Conectar'}
+                </Button>
+              </div>
+            ) : auth.type === 'oauth' ? (
+              <div className="text-center py-6">
+                <p className="text-sm text-gray-600 mb-4">{auth.hint}</p>
+                <Button variant="primary" size="lg" className="w-full" disabled>
+                  Conectar con {prov?.nombre}
+                </Button>
+                <p className="text-xs text-gray-400 mt-2">OAuth disponible próximamente</p>
+              </div>
+            ) : null}
           </div>
         </div>
       );
