@@ -131,6 +131,15 @@ Sub-paso 3: Verificación
   Botón "Continuar" desbloqueado
 ```
 
+**Race condition en verificación:**
+Si el cliente hace clic en "Verificar" pero versusd aún no terminó de registrarse, el backend espera hasta 10s (polling interno cada 1s) a que el agente aparezca antes de responder "no encontrado". Esto evita falsos negativos por timing.
+
+**Ruta de onboarding para clientes autenticados:**
+- Los clientes que ya iniciaron sesión acceden al wizard vía `/onboarding` (nueva ruta limpia)
+- La ruta antigua `/configuracion/instalacion-de-agente` redirige a `/onboarding`
+- `/onboarding` obtiene el VCOO ID del cliente autenticado y carga el mismo wizard que `/setup/{token}`
+- Si el cliente ya completó el onboarding, `/onboarding` redirige a `/servicios`
+
 ### 2.3 Backend
 
 **Nuevo endpoint — Tick unificado (reemplaza poll + health):**
@@ -163,9 +172,12 @@ Response: {
 - `POST /vcoo/{id}/set-provider` — encolar comando set-provider
 - `POST /register` — registro del agente
 
-### 2.4 Agente (versusd)
+### 2.4 Agente (versusd = vcoo-supervisor)
 
-versusd se convierte en el agente permanente. Se reescribe en Python (reemplazando el bash actual) usando la arquitectura de plugins del vcoo-supervisor.
+versusd se unifica con `vcoo-supervisor`. El supervisor (Python, systemd) ES el nuevo versusd — un solo servicio permanente con plugins modulares. Reemplaza:
+- El antiguo `vsd/versusd.sh` (bash watchdog)
+- El antiguo `packages/agent/agent_http.py` (transitorio)
+- El antiguo `packages/agent/health-reporter.py` (independiente)
 
 **Plugins de versusd:**
 
