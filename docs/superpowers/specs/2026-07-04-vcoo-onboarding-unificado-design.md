@@ -133,18 +133,28 @@ Sub-paso 3: Verificación
 
 ### 2.3 Backend
 
-**Nuevo endpoint — Long Polling:**
+**Nuevo endpoint — Tick unificado (reemplaza poll + health):**
 ```
-GET /agent/{id}/poll?timeout=25
+POST /agent/{id}/tick
 Headers: Authorization: Bearer <agent_token>
+Body: {
+  health: {
+    hostname: "vps-01",
+    cpu_pct: 23,
+    memory_pct: 45,
+    disk_pct: 67,
+    hermes_running: true,
+    template_version: "v1.2"
+  },
+  last_command_id: "cmd_abc123"  // último comando procesado (ACK)
+}
 
-Respuesta inmediata si hay comandos:
-  200 { commands: [{ cmd_id, command, payload }], step, progress }
-
-Respuesta diferida si no hay comandos:
-  Mantiene conexión hasta 25s
-  Si aparece un comando → responde inmediatamente
-  Si timeout → 204 No Content (agente reintenta)
+Response: {
+  commands: [{ cmd_id, command, payload, step }],
+  tick_interval: 5,  // cuántos segundos hasta el próximo tick
+  step: "bootstrap",
+  progress: { done: 1, total: 4 }
+}
 ```
 
 **Endpoints existentes (sin cambios):**
@@ -152,8 +162,6 @@ Respuesta diferida si no hay comandos:
 - `GET /setup/{identifier}/auth-url?service=xxx` — URL OAuth
 - `POST /vcoo/{id}/set-provider` — encolar comando set-provider
 - `POST /register` — registro del agente
-- `POST /agent/{id}/result` — reportar resultado comando
-- `POST /agent/{id}/health` — health report
 
 ### 2.4 Agente (versusd)
 
@@ -163,30 +171,55 @@ versusd se convierte en el agente permanente. Se reescribe en Python (reemplazan
 
 | Plugin | Loop | Función |
 |--------|------|---------|
-| `command_worker` | GET /agent/{id}/poll?timeout=25 | Long polling, ejecuta comandos, reporta resultados |
-| `health_reporter` | POST /agent/{id}/health (60s) | Reporta métricas del VPS |
+| `tick` | POST /agent/{id}/tick (cada N seg) | **Único loop.** Envía health report + recibe comandos en una sola request |
 | `watchdog` | pgrep hermes (30s) | Reinicia Hermes si no responde |
 | `updater` | hermes update (7 días) | Actualiza Hermes automáticamente |
 
-**Comandos que ejecuta command_worker:**
+**Plugin `tick` — el loop unificado:**
+
+```
+POST /agent/{id}/tick
+Body: {
+  health: { cpu, memory, hostname, disk, hermes_running, template_version },
+  last_command_id: "abc"   // ID del último comando recibido (ACK implícito)
+}
+
+Response: {
+  commands: [...],          // comandos pendientes (vacío si no hay)
+  tick_interval: 5,         // cuántos segundos hasta el próximo tick (dinámico)
+  status: "ok"
+}
+```
+
+**Frecuencia dinámica del tick:**
+- **Durante onboarding:** `tick_interval = 5s` (polling activo, comandos frecuentes)
+- **Post-onboarding:** `tick_interval = 60s` (solo health report, sin comandos)
+- **Nuevo módulo contratado:** el backend encola comandos, el próximo tick los entrega, y responde con `tick_interval = 5s` para reactivar el polling rápido
+- **Nunca se detiene:** versusd SIEMPRE hace tick, pero a menor frecuencia cuando no hay trabajo
+
+```
+versusd loop:
+  while true:
+    response = POST /agent/{id}/tick (health + last_command_id)
+    if response.commands:
+      for cmd in response.commands:
+        ejecutar(cmd)
+    sleep(response.tick_interval)
+```
+
+**Ventajas del tick unificado:**
+- 1 request en vez de 2 (health + poll) por ciclo
+- El backend correlaciona estado del VPS + avance de comandos en el mismo momento
+- La frecuencia se adapta automáticamente: activo cuando hay trabajo, reposo cuando no
+- Sin WebSocket, sin complejidad extra
+
+**Comandos que ejecuta versusd:**
 - `verify-bootstrap` → verifica que Hermes esté instalado
 - `set-provider` → `hermes auth add <provider> api-key --key <decrypted_key>`
 - `save-creds` → guarda tokens OAuth en `~/.hermes/`
-- `finalize` → marca onboarding como completo (no se autodestruye)
+- `finalize` → marca onboarding como completo (versusd sigue vivo)
 
-**Ciclo de vida del command_worker:**
-- **Durante onboarding:** polling frecuente (timeout=25s, reconexión inmediata si hay comandos)
-- **Post-onboarding (inactivo):** polling reducido (timeout=60s, reconexión cada 60s si no hay comandos)
-- **Nuevo módulo contratado:** el backend encola comandos, el siguiente poll los entrega, el worker se reactiva temporalmente
-- **Nunca se detiene:** versusd SIEMPRE hace polling, pero a menor frecuencia cuando no hay trabajo activo
-
-El backend controla la frecuencia del poll sugiriendo `poll_interval` en la respuesta:
-```
-200 OK → { commands: [...], poll_interval: 5 }
-204 No Content → { poll_interval: 60 }
-```
-
-versusd NUNCA se autodestruye. Después del onboarding, sigue vivo haciendo health reports + watchdog + polling de baja frecuencia.
+**Importante:** versusd NUNCA se autodestruye. Después del onboarding, sigue vivo haciendo ticks cada 60s + watchdog.
 
 ### 2.5 One-liner
 
@@ -215,21 +248,29 @@ Los scripts del backend y los IDs internos mantienen nombres **genéricos** para
 
 **Regla:** El backend siempre usa `office`, `mail`, `planner`, `developer`. El frontend mapea a nombres descriptivos que el cliente entiende. Si en el futuro `office` soporta también Microsoft 365, el script `vcoo-office.py` sigue siendo válido.
 
-### 2.7 Comunicación: Long Polling
+### 2.7 Comunicación: Tick unificado
 
 ```
-VPS:  GET /agent/{id}/poll?timeout=25
-CP:   ── espera hasta 25s ──> comando disponible → 200
-      ── espera 25s ──> sin comandos → 204
-VPS:  si 200: ejecuta comando → POST /agent/{id}/result
-      si 204: repite long poll inmediatamente
+versusd loop:
+  while true:
+    response = POST /agent/{id}/tick (health + last_command_id)
+    if response.commands:
+      for cmd in response.commands:
+        ejecutar(cmd)
+    sleep(response.tick_interval)  // 5s si hay trabajo, 60s si no
 ```
+
+**Frecuencia dinámica:**
+- Comandos pendientes → `tick_interval: 5` (polling activo)
+- Sin comandos → `tick_interval: 60` (solo health report)
+- Nuevo módulo contratado → backend encola comando, próximo tick lo entrega con `tick_interval: 5`
 
 **Ventajas:**
-- Latencia ~ms (comando llega casi inmediatamente después de encolado)
-- Pasa cualquier firewall/NAT (es HTTP normal)
-- Funciona con Vercel serverless (conexiones de hasta 60s en plan pro)
-- Sin infraestructura extra (no WebSocket, no Supabase Realtime)
+- 1 request por ciclo (health + comando ACK + poll) en vez de 2
+- Estado del VPS y avance de comandos siempre correlacionados
+- Pasa cualquier firewall/NAT (HTTP simple)
+- Funciona con Vercel serverless (request/respuesta corta)
+- Sin WebSocket, sin infraestructura extra
 
 ## 3. Features faltantes detectadas
 
