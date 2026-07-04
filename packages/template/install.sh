@@ -60,14 +60,28 @@ if ! command -v curl &>/dev/null; then
     warn "curl no encontrado. Instalando..."
     apt-get update -qq && apt-get install -y -qq curl
 fi
-ok "curl disponible"
+ok "curl disponiblee"
 
 # Git
 if ! command -v git &>/dev/null; then
     warn "git no encontrado. Instalando..."
     apt-get update -qq && apt-get install -y -qq git
 fi
-ok "git disponible"
+ok "git disponiblee"
+
+# XZ (needed for tar .xz)
+if ! command -v xz &>/dev/null; then
+    info "XZ no encontrado. Instalando..."
+    apt-get update -qq && apt-get install -y -qq xz-utils
+fi
+ok "xz disponible"
+
+# gettext (provides envsubst)
+if ! command -v gettext &>/dev/null; then
+    info "gettext no encontrado. Instalando..."
+    apt-get update -qq && apt-get install -y -qq gettext
+fi
+ok "gettext disponiblee"
 
 # ── 2. uv (gestor de paquetes Python rápido) ───────────────────
 if ! command -v uv &>/dev/null; then
@@ -81,29 +95,25 @@ ok "uv $(uv --version 2>/dev/null || echo 'instalado')"
 if ! command -v hermes &>/dev/null; then
     info "Instalando Hermes Agent..."
     
-    # Crear VCOO venv con todas las dependencias (incluyendo Hermes Agent)
+    # Crear VCOO venv con dependencias de Python (google-api, etc.)
     mkdir -p "${HERMES_SCRIPTS}"
     if [ ! -d "${HERMES_SCRIPTS}/.venv" ]; then
         uv venv --python ${PYTHON} "${HERMES_SCRIPTS}/.venv"
     fi
     
+    # Instalar dependencias de VCOO en el venv (NO Hermes Agent)
     uv pip install --python "${HERMES_SCRIPTS}/.venv/bin/python" \
-        hermes-agent \
         google-api-python-client google-auth-httplib2 google-auth-oauthlib \
         reportlab weasyprint httpx pyyaml 2>&1 | tail -1
     
-    # Crear symlink para el comando hermes
-    ln -sf "${HERMES_SCRIPTS}/.venv/bin/hermes" "${HOME}/.local/bin/hermes" 2>/dev/null || \
-        warn "Crea un alias manual: alias hermes='${HERMES_SCRIPTS}/.venv/bin/hermes'"
-    
-    # Asegurar que ~/.local/bin está en PATH
-    case ":${PATH}:" in
-        *:"${HOME}/.local/bin":*) ;;
-        *) export PATH="${HOME}/.local/bin:${PATH}"
-           echo 'export PATH="$HOME/.local/bin:$PATH"' >> "${HOME}/.bashrc" ;;
-    esac
-    
-    ok "Hermes Agent instalado (vía pip en VCOO venv)"
+    # Instalar Hermes Agent (método oficial: installer de Nous Research)
+    # Documentación: https://hermes-agent.nousresearch.com/docs/installation
+    if ! command -v hermes &>/dev/null; then
+        info "Instalando Hermes Agent (método oficial)..."
+        curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup
+        export PATH="$HOME/.local/bin:$PATH"
+    fi
+    ok "Hermes Agent $(hermes --version 2>/dev/null || echo 'presente')"
 else
     ok "Hermes Agent $(hermes --version 2>/dev/null || echo 'presente')"
 fi
@@ -228,7 +238,13 @@ if command -v hermes &>/dev/null; then
 fi
 
 # ── 9. Registrar en control plane (si hay PROVISION_TOKEN) ──
-if [ -n "${PROVISION_TOKEN:-}" ] && [ -n "${CONTROL_PLANE_URL:-}" ]; then
+# Si AGENT_ID ya está exportado (ej: instalación vía unified installer),
+# saltamos el registro API y configuramos directamente.
+REGISTERED=false
+if [ -n "${AGENT_ID:-}" ]; then
+    info "Agente ya registrado (ID: ${AGENT_ID}) — omitiendo registro..."
+    REGISTERED=true
+elif [ -n "${PROVISION_TOKEN:-}" ] && [ -n "${CONTROL_PLANE_URL:-}" ]; then
     info "Registrando agente en control plane..."
     RESP=$(curl -sS -w "\n%{http_code}" "${CONTROL_PLANE_URL}/register" \
       -H "Content-Type: application/json" \
@@ -240,30 +256,75 @@ if [ -n "${PROVISION_TOKEN:-}" ] && [ -n "${CONTROL_PLANE_URL:-}" ]; then
         AGENT_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['agent_id'])" 2>/dev/null || echo "")
         VCOO_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['vcoo_id'])" 2>/dev/null || echo "")
         AGENT_TOKEN=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['agent_token'])" 2>/dev/null || echo "")
-
-        # Guardar en .env de Hermes
-        {
-            echo ""
-            echo "# VCOO Control Plane (añadido por instalador)"
-            echo "VCOO_ID=${VCOO_ID}"
-            echo "AGENT_ID=${AGENT_ID}"
-            echo "AGENT_TOKEN=${AGENT_TOKEN}"
-        } >> "${HERMES_HOME}/.env"
-
+        REGISTERED=true
         ok "Agente registrado en control plane (ID: $AGENT_ID)"
-
-        # Arrancar health reporter
-        if [ -f "${HERMES_SCRIPTS}/vcoo/health-reporter.py" ]; then
-            export AGENT_ID VCOO_ID AGENT_TOKEN CONTROL_PLANE="${CONTROL_PLANE_URL}"
-            nohup python3 "${HERMES_SCRIPTS}/vcoo/health-reporter.py" > /tmp/vcoo-health.log 2>&1 &
-            HPID=$!
-            mkdir -p "$HOME/.vcoo-agent"
-            echo "$HPID" > "$HOME/.vcoo-agent/health-reporter.pid"
-            ok "Health reporter iniciado (PID $HPID)"
-        fi
     else
         warn "No se pudo registrar el agente (HTTP $HTTP_CODE). Se puede registrar manualmente desde el panel."
     fi
+fi
+
+# ── 9b. Configurar .env y servicios systemd si tenemos agente ──
+if $REGISTERED && [ -n "${AGENT_ID:-}" ]; then
+    # Guardar/actualizar .env de Hermes
+    {
+        echo ""
+        echo "# VCOO Control Plane (añadido por instalador)"
+        echo "VCOO_ID=${VCOO_ID:-}"
+        echo "AGENT_ID=${AGENT_ID}"
+        echo "AGENT_TOKEN=${AGENT_TOKEN:-}"
+    } >> "${HERMES_HOME}/.env"
+
+    # Detectar paths para systemd
+    HERMES_PYTHON="${HERMES_PYTHON:-$(which python3 2>/dev/null || echo /usr/bin/python3)}"
+    HERMES_BIN="${HERMES_BIN:-$(which hermes 2>/dev/null || echo /usr/local/bin/hermes)}"
+    export HERMES_PYTHON HERMES_BIN HERMES_SCRIPTS HERMES_HOME HOME USER
+
+    # Configurar servicios systemd
+    info "Configurando servicios systemd..."
+    
+    # Crear directorio temporal para service files
+    SERVICE_TEMP_DIR="$(mktemp -d)"
+    
+    # Copiar plantillas de servicio
+    cp "${VCOO_DIR}/files/systemd/"*.service "${SERVICE_TEMP_DIR}/" 2>/dev/null || true
+    
+    # Procesar cada servicio
+    for service_template in "${SERVICE_TEMP_DIR}"/*.service; do
+        [ -f "$service_template" ] || continue
+        service_name="$(basename "$service_template")"
+        
+        # Sustituir variables en la plantilla
+        envsubst < "$service_template" | sudo tee "/etc/systemd/system/$service_name" > /dev/null || {
+            # Fallback a sed si envsubst no está disponiblee
+            sed -e "s|\$HERMES_SCRIPTS|${HERMES_SCRIPTS}|g" \
+                -e "s|\$HERMES_HOME|${HERMES_HOME}|g" \
+                -e "s|\$HERMES_PYTHON|${HERMES_PYTHON:-/usr/bin/python3}|g" \
+                -e "s|\$HERMES_BIN|${HERMES_BIN:-/usr/local/bin/hermes}|g" \
+                -e "s|\$HOME|${HOME}|g" \
+                -e "s|\$USER|$(whoami)|g" \
+                "$service_template" | sudo tee "/etc/systemd/system/$service_name" > /dev/null
+        }
+        
+        ok "Service copiado: $service_name"
+    done
+    
+    # Recargar systemd y activar servicios
+    sudo systemctl daemon-reload && ok "Systemd daemon recargado"
+    
+    sudo systemctl enable --now vcoo-health-reporter.service && \
+    ok "Health reporter habilitado e iniciado" || \
+    warn "Failed to enable/start health reporter"
+    
+    sudo systemctl enable --now vcoo-hermes-gateway.service && \
+    ok "Hermes gateway habilitado e iniciado" || \
+    warn "Failed to enable/start Hermes gateway"
+    
+    # Limpiar
+    rm -rf "$SERVICE_TEMP_DIR"
+    
+    info "Servicios systemd configurados. Puede verificar con:"
+    info "  systemctl status vcoo-health-reporter"
+    info "  systemctl status vcoo-hermes-gateway"
 fi
 
 # ── 10. Resumen final ──────────────────────────────────────────
@@ -280,8 +341,15 @@ echo ""
 echo "   2. Edita tu configuración:"
 echo "      hermes config edit"
 echo ""
-echo "   3. Arranca MAGI:"
-echo "      hermes gateway run"
+echo \"   3. Verifica el estado de los servicios:\"
+echo \"      systemctl status vcoo-health-reporter\"
+echo \"      systemctl status vcoo-hermes-gateway\"
 echo ""
-echo "   4. Envíale un mensaje a MAGI desde Discord o Telegram"
+echo "   4. Configura las integraciones:"
+echo "      bash provision/configure-oauth.sh"
+echo ""
+echo "   5. Edita tu configuración:"
+echo "      hermes config edit"
+echo ""
+echo "   6. Envía un mensaje a MAGI desde Discord o Telegram"
 echo ""

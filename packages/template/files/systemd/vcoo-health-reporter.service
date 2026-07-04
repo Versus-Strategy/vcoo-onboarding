@@ -1,0 +1,17 @@
+[Unit]
+Description=VCOO Health Reporter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=$HERMES_PYTHON $HERMES_SCRIPTS/vcoo/health-reporter.py
+EnvironmentFile=$HERMES_HOME/.env
+Restart=on-failure
+RestartSec=10
+User=$USER
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
