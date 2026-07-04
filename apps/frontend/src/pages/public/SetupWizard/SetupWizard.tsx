@@ -13,11 +13,18 @@ interface ModuleLabel {
   description: string;
 }
 
+interface ProviderInfo {
+  id: string;
+  nombre: string;
+  descripcion: string;
+}
+
 interface OnboardingState {
   vcoo_id: string;
   name: string;
   modules: string[];
   module_labels?: Record<string, ModuleLabel>;
+  providers?: ProviderInfo[];
   step: string;
   wizard_step?: number;
   status: string;
@@ -28,14 +35,6 @@ interface OnboardingState {
   progress: number | { total: number; done: number };
 }
 
-interface ProviderInfo {
-  id: string;
-  nombre: string;
-  descripcion: string;
-  logo: string;
-  color: string;
-}
-
 const PASOS = [
   'Instalar Agente',
   'Proveedor IA',
@@ -43,49 +42,10 @@ const PASOS = [
   'Finalización',
 ];
 
-const PROVEEDORES: ProviderInfo[] = [
-  {
-    id: 'anthropic',
-    nombre: 'Anthropic',
-    descripcion: 'Claude — modelos de última generación',
-    logo: 'https://www.anthropic.com/favicon.ico',
-    color: 'text-orange-600',
-  },
-  {
-    id: 'openai',
-    nombre: 'OpenAI',
-    descripcion: 'GPT-4, GPT-4o y más',
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/0/04/ChatGPT_logo.svg',
-    color: 'text-green-600',
-  },
-  {
-    id: 'google',
-    nombre: 'Google IA',
-    descripcion: 'Gemini y modelos de Google',
-    logo: 'https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png',
-    color: 'text-blue-600',
-  },
-  {
-    id: 'mistral',
-    nombre: 'Mistral AI',
-    descripcion: 'Modelos abiertos y eficientes',
-    logo: 'https://mistral.ai/favicon.ico',
-    color: 'text-purple-600',
-  },
-  {
-    id: 'xai',
-    nombre: 'xAI',
-    descripcion: 'Grok y modelos de xAI',
-    logo: 'https://x.ai/favicon.ico',
-    color: 'text-gray-600',
-  },
-  {
-    id: 'cohere',
-    nombre: 'Cohere',
-    descripcion: 'Modelos empresariales',
-    logo: 'https://cohere.com/favicon.ico',
-    color: 'text-red-600',
-  },
+const COLORS = [
+  'text-orange-600', 'text-green-600', 'text-blue-600',
+  'text-purple-600', 'text-gray-600', 'text-red-600',
+  'text-teal-600', 'text-pink-600', 'text-indigo-600',
 ];
 
 // ── AuthForm: registro e inicio de sesión para clientes (tema claro) ──
@@ -577,7 +537,7 @@ const SetupWizard = () => {
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {PROVEEDORES.map((proveedor) => (
+        {(onboarding.providers || []).map((proveedor, idx) => (
           <div
             key={proveedor.id}
             onClick={() => manejarConectarProveedor(proveedor.id)}
@@ -587,7 +547,7 @@ const SetupWizard = () => {
           >
             <div className="flex flex-col items-center text-center">
               <div
-                className={`w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mb-3 text-2xl font-bold ${proveedor.color}`}
+                className={`w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mb-3 text-2xl font-bold ${COLORS[idx % COLORS.length]}`}
               >
                 {proveedor.nombre.charAt(0)}
               </div>

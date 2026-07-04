@@ -338,7 +338,7 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
     st = crud.get_onboarding_state(db, vcoo_id)
     if not st:
         raise HTTPException(status_code=404, detail="No hay datos de onboarding")
-    from onboarding import get_total_steps, get_module_label, get_module_description, get_wizard_step, is_onboarding_complete
+    from onboarding import get_total_steps, get_module_label, get_module_description, get_wizard_step, is_onboarding_complete, PROVIDERS
     modules = list(st.modules or ["core"])
     total = get_total_steps(modules)
     done = len(st.completed or [])
@@ -355,16 +355,25 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
     install_cmd = f"curl -sSL {control_plane}/install.sh | CONTROL_PLANE={control_plane} PROVISION_TOKEN={raw_token} bash -"
     agent = crud.get_agent_by_vcoo(db, vcoo_id)
     agent_online = False
+    agent_providers = None
     if agent and agent.last_seen:
         import datetime as dt
         ago = (dt.datetime.utcnow() - agent.last_seen.replace(tzinfo=None)).total_seconds()
         agent_online = ago < 120
+        if agent.capabilities:
+            try:
+                caps = json.loads(agent.capabilities)
+                agent_providers = caps.get("providers")
+            except Exception:
+                pass
+    providers = agent_providers or PROVIDERS
     return {
         "requires_registration": False,
         "vcoo_id": str(v.id),
         "name": v.name,
         "modules": modules,
         "module_labels": module_labels,
+        "providers": providers,
         "step": current_step,
         "wizard_step": get_wizard_step(current_step),
         "status": st.status,

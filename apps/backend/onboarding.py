@@ -42,6 +42,19 @@ MODULE_DESCRIPTIONS: dict[str, str] = {
     "developer": "GitHub, Vercel, Supabase y herramientas para desarrolladores",
 }
 
+# Proveedores de IA disponibles para el wizard de onboarding
+PROVIDERS: list[dict[str, str]] = [
+    {"id": "anthropic", "nombre": "Anthropic",   "descripcion": "Claude — modelos de última generación"},
+    {"id": "openai",    "nombre": "OpenAI",      "descripcion": "GPT-4, GPT-4o y más"},
+    {"id": "google",    "nombre": "Google IA",   "descripcion": "Gemini y modelos de Google"},
+    {"id": "mistral",   "nombre": "Mistral AI",  "descripcion": "Modelos abiertos y eficientes"},
+    {"id": "xai",       "nombre": "xAI",         "descripcion": "Grok y modelos de xAI"},
+    {"id": "cohere",    "nombre": "Cohere",      "descripcion": "Modelos empresariales"},
+    {"id": "openrouter","nombre": "OpenRouter",  "descripcion": "Múltiples modelos en un solo API"},
+    {"id": "copilot",   "nombre": "GitHub Copilot", "descripcion": "Modelos de GitHub y socios"},
+    {"id": "gemini",    "nombre": "Google Gemini","descripcion": "Modelos Gemini de Google"},
+]
+
 
 def get_module_label(module_id: str) -> str:
     return MODULE_LABELS.get(module_id, module_id.capitalize())
