@@ -89,8 +89,30 @@ NAVEGADOR (dashboard cliente/operador)     CONTROL PLANE (FastAPI)     VPS (vers
 |------|---------------|--------|
 | 1. Instalar Agente | Siempre | Mostrar one-liner con token real. Copiar → Verificar. Backend llama a POST /setup/{id}/verify |
 | 2. Configurar Proveedor IA | Siempre | Seleccionar proveedor (Anthropic, OpenAI, etc.). Ingresar API Key. Backend envía comando set-provider al VPS. |
-| 3. Conectar Módulos | Solo si contratados | Cada módulo contratado se muestra como sub-paso. OAuth en browser. Backend guarda credenciales. |
+| 3. Conectar Módulos | Solo si contratados | Cada módulo contratado se muestra como tarjeta con su nombre y descripción. Dentro de cada tarjeta, el botón OAuth correspondiente ("Iniciar sesión con Google", "Conectar GitHub", etc.). Todo el OAuth ocurre en el navegador. |
 | 4. Finalización | Siempre | Resumen de configuración. Enlace al dashboard /servicios. |
+
+**Paso 3 en detalle — cada módulo contratado se renderiza como:**
+
+```
+┌──────────────────────────────────────────────┐
+│  Google Drive                                │
+│  Acceso a Drive, Docs y Calendar             │
+│  [Iniciar sesión con Google]  ✓ Conectado   │
+├──────────────────────────────────────────────┤
+│  Gmail                                       │
+│  Correo electrónico inteligente              │
+│  [Iniciar sesión con Google]  ✓ Conectado   │
+├──────────────────────────────────────────────┤
+│  Planner                                     │
+│  Calendario y planificación                  │
+│  [Iniciar sesión con Google]  [Conectar]    │
+├──────────────────────────────────────────────┤
+│  GitHub + Vercel + Supabase                  │
+│  Repositorios, deploys y base de datos       │
+│  [Conectar GitHub] [Conectar Vercel] ...    │
+└──────────────────────────────────────────────┘
+```
 
 **Sub-pasos del Paso 1 (Instalar Agente):**
 
@@ -171,13 +193,13 @@ Esto descarga `install_vsd.sh` que:
 
 Los scripts del backend y los IDs internos mantienen nombres **genéricos** para soportar múltiples proveedores futuros. Solo cambia la etiqueta visible en el frontend.
 
-| Backend ID (script) | Frontend (etiqueta visible) | Descripción |
-|--------------------|---------------------------|-------------|
-| core | — | Instalación base (siempre incluido) |
-| office | Google Drive | Acceso a Drive, Docs y Calendar |
-| mail | Gmail | Correo electrónico inteligente |
-| developer | GitHub + Vercel + Supabase | Repositorios, deploys y base de datos |
-| planner | *(pospuesto)* | Trello se implementa más adelante |
+| Backend ID (script) | Frontend (etiqueta visible) | OAuth | Descripción |
+|--------------------|---------------------------|-------|-------------|
+| core | — | — | Instalación base (siempre incluido) |
+| office | Google Drive | Google OAuth | Acceso a Drive, Docs |
+| mail | Gmail | Google OAuth | Correo electrónico inteligente |
+| planner | Planner | Google OAuth | Calendario y planificación (Calendar ahora, Trello futuro) |
+| developer | GitHub + Vercel + Supabase | GitHub OAuth + Vercel OAuth + Supabase OAuth | Repositorios, deploys y base de datos |
 
 **Regla:** El backend siempre usa `office`, `mail`, `planner`, `developer`. El frontend mapea a nombres descriptivos que el cliente entiende. Si en el futuro `office` soporta también Microsoft 365, el script `vcoo-office.py` sigue siendo válido.
 
