@@ -222,7 +222,6 @@ const SetupWizard = () => {
   const [error, setError] = useState<string | null>(null);
   const [verificando, setVerificando] = useState(false);
   const [conectando, setConectando] = useState<string | null>(null);
-  const [subPaso, setSubPaso] = useState(1);
   const [proveedorSeleccionado, setProveedorSeleccionado] = useState<string | null>(null);
   const [verMas, setVerMas] = useState(false);
   const [apiKeyValue, setApiKeyValue] = useState('');
@@ -435,14 +434,6 @@ const SetupWizard = () => {
       onboarding.install_command ||
       `curl -sSL ${API_URL}/install.sh | PROVISION_TOKEN=${token} bash -`;
 
-    const subSteps = [
-      { num: 1, label: 'Copia el comando de instalación' },
-      { num: 2, label: 'Conéctate a tu VPS por SSH' },
-      { num: 3, label: 'Ejecuta el comando en la terminal' },
-      { num: 4, label: 'Espera a que la instalación termine' },
-      { num: 5, label: 'Haz clic en "Verificar" para continuar' },
-    ];
-
     return (
       <div className="space-y-6">
         <div>
@@ -450,56 +441,8 @@ const SetupWizard = () => {
             Instalar el Agente VCOO
           </h2>
           <p className="text-gray-600">
-            Sigue estos pasos para instalar el agente en tu servidor:
+            Copia el comando y ejecútalo en la terminal de tu VPS. Cuando termine, vuelve aquí y haz clic en <strong>Verificar</strong>.
           </p>
-        </div>
-
-        <div className="space-y-3">
-          {subSteps.map((s) => {
-            const isCompleted = s.num < subPaso;
-            const isCurrent = s.num === subPaso;
-            return (
-              <div
-                key={s.num}
-                className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
-                  isCompleted
-                    ? 'bg-green-50 border border-green-200'
-                    : isCurrent
-                    ? 'bg-primary-50 border border-primary-200'
-                    : 'bg-gray-50 border border-gray-200'
-                }`}
-              >
-                <div
-                  className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold ${
-                    isCompleted
-                      ? 'bg-green-500 text-white'
-                      : isCurrent
-                      ? 'bg-primary-600 text-white'
-                      : 'bg-gray-300 text-gray-600'
-                  }`}
-                >
-                  {isCompleted ? (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                    </svg>
-                  ) : (
-                    s.num
-                  )}
-                </div>
-                <span
-                  className={`text-sm font-medium ${
-                    isCompleted
-                      ? 'text-green-800'
-                      : isCurrent
-                      ? 'text-primary-800'
-                      : 'text-gray-500'
-                  }`}
-                >
-                  {s.label}
-                </span>
-              </div>
-            );
-          })}
         </div>
 
         <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
@@ -508,10 +451,7 @@ const SetupWizard = () => {
               {cmdText}
             </code>
             <button
-              onClick={() => {
-                navigator.clipboard.writeText(cmdText);
-                setSubPaso(Math.max(subPaso, 2));
-              }}
+              onClick={() => navigator.clipboard.writeText(cmdText)}
               className="flex-shrink-0 text-gray-400 hover:text-primary-600 transition-colors"
               title="Copiar comando"
             >
@@ -519,21 +459,6 @@ const SetupWizard = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
               </svg>
             </button>
-          </div>
-        </div>
-
-        <div className="flex justify-between items-center">
-          <div className="flex gap-2">
-            {subPaso > 1 && (
-              <Button variant="ghost" size="sm" onClick={() => setSubPaso(subPaso - 1)}>
-                ← Anterior
-              </Button>
-            )}
-            {subPaso < 5 && (
-              <Button variant="ghost" size="sm" onClick={() => setSubPaso(subPaso + 1)}>
-                Siguiente →
-              </Button>
-            )}
           </div>
         </div>
 
