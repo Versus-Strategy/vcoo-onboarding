@@ -932,6 +932,24 @@ def agent_report_result(agent_id: str, payload: dict, db: Session = Depends(get_
 
 # ── VCOO Logs ────────────────────────────────────────────
 
+@app.get("/vcoo/{vcoo_id}/audit")
+def get_vcoo_audit(vcoo_id: str, db: Session = Depends(get_db)):
+    """Return audit log entries for a VCOO."""
+    logs = crud.get_audit_log_for_vcoo(db, vcoo_id)
+    return {
+        "audit_log": [
+            {
+                "id": str(log.id),
+                "action": log.action,
+                "actor_email": log.actor_email,
+                "metadata": json.loads(log.metadata) if log.metadata else None,
+                "created_at": log.created_at.isoformat() if log.created_at else None,
+            }
+            for log in logs
+        ]
+    }
+
+
 @app.get("/vcoo/{vcoo_id}/logs")
 def get_vcoo_logs(vcoo_id: str, db: Session = Depends(get_db)):
     """Retrieve all command logs for a VCOO (across all its agents)."""
