@@ -13,10 +13,10 @@ services:
 
   backend:
     build:
-      context: .
-      dockerfile: Dockerfile.backend
+      context: ..
+      dockerfile: infra/Dockerfile.backend
     env_file:
-      - backend/.env
+      - ../apps/backend/.env
     environment:
       POSTGRES_URL: postgresql://postgres:postgres@db:5432/vcoo
     depends_on:
