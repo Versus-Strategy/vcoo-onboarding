@@ -39,6 +39,31 @@ echo -e "${BLUE}║     by VERSUS Strategy SL                ║${NC}"
 echo -e "${BLUE}╚══════════════════════════════════════════╝${NC}"
 echo ""
 
+# ── Detección de instalación previa ─────────────────────────
+VCOO_SUPERVISOR_DIR="/opt/vcoo-supervisor"
+PREVIOUS_INSTALL=false
+if [ -d "$VCOO_SUPERVISOR_DIR" ] || systemctl list-unit-files 2>/dev/null | grep -q 'vcoo-'; then
+    PREVIOUS_INSTALL=true
+    echo ""
+    echo -e "${YELLOW}⚠ Se detectó una instalación previa de VCOO.${NC}"
+    echo -n -e "${YELLOW}¿Deseas reinstalar los servicios VCOO? (se conservarán las dependencias del sistema) [s/N]: ${NC}"
+    read -r REINSTALL
+    if [ "$REINSTALL" != "s" ] && [ "$REINSTALL" != "S" ]; then
+        echo ""
+        info "Reinstalación cancelada por el usuario."
+        exit 0
+    fi
+    info "Limpiando servicios VCOO anteriores..."
+    for svc in vcoo-health-reporter vcoo-hermes-gateway vcoo-supervisor; do
+        sudo systemctl stop "$svc" 2>/dev/null || true
+        sudo systemctl disable "$svc" 2>/dev/null || true
+        sudo rm -f "/etc/systemd/system/${svc}.service" 2>/dev/null || true
+    done
+    sudo systemctl daemon-reload
+    sudo rm -rf "$VCOO_SUPERVISOR_DIR" 2>/dev/null || true
+    ok "Limpieza completada"
+fi
+
 # ── 1. Requisitos ──────────────────────────────────────────────
 info "Verificando requisitos del sistema..."
 
@@ -280,23 +305,43 @@ if $REGISTERED && [ -n "${AGENT_ID:-}" ]; then
     HERMES_BIN="${HERMES_BIN:-$(which hermes 2>/dev/null || echo /usr/local/bin/hermes)}"
     export HERMES_PYTHON HERMES_BIN HERMES_SCRIPTS HERMES_HOME HOME USER
 
+    # Copiar supervisor VCOO
+    SUPERVISOR_SRC="${VCOO_DIR}/vcoo-supervisor"
+    if [ -d "$SUPERVISOR_SRC" ]; then
+        info "Instalando vcoo-supervisor..."
+        sudo mkdir -p "$VCOO_SUPERVISOR_DIR/plugins"
+        sudo cp "$SUPERVISOR_SRC/supervisor.py" "$VCOO_SUPERVISOR_DIR/"
+        sudo cp "$SUPERVISOR_SRC/config.json" "$VCOO_SUPERVISOR_DIR/"
+        sudo cp "$SUPERVISOR_SRC/plugins/"*.py "$VCOO_SUPERVISOR_DIR/plugins/"
+        # Escribir AGENT_ID y CONTROL_PLANE en config
+        sudo python3 -c "
+import json
+with open('$VCOO_SUPERVISOR_DIR/config.json') as f:
+    cfg = json.load(f)
+hr = cfg.setdefault('plugins', {}).setdefault('health_reporter', {})
+hr['agent_id'] = '$AGENT_ID'
+hr['agent_token'] = '$AGENT_TOKEN'
+hr['control_plane'] = '${CONTROL_PLANE:-${CONTROL_PLANE_URL:-}}'
+with open('$VCOO_SUPERVISOR_DIR/config.json', 'w') as f:
+    json.dump(cfg, f, indent=2)
+"
+        ok "vcoo-supervisor instalado en $VCOO_SUPERVISOR_DIR"
+    else
+        warn "Origen del supervisor no encontrado en $SUPERVISOR_SRC — saltando"
+    fi
+
     # Configurar servicios systemd
     info "Configurando servicios systemd..."
     
-    # Crear directorio temporal para service files
     SERVICE_TEMP_DIR="$(mktemp -d)"
+    cp "${VCOO_DIR}/files/systemd/vcoo-supervisor.service" "${SERVICE_TEMP_DIR}/" 2>/dev/null || true
+    cp "${VCOO_DIR}/files/systemd/vcoo-hermes-gateway.service" "${SERVICE_TEMP_DIR}/" 2>/dev/null || true
     
-    # Copiar plantillas de servicio
-    cp "${VCOO_DIR}/files/systemd/"*.service "${SERVICE_TEMP_DIR}/" 2>/dev/null || true
-    
-    # Procesar cada servicio
     for service_template in "${SERVICE_TEMP_DIR}"/*.service; do
         [ -f "$service_template" ] || continue
         service_name="$(basename "$service_template")"
         
-        # Sustituir variables en la plantilla
         envsubst < "$service_template" | sudo tee "/etc/systemd/system/$service_name" > /dev/null || {
-            # Fallback a sed si envsubst no está disponiblee
             sed -e "s|\$HERMES_SCRIPTS|${HERMES_SCRIPTS}|g" \
                 -e "s|\$HERMES_HOME|${HERMES_HOME}|g" \
                 -e "s|\$HERMES_PYTHON|${HERMES_PYTHON:-/usr/bin/python3}|g" \
@@ -309,22 +354,20 @@ if $REGISTERED && [ -n "${AGENT_ID:-}" ]; then
         ok "Service copiado: $service_name"
     done
     
-    # Recargar systemd y activar servicios
     sudo systemctl daemon-reload && ok "Systemd daemon recargado"
     
-    sudo systemctl enable --now vcoo-health-reporter.service && \
-    ok "Health reporter habilitado e iniciado" || \
-    warn "Failed to enable/start health reporter"
+    sudo systemctl enable --now vcoo-supervisor.service && \
+    ok "Supervisor habilitado e iniciado" || \
+    warn "Failed to enable/start supervisor"
     
     sudo systemctl enable --now vcoo-hermes-gateway.service && \
     ok "Hermes gateway habilitado e iniciado" || \
     warn "Failed to enable/start Hermes gateway"
     
-    # Limpiar
     rm -rf "$SERVICE_TEMP_DIR"
     
     info "Servicios systemd configurados. Puede verificar con:"
-    info "  systemctl status vcoo-health-reporter"
+    info "  systemctl status vcoo-supervisor"
     info "  systemctl status vcoo-hermes-gateway"
 fi
 
@@ -343,7 +386,7 @@ echo "   2. Edita tu configuración:"
 echo "      hermes config edit"
 echo ""
 echo \"   3. Verifica el estado de los servicios:\"
-echo \"      systemctl status vcoo-health-reporter\"
+echo \"      systemctl status vcoo-supervisor\"
 echo \"      systemctl status vcoo-hermes-gateway\"
 echo ""
 echo "   4. Configura las integraciones:"
