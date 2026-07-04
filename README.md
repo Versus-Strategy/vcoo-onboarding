@@ -10,8 +10,9 @@ API REST que orquesta el ciclo de vida completo de las instancias **VCOO** (Virt
 | ORM               | SQLAlchemy 2.0                                 |
 | Base de datos     | PostgreSQL (Supabase)                          |
 | Autenticación     | JWT (PyJWT) + hashlib (password hashing)       |
-| Despliegue        | Vercel (serverless functions via `api/index.py`) |
-| Cliente HTTP      | httpx + requests (agente)                      |
+| Despliegue        | Vercel (serverless functions via `api/[...slug].py`) |
+| Agente VPS        | vcoo-supervisor (Python, modular, systemd)     |
+| Frontend          | React SPA (vcoo-dashboard)                     |
 | WebSockets        | FastAPI WebSocket + bridge (entorno local)     |
 
 ## Arquitectura
@@ -22,18 +23,18 @@ API REST que orquesta el ciclo de vida completo de las instancias **VCOO** (Virt
 │  (React SPA)  │←──────────────────│  (FastAPI Serverless)  │
 │  Vercel       │                   │  Vercel                │
 └──────────────┘                    └───────────┬──────────┘
-                                                │ SQLAlchemy
-                                                ↓
-                                        ┌──────────────┐
-                                        │  Supabase     │
-                                        │  PostgreSQL   │
-                                        └──────────────┘
+                                                 │ SQLAlchemy
+                                                 ↓
+                                         ┌──────────────┐
+                                         │  Supabase     │
+                                         │  PostgreSQL   │
+                                         └──────────────┘
 
-┌─────────────────┐  HTTP Polling     ┌──────────────────────┐
-│  VCOO Agent      │ ────────────────→│  VCOO Onboarding API  │
-│  (VPS del        │←─────────────────│  (register, poll,     │
-│   cliente)       │                  │   result, heartbeat)  │
-└─────────────────┘                  └──────────────────────┘
+┌──────────────────────┐  POST /agent/{id}/health  ┌──────────────────────┐
+│  vcoo-supervisor      │ ────────────────────────→│  VCOO Onboarding API  │
+│  (VPS del cliente)    │ (métricas, versión,       │                       │
+│  systemd + plugins)   │  heartbeat)               │                       │
+└──────────────────────┘                           └──────────────────────┘
 ```
 
 La aplicación se despliega como **funciones serverless** en Vercel. `api/[...slug].py` es el punto de entrada para Vercel. En entorno local, los WebSockets están disponibles para comunicación en tiempo real agente-UI.
@@ -105,9 +106,12 @@ docs/           → Documentación y planos
 
 ### Utilidad
 
-| Método | Ruta      | Descripción                                         |
-|--------|-----------|-----------------------------------------------------|
-| GET    | `/health` | Healthcheck con información de conexión a BD.       |
+| Método | Ruta                         | Descripción                                         |
+|--------|------------------------------|-----------------------------------------------------|
+| GET    | `/healthz`                   | Healthcheck con información de conexión a BD.       |
+| GET    | `/install.sh`                | Script de instalación del agente (one-liner).       |
+| GET    | `/template.tar.gz`           | Template VCOO para provisioning del VPS.            |
+| GET    | `/playbooks`                 | Lista playbooks disponibles.                        |
 
 ## Esquema de Base de Datos
 
@@ -118,10 +122,61 @@ La base de datos se ejecuta en **Supabase (PostgreSQL)**. Las tablas principales
 | `vcoos`            | Instancias VCOO (id, name, status, created_at).                |
 | `provision_tokens` | Tokens de provision para vincular clientes (token, vcoo_id, expires_at, used). |
 | `clients`          | Clientes registrados (email, password_hash, name, vcoo_id).    |
-| `agents`           | Agentes VCOO registrados (vcoo_id, info, status, last_seen, health_payload). |
+| `agents`           | Agentes VCOO registrados (vcoo_id, info, status, last_seen, health_payload, template_version, supervisor_version). |
 | `commands`         | Comandos encolados para los agentes (command, status, step, result, ttl). |
 | `command_logs`     | Logs chunked de ejecución de comandos (command_id, stream, chunk). |
 | `onboarding_state` | Estado del wizard de onboarding por VCOO (step, status, modules, completed, errors, retry_count). |
+| `audit_log`        | Registro de auditoría de acciones del operador (action, actor_email, vcoo_id, log_metadata). |
+
+## vcoo-supervisor (agente en VPS)
+
+El supervisor es un proceso Python modular que corre como servicio systemd en cada VPS del cliente. Reemplaza los antiguos `versusd`, `health-reporter.py` y el heartbeat del agente.
+
+```
+vcoo-supervisor/
+├── supervisor.py          ← Core: ciclo, scheduler, logging
+├── config.json            ← Configuración de plugins
+├── plugins/
+│   ├── health_reporter.py ← Métricas VPS cada 60s → POST /agent/{id}/health
+│   ├── watchdog.py        ← pgrep Hermes cada 30s, restart si caído
+│   └── updater.py         ← hermes update cada 7 días
+└── vcoo-supervisor.service ← systemd unit
+```
+
+Cada plugin implementa la interfaz:
+```python
+class Plugin:
+    name: str
+    interval: int
+    def start(self, config): ...
+    def stop(self): ...
+    def tick(): ...
+```
+
+### Métricas reportadas
+
+```json
+{
+  "hostname": "vcoo-test",
+  "uptime_seconds": 3600,
+  "hermes_running": true,
+  "disk_used_pct": 21.8,
+  "template_version": "1.2.0",
+  "supervisor_version": "0.1.0"
+}
+```
+
+## Auditoría
+
+Cada acción crítica del operador registra un evento en la tabla `audit_log`:
+
+| Acción | Endpoint |
+|--------|----------|
+| `vcoo.created` | `POST /vcoo` |
+| `vcoo.deleted` | `DELETE /vcoo/{id}` |
+| `token.regenerated` | `POST /vcoo/{id}/regenerate-token` |
+
+Los eventos se muestran como timeline en la página de detalle del cliente (`/operador/clientes/{id}`).
 
 Las tablas se crean automáticamente al iniciar la aplicación mediante `Base.metadata.create_all()`.
 

@@ -58,29 +58,44 @@ Elegimos **dos repositorios independientes**: `vcoo-dashboard` (frontend) y `vco
 
 ---
 
-## 3. versusd Watchdog en Lugar de Modificar Hermes Agent
+## 3. vcoo-supervisor (Reemplazo de versusd + health-reporter)
 
 ### Contexto
 
-El agente VCOO necesita reportar health, hacer polling de comandos y ejecutar verificaciones. Hermes Agent ya existe como plataforma de agentes de IA. Podríamos haber extendido Hermes Agent para incluir estas capacidades.
+Originalmente había 3 sistemas de reporte superpuestos: `versusd` (watchdog bash), `health-reporter.py` (métricas Python) y el heartbeat del agente. Cada uno tenía configuraciones, ciclos y formatos diferentes.
 
-### Decisión
+### Decisión (Jul 2026)
 
-Decidimos crear **un sistema watchdog independiente** (`vsd/versusd`) basado en systemd, separado de Hermes Agent.
+Unificamos todo en **vcoo-supervisor**: un proceso Python modular con sistema de plugins que corre como servicio systemd.
 
-### Razones
+### Arquitectura
 
-1. **Separación de concerns**: Hermes Agent es un agente de IA conversacional. Añadirle responsabilidades de health reporting y watchdog lo convertiría en un monolito con responsabilidades mezcladas.
-2. **Principio de responsabilidad única**: Hermes Agent debe ocuparse de interpretar y ejecutar intenciones del usuario. El watchdog debe ocuparse de mantener el agente VCOO vivo, reportar su estado y gestionar su ciclo de vida.
-3. **Estándar de la industria**: systemd es el sistema de init estándar en Linux. Usarlo para gestionar servicios es la práctica correcta. No necesitamos reinventar la supervisión de procesos.
-4. **Resiliencia**: Si Hermes Agent falla o se cuelga, el watchdog sigue funcionando y puede reiniciarlo. Si el watchdog estuviera dentro de Hermes Agent, un fallo de Hermes dejaría sin supervisión al agente.
-5. **Simplicidad**: El watchdog es un script shell + servicios systemd. Sin dependencias de Python, sin frameworks. Se instala con un one-liner.
+```
+vcoo-supervisor/
+├── supervisor.py          ← Core con scheduler y plugin manager
+├── plugins/
+│   ├── health_reporter.py ← Métricas VPS + heartbeat al backend
+│   ├── watchdog.py        ← pgrep Hermes, restart si caído
+│   └── updater.py         ← Auto-update semanal
+├── config.json            ← Config centralizada
+└── vcoo-supervisor.service ← systemd unit
+```
 
-### Componentes del watchdog
+### Razones del cambio
 
-- **`vsd/vsctl`** — CLI para controlar el watchdog y provisionar el agente.
-- **`vsd/onboard.sh`** — Script de instalación one-liner.
-- **Servicios systemd** — Unidades para el agente VCOO y Hermes Gateway.
+1. **Centralización**: Un solo proceso, un solo cron, una sola configuración.
+2. **Modularidad**: Cada plugin tiene una interfaz `start/tick/stop` y se activa/desactiva desde config.
+3. **Autenticación**: El health reporter ahora envía `Authorization: Bearer` (antes no autenticaba).
+4. **Métricas enriquecidas**: Reporta hostname, uptime, disco, versión del template y del supervisor.
+5. **Mantenibilidad**: Python en lugar de bash permite mejor testing y manejo de errores.
+
+### Componentes
+
+- **`packages/vcoo-supervisor/supervisor.py`** — Core del supervisor.
+- **`packages/vcoo-supervisor/plugins/health_reporter.py`** — Envía métricas VPS al backend cada 60s.
+- **`packages/vcoo-supervisor/plugins/watchdog.py`** — Monitorea Hermes cada 30s y lo reinicia si es necesario.
+- **`packages/vcoo-supervisor/plugins/updater.py`** — Ejecuta `hermes update` semanalmente.
+- **`packages/vcoo-supervisor/vcoo-supervisor.service`** — Unidad systemd.
 
 ---
 
