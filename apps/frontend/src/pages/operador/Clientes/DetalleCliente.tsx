@@ -53,6 +53,13 @@ const DetalleClientePage = () => {
     }
   }, [copiado]);
 
+  // ── Provider configuration state ──
+  const [provider, setProvider] = useState('openrouter');
+  const [model, setModel] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [configuring, setConfiguring] = useState(false);
+  const [configResult, setConfigResult] = useState<string | null>(null);
+
   const copiarAlPortapapeles = (texto: string, label: string) => {
     navigator.clipboard.writeText(texto).then(() => {
       setCopiado(label);
@@ -128,13 +135,6 @@ const DetalleClientePage = () => {
   const provisionToken = tokenData?.token;
   const installCommand = tokenData?.install_command;
   const onboardingUrl = tokenData?.onboarding_url;
-
-  // ── Provider configuration state ──
-  const [provider, setProvider] = useState('openrouter');
-  const [model, setModel] = useState('');
-  const [apiKey, setApiKey] = useState('');
-  const [configuring, setConfiguring] = useState(false);
-  const [configResult, setConfigResult] = useState<string | null>(null);
 
   const handleSetProvider = async () => {
     if (!provider || !apiKey) return;
