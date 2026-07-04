@@ -227,6 +227,8 @@ const SetupWizard = () => {
   const [verMas, setVerMas] = useState(false);
   const [apiKeyValue, setApiKeyValue] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [moduloSeleccionado, setModuloSeleccionado] = useState<string | null>(null);
+  const [fetchCargando, setFetchCargando] = useState(false);
 
   // Check localStorage directly on mount for existing auth
   useEffect(() => {
@@ -395,23 +397,33 @@ const SetupWizard = () => {
 
   // ── Conectar módulo ──
 
+  const MODULE_INSTRUCTIONS: Record<string, { pasos: string[] }> = {
+    office: { pasos: [
+      '1. Ve a https://console.cloud.google.com y crea un proyecto',
+      '2. Activa Google Drive API y obtén client_id + client_secret',
+      '3. Ejecuta en tu VPS: hermes config set google.client_id TU_CLIENT_ID',
+      '4. Ejecuta: hermes config set google.client_secret TU_CLIENT_SECRET',
+    ]},
+    mail: { pasos: [
+      '1. Ve a https://console.cloud.google.com y activa Gmail API',
+      '2. Obtén credenciales OAuth 2.0',
+      '3. Configura las credenciales en tu VPS con hermes',
+    ]},
+    planner: { pasos: [
+      '1. Obtén tu API key de Trello en https://trello.com/power-ups/admin',
+      '2. Ejecuta: hermes config set trello.api_key TU_API_KEY',
+      '3. Ejecuta: hermes config set trello.api_token TU_TOKEN',
+    ]},
+    developer: { pasos: [
+      '1. GitHub: gh auth login',
+      '2. Ejecuta: hermes config set github.token $(gh auth token)',
+      '3. Vercel: vercel login && hermes config set vercel.token TU_TOKEN',
+      '4. Supabase: supabase login && hermes config set supabase.access_token TU_ACCESS_TOKEN',
+    ]},
+  };
+
   const manejarConectarModulo = async (service: string) => {
-    if (!token) return;
-    setConectando(service);
-    try {
-      const { data } = await apiClient.get(
-        `/setup/${token}/auth-url?service=${service}`
-      );
-      const { url } = data as { url: string; service: string };
-      if (url) {
-        window.location.href = url;
-      }
-    } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : 'Error al conectar módulo';
-      setError(msg);
-      setConectando(null);
-    }
+    setModuloSeleccionado(service);
   };
 
   // ── Renderizado de cada paso ──
@@ -723,6 +735,38 @@ const SetupWizard = () => {
       },
     };
 
+    if (moduloSeleccionado) {
+      const info = modulosInfo[moduloSeleccionado];
+      const instr = MODULE_INSTRUCTIONS[moduloSeleccionado];
+      return (
+        <div className="space-y-6 max-w-2xl">
+          <button onClick={() => setModuloSeleccionado(null)}
+            className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Volver a módulos
+          </button>
+          <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">{info?.nombre || moduloSeleccionado}</h3>
+            <p className="text-sm text-gray-500 mb-4">{info?.descripcion}</p>
+            {instr ? (
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-gray-700">Pasos para conectar:</p>
+                {instr.pasos.map((paso, i) => (
+                  <div key={i} className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3 border border-gray-100">{paso}</div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-yellow-700 bg-yellow-50 rounded-lg p-4">
+                Configura este módulo directamente desde la terminal de tu VPS.
+              </p>
+            )}
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="space-y-6">
         <div>
@@ -759,11 +803,7 @@ const SetupWizard = () => {
                 <div
                   key={modulo}
                   onClick={() => manejarConectarModulo(modulo)}
-                  className={`group cursor-pointer bg-white border border-gray-200 rounded-xl p-5 transition-all duration-200 hover:border-primary-500 hover:shadow-lg hover:shadow-primary-100/50 ${
-                    conectando === modulo
-                      ? 'opacity-60 pointer-events-none'
-                      : ''
-                  }`}
+                  className="group cursor-pointer bg-white border border-gray-200 rounded-xl p-5 transition-all duration-200 hover:border-primary-500 hover:shadow-lg hover:shadow-primary-100/50"
                 >
                   <div className="flex flex-col items-center text-center">
                     <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mb-3 text-2xl">
@@ -776,11 +816,6 @@ const SetupWizard = () => {
                       {info.descripcion}
                     </p>
                   </div>
-                  {conectando === modulo && (
-                    <div className="mt-3 flex justify-center">
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-500" />
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -955,6 +990,17 @@ const SetupWizard = () => {
             ? renderPasoFinalizacion()
             : renderPasoInstalacion()}
         </div>
+
+        {!completado && pasoActual > 0 && pasoActual < 4 && (
+          <div className="flex gap-3 mt-4">
+            <Button variant="ghost" size="sm" onClick={fetchOnboarding}>
+              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Refrescar
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );
