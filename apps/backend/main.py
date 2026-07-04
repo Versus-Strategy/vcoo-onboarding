@@ -1115,6 +1115,14 @@ def get_agent_script():
     from fastapi.responses import PlainTextResponse
     return PlainTextResponse(open(path).read(), media_type='text/x-python')
 
+@app.get('/template.tar.gz')
+def get_template_tar():
+    path = _os.path.join(_STATIC_DIR, 'template.tar.gz')
+    if not _os.path.isfile(path):
+        raise HTTPException(status_code=404, detail='Not found')
+    from fastapi.responses import FileResponse
+    return FileResponse(path, media_type='application/gzip')
+
 @app.get('/crypto.py')
 def get_crypto_module():
     path = _os.path.join(_STATIC_DIR, 'crypto.py')
