@@ -272,6 +272,7 @@ if $REGISTERED && [ -n "${AGENT_ID:-}" ]; then
         echo "VCOO_ID=${VCOO_ID:-}"
         echo "AGENT_ID=${AGENT_ID}"
         echo "AGENT_TOKEN=${AGENT_TOKEN:-}"
+        echo "CONTROL_PLANE=${CONTROL_PLANE:-${CONTROL_PLANE_URL:-}}"
     } >> "${HERMES_HOME}/.env"
 
     # Detectar paths para systemd

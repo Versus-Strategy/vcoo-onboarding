@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=$HERMES_PYTHON $HERMES_SCRIPTS/vcoo/health-reporter.py
+ExecStart=$HERMES_PYTHON $HERMES_SCRIPTS/health-reporter.py
 EnvironmentFile=$HERMES_HOME/.env
 Restart=on-failure
 RestartSec=10
