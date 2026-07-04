@@ -36,7 +36,25 @@ API REST que orquesta el ciclo de vida completo de las instancias **VCOO** (Virt
 └─────────────────┘                  └──────────────────────┘
 ```
 
-La aplicación se despliega como **funciones serverless** en Vercel. El módulo `backend/` contiene la aplicación FastAPI completa, mientras que `api/index.py` es el punto de entrada para Vercel. En entorno local, los WebSockets están disponibles para comunicación en tiempo real agente-UI.
+La aplicación se despliega como **funciones serverless** en Vercel. `api/[...slug].py` es el punto de entrada para Vercel. En entorno local, los WebSockets están disponibles para comunicación en tiempo real agente-UI.
+
+Este repositorio es un **monorepo** con la siguiente estructura:
+
+```
+apps/           → Aplicaciones desplegables independientemente
+  backend/      → FastAPI (Python)
+  frontend/     → React SPA (TypeScript)
+packages/       → Código compartido (no se despliega solo)
+  agent/        → Scripts del agente VCOO
+  vsd/          → Watchdog systemd
+  template/     → Plantillas de provisioning
+infra/          → Configuración de infraestructura
+  docker-compose.yml
+  Dockerfile.backend
+  supabase/
+api/            → Entrypoint serverless Vercel
+docs/           → Documentación y planos
+```
 
 ## Endpoints de la API
 
@@ -136,20 +154,20 @@ Este sistema está separado de Hermes Agent por diseño: el watchdog no debe dep
 
 ## Variables de Entorno
 
-| Variable              | Local (backend/.env)     | Producción (Vercel)                             | Descripción                                                     |
-|-----------------------|--------------------------|-------------------------------------------------|-----------------------------------------------------------------|
-| `POSTGRES_URL`        | `sqlite:///./test.db`    | PostgreSQL URL (Supabase)                       | URL de conexión a base de datos.                                |
-| `MASTER_KEY`          | `vcoo-test-master-key-…` | Secreto seguro (64+ chars)                      | Clave HMAC para firmar/verificar todos los JWT.                 |
-| `DASHBOARD_PASSWORD`  | `versus`                 | Contraseña del dashboard de operador            | Login del operador en `/auth/verify`.                           |
-| `DASHBOARD_URL`       | `http://localhost:5173`  | `https://vcoo-dashboard.vercel.app`             | URL del frontend SPA (dashboard + wizard).                      |
-| `CONTROL_PLANE`       | `http://localhost:8000`  | `https://vcoo-onboarding.vercel.app`            | URL de esta API (para el agente y scripts).                     |
-| `FRONTEND_URL`        | — (usa DASHBOARD_URL)    | — (usa DASHBOARD_URL)                           | Deprecated — mantiene compatibilidad. Usar `DASHBOARD_URL`.     |
-| `OP_TOKEN`            | `op-test-token`          | Token para WebSocket operator                   | Autenticación del operador en WebSockets (local only).          |
-| `SECRET_KEY`          | `vcoo-test-secret-key-…` | Secreto secundario                              | Comodín para futuros usos.                                      |
-| `GOOGLE_CLIENT_ID`    | —                        | Google OAuth Client ID                          | Para autenticación OAuth con Google Workspace.                  |
-| `GOOGLE_CLIENT_SECRET`| —                        | Google OAuth Client Secret                      | Para autenticación OAuth con Google Workspace.                  |
-| `GOOGLE_REDIRECT_URI` | —                        | `https://vcoo-onboarding.vercel.app/auth/callback` | URI de redirect OAuth.                                          |
-| `TRELLO_API_KEY`      | —                        | Trello API Key                                  | Para integración con Trello.                                    |
+| Variable              | Local (apps/backend/.env) | Producción (Vercel)                             | Descripción                                                     |
+|-----------------------|---------------------------|-------------------------------------------------|-----------------------------------------------------------------|
+| `POSTGRES_URL`        | `sqlite:///./test.db`     | PostgreSQL URL (Supabase)                       | URL de conexión a base de datos.                                |
+| `MASTER_KEY`          | `vcoo-test-master-key-…`  | Secreto seguro (64+ chars)                      | Clave HMAC para firmar/verificar todos los JWT.                 |
+| `DASHBOARD_PASSWORD`  | `versus`                  | Contraseña del dashboard de operador            | Login del operador en `/auth/verify`.                           |
+| `DASHBOARD_URL`       | `http://10.0.0.1:3000`    | `https://vcoo-dashboard.vercel.app`             | URL del frontend SPA (dashboard + wizard).                      |
+| `CONTROL_PLANE`       | `http://10.0.0.1:8000`    | `https://vcoo-onboarding.vercel.app`            | URL de esta API (para el agente y scripts).                     |
+| `FRONTEND_URL`        | — (usa DASHBOARD_URL)     | — (usa DASHBOARD_URL)                           | Deprecated — mantiene compatibilidad. Usar `DASHBOARD_URL`.     |
+| `OP_TOKEN`            | `op-test-token`           | Token para WebSocket operator                   | Autenticación del operador en WebSockets (local only).          |
+| `SECRET_KEY`          | `vcoo-test-secret-key-…`  | Secreto secundario                              | Comodín para futuros usos.                                      |
+| `GOOGLE_CLIENT_ID`    | —                         | Google OAuth Client ID                          | Para autenticación OAuth con Google Workspace.                  |
+| `GOOGLE_CLIENT_SECRET`| —                         | Google OAuth Client Secret                      | Para autenticación OAuth con Google Workspace.                  |
+| `GOOGLE_REDIRECT_URI` | —                         | `https://vcoo-onboarding.vercel.app/auth/callback` | URI de redirect OAuth.                                          |
+| `TRELLO_API_KEY`      | —                         | Trello API Key                                  | Para integración con Trello.                                    |
 
 > **Importante:** En producción, las URLs `DASHBOARD_URL` y `CONTROL_PLANE` deben referenciarse mutuamente:
 > - `DASHBOARD_URL` → apunta al frontend SPA (p.ej. `https://vcoo-dashboard.vercel.app`)
@@ -162,71 +180,55 @@ Este sistema está separado de Hermes Agent por diseño: el watchdog no debe dep
 
 ```bash
 # Reconstruir e iniciar backend + base de datos
+cd infra
 docker compose up -d --build backend
 
-# La API está en http://localhost:8000
-# Documentación interactiva: http://localhost:8000/docs
+# La API está en http://10.0.0.1:8000
+# Documentación interactiva: http://10.0.0.1:8000/docs
 ```
 
 ### Backend (Python directo)
 
 ```bash
-cd backend
+cd apps/backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+uvicorn main:app --reload --port 8000 --host 0.0.0.0
 ```
 
-### Frontend (submódulo)
-
-El frontend es una SPA React (Vite + TypeScript) en `frontend/`, que es un **submódulo** de [`vcoo-dashboard`](https://github.com/Versus-Strategy/vcoo-dashboard).
+### Frontend
 
 ```bash
-# Primera vez: inicializar submódulo
-git submodule update --init --recursive
-
-# Desarrollo
-cd frontend
+cd apps/frontend
 npm install
 npm run dev
 ```
 
 El frontend estará en `http://10.0.0.1:3000` y se conectará automáticamente al backend en `http://10.0.0.1:8000`.
 
-#### Actualizar el submódulo
-
-```bash
-git submodule update --remote frontend
-```
-
-#### Clonar todo desde cero
-
-```bash
-git clone --recurse-submodules git@github.com:Versus-Strategy/vcoo-onboarding.git
-```
-
 ### Flujo local completo
 
 ```
-Frontend (10.0.0.1:3000) → API (10.0.0.1:8000) → SQLite (./test.db)
+Frontend (10.0.0.1:3000) → API (10.0.0.1:8000) → SQLite (apps/backend/test.db)
 ```
-
-Las variables en `backend/.env` ya están preconfiguradas para desarrollo local:
-- `DASHBOARD_URL=http://10.0.0.1:3000`
-- `CONTROL_PLANE=http://10.0.0.1:8000`
 
 ## Despliegue
 
-### Backend (Vercel)
+Cada `apps/*` se despliega como un proyecto separado en Vercel, apuntando al mismo repositorio pero con distinto **Root Directory**.
+
+### Backend (Vercel — proyecto `vcoo-onboarding`)
+
+| Configuración     | Valor                                    |
+|-------------------|------------------------------------------|
+| Root Directory    | `api/` (o raíz del repo)                |
+| Build Command     | `pip install -r ../apps/backend/requirements.txt` |
 
 ```bash
 vercel --prod
 ```
 
-El punto de entrada serverless es `api/[...slug].py`. Vercel enruta todas las rutas mediante la configuración en `vercel.json`. Las rutas de WebSocket no están disponibles en serverless (solo local).
-
-**Configurar variables de entorno en Vercel:**
+**Variables de entorno en Vercel:**
 
 | Variable            | Valor                                      |
 |---------------------|--------------------------------------------|
@@ -236,23 +238,26 @@ El punto de entrada serverless es `api/[...slug].py`. Vercel enruta todas las ru
 | `DASHBOARD_URL`     | `https://vcoo-dashboard.vercel.app`        |
 | `CONTROL_PLANE`     | `https://vcoo-onboarding.vercel.app`       |
 
-### Frontend (Vercel — proyecto separado)
+### Frontend (Vercel — proyecto `vcoo-dashboard`)
 
-El frontend se despliega como proyecto independiente en Vercel.
+| Configuración     | Valor                                    |
+|-------------------|------------------------------------------|
+| Root Directory    | `apps/frontend`                          |
+| Build Command     | `npm run build`                          |
 
 ```bash
-cd frontend
+cd apps/frontend
 vercel --prod
 ```
 
-**Configurar variable de entorno en el frontend:**
+**Variables de entorno en Vercel:**
 
 | Variable         | Valor                                      |
 |------------------|--------------------------------------------|
 | `VITE_API_URL`   | `https://vcoo-onboarding.vercel.app`       |
 
-> **Relación entre despliegues:** El backend necesita saber dónde está el frontend (`DASHBOARD_URL`), y el frontend necesita saber dónde está el backend (`VITE_API_URL`). Ambos deben configurarse explícitamente en los respectivos proyectos de Vercel — no hay defaults fiables en producción.
+> **Relación entre despliegues:** El backend necesita saber dónde está el frontend (`DASHBOARD_URL`), y el frontend necesita saber dónde está el backend (`VITE_API_URL`). Ambos deben configurarse explícitamente en los respectivos proyectos de Vercel. El monorepo permite que cambios en `apps/backend/` solo redeployen el backend, y cambios en `apps/frontend/` solo redeployen el frontend.
 
-## Submódulo
+## Repositorios Relacionados
 
-`frontend/` es un submódulo que apunta a [`vcoo-dashboard`](https://github.com/Versus-Strategy/vcoo-dashboard). Para más detalles sobre el frontend, consulta su [README](frontend/README.md).
+- [vcoo-dashboard](https://github.com/Versus-Strategy/vcoo-dashboard) — Frontend React SPA (integrado en `apps/frontend/`)
