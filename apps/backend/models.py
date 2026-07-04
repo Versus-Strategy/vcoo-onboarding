@@ -134,7 +134,7 @@ class AuditLog(Base):
     action = Column(String(64), nullable=False, index=True)
     actor_email = Column(String(255), nullable=True)
     vcoo_id = Column(String(36), nullable=True, index=True)
-    metadata = Column(Text, nullable=True)  # JSON
+    log_metadata = Column(Text, nullable=True)  # JSON
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 

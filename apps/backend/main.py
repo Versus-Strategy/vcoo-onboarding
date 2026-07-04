@@ -942,7 +942,7 @@ def get_vcoo_audit(vcoo_id: str, db: Session = Depends(get_db)):
                 "id": str(log.id),
                 "action": log.action,
                 "actor_email": log.actor_email,
-                "metadata": json.loads(log.metadata) if log.metadata else None,
+                "metadata": json.loads(log.log_metadata) if log.log_metadata else None,
                 "created_at": log.created_at.isoformat() if log.created_at else None,
             }
             for log in logs

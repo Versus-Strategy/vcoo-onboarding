@@ -516,7 +516,7 @@ def create_audit_log(db: Session, action: str, actor_email: str = None, vcoo_id:
         action=action,
         actor_email=actor_email,
         vcoo_id=vcoo_id,
-        metadata=json.dumps(metadata) if metadata else None,
+        log_metadata=json.dumps(metadata) if metadata else None,
     )
     db.add(log)
     db.commit()
