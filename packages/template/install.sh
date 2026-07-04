@@ -331,10 +331,10 @@ if $REGISTERED && [ -n "${AGENT_ID:-}" ]; then
 import json
 with open('$VCOO_SUPERVISOR_DIR/config.json') as f:
     cfg = json.load(f)
-        tk = cfg.setdefault('plugins', {}).setdefault('tick', {})
-        tk['agent_id'] = '$AGENT_ID'
-        tk['agent_token'] = '$AGENT_TOKEN'
-        tk['control_plane'] = '${CONTROL_PLANE:-${CONTROL_PLANE_URL:-}}'
+tk = cfg.setdefault('plugins', {}).setdefault('tick', {})
+tk['agent_id'] = '$AGENT_ID'
+tk['agent_token'] = '$AGENT_TOKEN'
+tk['control_plane'] = '${CONTROL_PLANE:-${CONTROL_PLANE_URL:-}}'
 with open('$VCOO_SUPERVISOR_DIR/config.json', 'w') as f:
     json.dump(cfg, f, indent=2)
 "
