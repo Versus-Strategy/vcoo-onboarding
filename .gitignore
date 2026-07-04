@@ -8,8 +8,12 @@ master.key
 .vercel
 node_modules/
 dist/
-frontend/.env
 
-# test files
-backend/test*.py
-backend/test.db
+# Monorepo: apps
+apps/*/.env
+apps/backend/test*.py
+apps/backend/test.db
+
+# Monorepo: packages
+packages/*/node_modules/
+packages/*/dist/
