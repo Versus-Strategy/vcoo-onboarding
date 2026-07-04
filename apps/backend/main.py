@@ -1,4 +1,4 @@
-import sys, os as _os, re as _re
+import sys, os as _os
 _sys_path = _os.path.dirname(__file__)
 if _sys_path not in sys.path:
     sys.path.insert(0, _sys_path)
@@ -17,18 +17,7 @@ import json
 import os as _os
 
 
-# ── Helper: resolve VCOO ID from onboarding URL param ─────────
-# Accepts either a VCOO UUID or a legacy JWT provision token.
-_UUID_RE = _re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
 
-def _resolve_setup_vcoo(identifier: str, db: Session) -> str | None:
-    """Return vcoo_id from a UUID (lookup active token) or a JWT (decode)."""
-    if _UUID_RE.match(identifier):
-        v = crud.get_vcoo(db, identifier)
-        if v:
-            return identifier
-    vcoo_id = crud.lookup_provision_token(db, identifier)
-    return vcoo_id
 
 app = FastAPI(title="VCOO Onboarding API v2")
 
@@ -278,8 +267,8 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
     2. Auth but client doesn't own this VCOO → {requires_registration: false, ...state}
     3. Auth and owns it → full onboarding state (existing behavior)
     Read-only — does not consume the token."""
-    vcoo_id = _resolve_setup_vcoo(identifier, db)
-    if not vcoo_id:
+    v = crud.get_vcoo(db, identifier)
+    if not v:
         raise HTTPException(
             status_code=400,
             detail={
@@ -288,9 +277,7 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
                 "action": "solicitar_nuevo_enlace"
             }
         )
-    v = crud.get_vcoo(db, vcoo_id)
-    if not v:
-        raise HTTPException(status_code=404, detail="VCOO not found")
+    vcoo_id = str(v.id)
 
     # Determine auth state
     client_payload = None
@@ -370,8 +357,8 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
 def trigger_step_verification(identifier: str, db: Session = Depends(get_db)):
     """Client clicks 'Verificar' in the wizard — enqueues the verification command.
     If no agent is connected, auto-advances the step for dev/demo mode."""
-    vcoo_id = _resolve_setup_vcoo(identifier, db)
-    if not vcoo_id:
+    v = crud.get_vcoo(db, identifier)
+    if not v:
         raise HTTPException(
             status_code=400,
             detail={
@@ -380,6 +367,7 @@ def trigger_step_verification(identifier: str, db: Session = Depends(get_db)):
                 "action": "solicitar_nuevo_enlace"
             }
         )
+    vcoo_id = str(v.id)
     st = crud.get_onboarding_state(db, vcoo_id)
     if not st:
         raise HTTPException(status_code=404, detail="No hay datos de onboarding")
@@ -423,8 +411,8 @@ def trigger_step_verification(identifier: str, db: Session = Depends(get_db)):
 @ app.get("/setup/{identifier}/auth-url")
 def get_auth_url(identifier: str, service: str = "", db: Session = Depends(get_db)):
     """Generates an OAuth authorization URL for the given service."""
-    vcoo_id = _resolve_setup_vcoo(identifier, db)
-    if not vcoo_id:
+    v = crud.get_vcoo(db, identifier)
+    if not v:
         raise HTTPException(
             status_code=400,
             detail={
@@ -433,6 +421,7 @@ def get_auth_url(identifier: str, service: str = "", db: Session = Depends(get_d
                 "action": "solicitar_nuevo_enlace"
             }
         )
+    vcoo_id = str(v.id)
     service = service.lower().strip()
     if service == "google":
         client_id = _os.getenv("GOOGLE_CLIENT_ID", "")
@@ -577,8 +566,8 @@ def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session
 @ app.get("/setup/{identifier}/hermes-commands")
 def get_hermes_commands_endpoint(identifier: str, service: str = "", db: Session = Depends(get_db)):
     """Returns Hermes CLI config commands for a service."""
-    vcoo_id = _resolve_setup_vcoo(identifier, db)
-    if not vcoo_id:
+    v = crud.get_vcoo(db, identifier)
+    if not v:
         raise HTTPException(
             status_code=400,
             detail={
@@ -587,6 +576,7 @@ def get_hermes_commands_endpoint(identifier: str, service: str = "", db: Session
                 "action": "solicitar_nuevo_enlace"
             }
         )
+    vcoo_id = str(v.id)
     service = service.lower().strip()
     commands_map = {
         "google": ["hermes config set google.client_id TU_CLIENT_ID", "hermes config set google.client_secret TU_CLIENT_SECRET"],
