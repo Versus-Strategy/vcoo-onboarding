@@ -12,46 +12,6 @@ COMMAND_MAP = {
     "finalize":         None,
 }
 
-# Qué tipo de autenticación requiere cada proveedor
-PROVIDER_AUTH: dict[str, dict] = {
-    "opencode-zen":     {"type": "oauth",   "hint": "Autentícate con OpenCode Zen"},
-    "opencode-go":      {"type": "oauth",   "hint": "Autentícate con OpenCode Go"},
-    "nous":             {"type": "oauth",   "hint": "Autentícate con Nous Portal"},
-    "openai-codex":     {"type": "oauth",   "hint": "Autentícate con OpenAI Codex (hermes auth add openai-codex)"},
-    "anthropic":        {"type": "api_key", "credential": "ANTHROPIC_API_KEY",  "hint": "Consigue tu API key en https://console.anthropic.com"},
-    "openai-api":       {"type": "api_key", "credential": "OPENAI_API_KEY",    "hint": "Consigue tu API key en https://platform.openai.com"},
-    "openrouter":       {"type": "api_key", "credential": "OPENROUTER_API_KEY","hint": "Consigue tu API key en https://openrouter.ai/keys"},
-    "copilot":          {"type": "api_key", "credential": "GITHUB_TOKEN",      "hint": "Genera un token en https://github.com/settings/tokens"},
-    "gemini":           {"type": "api_key", "credential": "GOOGLE_API_KEY",    "hint": "Consigue tu API key en https://aistudio.google.com"},
-    "huggingface":      {"type": "api_key", "credential": "HF_TOKEN",          "hint": "Consigue tu token en https://huggingface.co/settings/tokens"},
-    "nvidia":           {"type": "api_key", "credential": "NVIDIA_API_KEY",    "hint": "Consigue tu API key en https://build.nvidia.com"},
-    "deepseek":         {"type": "api_key", "credential": "DEEPSEEK_API_KEY",  "hint": "Consigue tu API key en platform.deepseek.com"},
-    "xai":              {"type": "api_key", "credential": "XAI_API_KEY",       "hint": "Consigue tu API key en https://console.x.ai"},
-    "bedrock":          {"type": "manual",  "hint": "Configura AWS credentials en tu VPS (aws configure)"},
-    "azure-foundry":    {"type": "api_key", "credential": "AZURE_API_KEY",     "hint": "Consigue tu API key en portal.azure.com"},
-    "ollama-cloud":     {"type": "api_key", "credential": "OLLAMA_API_KEY",    "hint": "Consigue tu API key en https://ollama.com/settings"},
-    "lmstudio":         {"type": "manual",  "hint": "LM Studio corre localmente, no requiere API key"},
-    "custom":           {"type": "manual",  "hint": "Configura OPENAI_BASE_URL y OPENAI_API_KEY en tu VPS"},
-    "zai":              {"type": "api_key", "credential": "GLM_API_KEY",       "hint": "Consigue tu API key en zai.plus"},
-    "kimi-coding":      {"type": "api_key", "credential": "KIMI_API_KEY",      "hint": "Consigue tu API key en kimi.com"},
-    "minimax":          {"type": "api_key", "credential": "MINIMAX_API_KEY",   "hint": "Consigue tu API key en minimax.io"},
-    "xai-oauth":        {"type": "oauth",   "hint": "Autentícate con xAI Grok (SuperGrok / Premium+)"},
-    "minimax-oauth":    {"type": "oauth",   "hint": "Autentícate con MiniMax OAuth"},
-    "qwen-oauth":       {"type": "oauth",   "hint": "Autentícate con Qwen OAuth"},
-    "alibaba":          {"type": "api_key", "credential": "ALIBABA_API_KEY",   "hint": "Consigue tu API key en aliyun.com"},
-    "stepfun":          {"type": "api_key", "credential": "STEP_API_KEY",      "hint": "Consigue tu API key en stepfun.com"},
-    "tencent-tokenhub": {"type": "api_key", "credential": "TENCENT_API_KEY",   "hint": "Consigue tu API key en tencent.com"},
-    "xiaomi":           {"type": "api_key", "credential": "XIAOMI_API_KEY",    "hint": "Consigue tu API key en xiaomi.com"},
-    "arcee":            {"type": "api_key", "credential": "ARCEEAI_API_KEY",   "hint": "Consigue tu API key en arcee.ai"},
-    "gmi":              {"type": "api_key", "credential": "GMI_API_KEY",       "hint": "Consigue tu API key en gmi.cloud"},
-    "kilocode":         {"type": "api_key", "credential": "KILOCODE_API_KEY",   "hint": "Consigue tu API key en kilocode.ai"},
-    "novita":           {"type": "api_key", "credential": "NOVITA_API_KEY",    "hint": "Consigue tu API key en novita.ai"},
-    "moa":              {"type": "manual",  "hint": "Mixture of Agents usa múltiples providers"},
-    "alibaba-coding-plan": {"type": "api_key", "credential": "ALIBABA_API_KEY","hint": "Consigue tu API key en aliyun.com"},
-    "vertex":           {"type": "manual",  "hint": "Configura Google Vertex AI en tu VPS (gcloud auth)"},
-}
-
-
 class Plugin:
     name = "tick"
     interval = 60
@@ -100,7 +60,7 @@ class Plugin:
         encrypted = payload.get("encrypted", "")
         if not provider or not encrypted:
             return {"status": "error", "output": "missing provider or key"}
-        auth = PROVIDER_AUTH.get(provider, {})
+        auth = self._parse_auth_from_config().get(provider, {})
         if auth.get("type") == "oauth":
             return {"status": "ok", "output": f"OAuth para {provider} pendiente"}
         # Decrypt if needed
@@ -176,6 +136,53 @@ class Plugin:
         except Exception:
             pass
 
+    def _parse_auth_from_config(self) -> dict[str, dict]:
+        """Parse auth metadata dynamically from Hermes config.yaml comments.
+        Lines like: #   "anthropic" - Direct Anthropic API (requires: ANTHROPIC_API_KEY)
+        Providers not in config.yaml get inferred defaults.
+        """
+        import re as _re
+        config_path = os.path.expanduser("~/.hermes/config.yaml")
+        auth_map: dict[str, dict] = {}
+        if os.path.isfile(config_path):
+            try:
+                with open(config_path) as f:
+                    content = f.read()
+                for m in _re.finditer(r'#\s+"(\w[\w-]+)"\s+-\s+(.+)', content):
+                    pid = m.group(1)
+                    desc = m.group(2)
+                    auth: dict = {"hint": desc.strip()}
+                    req_match = _re.search(r"requires:\s*\$?(\w[\w-]*)", desc)
+                    if req_match:
+                        req = req_match.group(1)
+                        if req.startswith("hermes") or req in ("",):
+                            auth["type"] = "oauth"
+                        else:
+                            auth["type"] = "api_key"
+                            auth["credential"] = req
+                    else:
+                        auth["type"] = "manual"
+                    auth_map[pid] = auth
+            except Exception:
+                pass
+        # Infer type for providers not in config.yaml
+        for pid, atype, cred, hint in [
+            ("opencode-go",  "api_key", "OPENCODE_API_KEY", "API key de OpenCode Go"),
+            ("opencode-zen", "api_key", "OPENCODE_API_KEY", "API key de OpenCode Zen"),
+            ("openai-api",   "api_key", "OPENAI_API_KEY",   "API key de OpenAI (https://platform.openai.com)"),
+            ("bedrock",      "manual",  "",                 "Configura AWS credentials (aws configure)"),
+            ("custom",       "manual",  "",                 "Configura OPENAI_BASE_URL y OPENAI_API_KEY"),
+            ("lmstudio",     "manual",  "",                 "LM Studio corre localmente, no requiere API key"),
+            ("moa",          "manual",  "",                 "Mixture of Agents requiere múltiples providers"),
+            ("vertex",       "manual",  "",                 "Configura Google Vertex AI (gcloud auth)"),
+        ]:
+            if pid not in auth_map:
+                entry = {"type": atype, "hint": hint}
+                if cred:
+                    entry["credential"] = cred
+                auth_map[pid] = entry
+        return auth_map
+
     def _discover_providers(self):
         """Read providers dynamically from Hermes' CANONICAL_PROVIDERS."""
         hermes_dir = os.path.expanduser("~/.hermes/hermes-agent")
@@ -192,12 +199,13 @@ class Plugin:
             mod = _iu.module_from_spec(spec)
             spec.loader.exec_module(mod)
             entries = getattr(mod, "CANONICAL_PROVIDERS", [])
+            auth_map = self._parse_auth_from_config()
             result = []
             for e in entries:
                 if e.slug.startswith("_"):
                     continue
                 provider = {"id": e.slug, "nombre": e.label, "descripcion": e.tui_desc}
-                auth = PROVIDER_AUTH.get(e.slug)
+                auth = auth_map.get(e.slug)
                 if auth:
                     provider["auth"] = auth
                 result.append(provider)
