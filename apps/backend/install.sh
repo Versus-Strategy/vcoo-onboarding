@@ -14,7 +14,7 @@ set -euo pipefail
 #   3. Descarga la template
 #   4. Configura .env con secrets del control plane
 #   5. Ejecuta install.sh de la template (Hermes + skills + cron)
-#   6. Arranca health reporter en background
+#   6. Arranca vcoo-supervisor en background
 #   7. Muestra resumen final
 #
 # Sin PROVISION_TOKEN → instalación manual (solo template)
@@ -255,7 +255,7 @@ echo "     - Trello:        Configurar API key en el panel"
 echo "     - GitHub:        gh auth login"
 echo ""
 echo "  2. Verifica el estado de los servicios:"
-echo "     systemctl status vcoo-health-reporter"
+echo "     systemctl status vcoo-supervisor"
 echo "     systemctl status vcoo-hermes-gateway"
 echo ""
 echo "  3. Edita tu configuración:"
