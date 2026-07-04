@@ -140,7 +140,7 @@ if ! command -v hermes &>/dev/null; then
     # Documentación: https://hermes-agent.nousresearch.com/docs/installation
     if ! command -v hermes &>/dev/null; then
         info "Instalando Hermes Agent (método oficial)..."
-        curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup
+        curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup --skip-browser --non-interactive
         export PATH="$HOME/.local/bin:$PATH"
     fi
     ok "Hermes Agent $(hermes --version 2>/dev/null || echo 'presente')"
