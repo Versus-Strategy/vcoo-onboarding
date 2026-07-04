@@ -70,6 +70,28 @@ async def startup():
                 ))
                 conn.commit()
                 print("[migration] Added capabilities column to agents table")
+            # Check if template_version column exists
+            result = conn.execute(_sql_text("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name='agents' AND column_name='template_version'
+            """))
+            if not result.fetchone():
+                conn.execute(_sql_text(
+                    "ALTER TABLE agents ADD COLUMN template_version VARCHAR(32)"
+                ))
+                conn.commit()
+                print("[migration] Added template_version column to agents table")
+            # Check if supervisor_version column exists
+            result = conn.execute(_sql_text("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name='agents' AND column_name='supervisor_version'
+            """))
+            if not result.fetchone():
+                conn.execute(_sql_text(
+                    "ALTER TABLE agents ADD COLUMN supervisor_version VARCHAR(32)"
+                ))
+                conn.commit()
+                print("[migration] Added supervisor_version column to agents table")
     except Exception as e:
         import sys as _sys
         print(f"[migration] Skipped (non-critical): {e}", file=_sys.stderr)
