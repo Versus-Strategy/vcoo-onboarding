@@ -965,6 +965,14 @@ const SetupWizard = () => {
             pasoActual={pasoActual}
             pasosTotales={4}
             pasos={PASOS}
+            onStepClick={(idx) => {
+              if (idx <= pasoBackend && idx !== pasoActual) {
+                setVistaActual(idx);
+                setProveedorSeleccionado(null);
+                setModuloSeleccionado(null);
+                setError(null);
+              }
+            }}
           />
         </div>
 

@@ -4,9 +4,10 @@ interface StepIndicatorProps {
   pasoActual: number;
   pasosTotales: number;
   pasos: string[];
+  onStepClick?: (idx: number) => void;
 }
 
-const StepIndicator: React.FC<StepIndicatorProps> = ({ pasoActual, pasosTotales, pasos }) => {
+const StepIndicator: React.FC<StepIndicatorProps> = ({ pasoActual, pasosTotales, pasos, onStepClick }) => {
   const porcentaje = Math.round((pasoActual / pasosTotales) * 100);
 
   return (
@@ -24,8 +25,13 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({ pasoActual, pasosTotales,
       </div>
 
       <div className="flex justify-between">
-        {pasos.map((paso, idx) => (
-          <div key={idx} className="flex flex-col items-center">
+        {pasos.map((paso, idx) => {
+          const unlocked = idx <= pasoActual;
+          return (
+          <div key={idx}
+            onClick={() => unlocked && onStepClick?.(idx)}
+            className={`flex flex-col items-center ${unlocked && onStepClick ? 'cursor-pointer' : ''}`}
+          >
             <div
               className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
                 idx < pasoActual
@@ -55,7 +61,8 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({ pasoActual, pasosTotales,
               {paso}
             </span>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
