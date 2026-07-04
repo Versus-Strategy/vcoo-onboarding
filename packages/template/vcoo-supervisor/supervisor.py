@@ -34,7 +34,7 @@ class Supervisor:
         while self.running:
             now = time.time()
             for plugin in self.plugins:
-                if now - self.last_tick[plugin.name] >= self.config.get("plugins", {}).get(plugin.name, {}).get("interval", plugin.interval):
+                if now - self.last_tick[plugin.name] >= plugin.interval:
                     try:
                         plugin.tick()
                     except Exception as e:

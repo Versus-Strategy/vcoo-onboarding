@@ -1,6 +1,10 @@
 {
   "plugins": {
     "health_reporter": {
+      "enabled": false,
+      "interval": 60
+    },
+    "tick": {
       "enabled": true,
       "interval": 60
     },

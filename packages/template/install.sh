@@ -140,10 +140,18 @@ if ! command -v hermes &>/dev/null; then
     # Documentación: https://hermes-agent.nousresearch.com/docs/installation
     if ! command -v hermes &>/dev/null; then
         info "Instalando Hermes Agent (método oficial)..."
-        curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup --skip-browser --non-interactive
-        export PATH="$HOME/.local/bin:$PATH"
+        if curl -fsSL --connect-timeout 10 --max-time 300 https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup --skip-browser --non-interactive; then
+            export PATH="$HOME/.local/bin:$PATH"
+            hash -r
+            ok "Hermes Agent $(hermes --version 2>/dev/null || echo 'instalado')"
+        else
+            warn "No se pudo descargar/instalar Hermes Agent automáticamente."
+            warn "  Si hay conexión a Internet, instálalo manualmente:"
+            warn "    curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash"
+        fi
+    else
+        ok "Hermes Agent $(hermes --version 2>/dev/null || echo 'presente')"
     fi
-    ok "Hermes Agent $(hermes --version 2>/dev/null || echo 'presente')"
 else
     ok "Hermes Agent $(hermes --version 2>/dev/null || echo 'presente')"
 fi
