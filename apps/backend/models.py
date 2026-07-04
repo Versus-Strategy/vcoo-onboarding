@@ -32,6 +32,8 @@ class Agent(Base):
     health_payload = Column(Text, nullable=True)  # JSON blob from health reporter
     encryption_key = Column(String, nullable=True)  # Fernet key for remote config
     capabilities = deferred(Column(Text, nullable=True))  # JSON blob: agent's reported capabilities
+    template_version = Column(String(32), nullable=True)
+    supervisor_version = Column(String(32), nullable=True)
 
     def to_dict(self):
         # Compute effective online/offline from last_seen with 120s threshold
@@ -118,6 +120,18 @@ class OnboardingState(Base):
 
     # relationship
     vcoo = relationship("VCOO", backref="onboarding_state", uselist=False)
+
+
+class AuditLog(Base):
+    """Audit trail for operator actions."""
+    __tablename__ = 'audit_log'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    action = Column(String(64), nullable=False, index=True)
+    actor_email = Column(String(255), nullable=True)
+    vcoo_id = Column(String(36), nullable=True, index=True)
+    metadata = Column(Text, nullable=True)  # JSON
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
 class Client(Base):

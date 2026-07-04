@@ -3,6 +3,7 @@ from sqlalchemy import text
 from fastapi import HTTPException
 import models
 from datetime import datetime, timedelta
+import json
 
 
 def create_vcoo(db: Session, name: str = None):
@@ -506,3 +507,34 @@ def process_agent_result(
             cmd_name = get_step_command(step)
             create_command(db, agent_id=agent_id, command=cmd_name, step=step)
         return cmd, True, step, 201  # same step, retry pending
+
+
+# ── Audit Log ────────────────────────────────────────────────
+
+def create_audit_log(db: Session, action: str, actor_email: str = None, vcoo_id: str = None, metadata: dict = None):
+    log = models.AuditLog(
+        action=action,
+        actor_email=actor_email,
+        vcoo_id=vcoo_id,
+        metadata=json.dumps(metadata) if metadata else None,
+    )
+    db.add(log)
+    db.commit()
+    return log
+
+
+def get_audit_log_for_vcoo(db: Session, vcoo_id: str, limit: int = 20):
+    return db.query(models.AuditLog).filter(
+        models.AuditLog.vcoo_id == vcoo_id
+    ).order_by(models.AuditLog.created_at.desc()).limit(limit).all()
+
+
+def update_agent_version(db: Session, agent_id: str, template_version: str = None, supervisor_version: str = None):
+    agent = db.query(models.Agent).filter(models.Agent.id == agent_id).first()
+    if not agent:
+        return
+    if template_version:
+        agent.template_version = template_version
+    if supervisor_version:
+        agent.supervisor_version = supervisor_version
+    db.commit()
