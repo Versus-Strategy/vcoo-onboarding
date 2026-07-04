@@ -219,6 +219,7 @@ def create_vcoo(payload: dict = {}, db: Session = Depends(get_db)):
     token = crud.create_provision_for_vcoo(db, str(vcoo.id))
     frontend_url = _os.getenv('FRONTEND_URL', 'http://localhost:5173')
     onboarding_url = frontend_url.rstrip('/') + '/setup/' + str(vcoo.id)
+    crud.create_audit_log(db, action="vcoo.created", vcoo_id=str(vcoo.id), metadata={"name": name})
     return {
         "id": str(vcoo.id),
         "name": vcoo.name,
@@ -622,6 +623,7 @@ def regenerate_token(vcoo_id: str, db: Session = Depends(get_db)):
     control_plane = _os.getenv('CONTROL_PLANE', 'http://localhost:8000')
     install_cmd = f"curl -sSL {control_plane}/install.sh | PROVISION_TOKEN={token} bash -"
     onboarding_url = f"{dashboard_url}/setup/{vcoo_id}"
+    crud.create_audit_log(db, action="token.regenerated", vcoo_id=vcoo_id)
     return {"token": token, "install_command": install_cmd, "onboarding_url": onboarding_url}
 
 @app.post("/vcoo/{vcoo_id}/complete")
@@ -645,6 +647,10 @@ def reactivate_vcoo(vcoo_id: str, db: Session = Depends(get_db)):
 @app.delete("/vcoo/{vcoo_id}")
 def delete_vcoo(vcoo_id: str, db: Session = Depends(get_db)):
     """Permanently delete a VCOO and all associated data."""
+    v = crud.get_vcoo(db, vcoo_id)
+    if not v:
+        raise HTTPException(status_code=404, detail="VCOO not found")
+    crud.create_audit_log(db, action="vcoo.deleted", vcoo_id=vcoo_id, metadata={"name": v.name})
     ok = crud.delete_vcoo(db, vcoo_id)
     if not ok:
         raise HTTPException(status_code=404, detail="VCOO not found")
@@ -969,6 +975,11 @@ def agent_health_report(agent_id: str, payload: dict = {}, db: Session = Depends
         ok = crud.update_agent_health(db, agent_id, payload)
         if not ok:
             raise HTTPException(status_code=404, detail="agent not found")
+        # Store version info if reported
+        if payload.get("template_version") or payload.get("supervisor_version"):
+            crud.update_agent_version(db, agent_id,
+                template_version=payload.get("template_version"),
+                supervisor_version=payload.get("supervisor_version"))
         return {"status": "ok", "agent_id": agent_id}
     except HTTPException:
         raise
