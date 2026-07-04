@@ -244,7 +244,8 @@ const AuthForm = ({ setupToken, onAutenticado }: AuthFormProps) => {
 // ── Componente principal ──
 
 const SetupWizard = () => {
-  const { token } = useParams<{ token: string }>();
+  const params = useParams<{ token: string }>();
+  const token = params.token || window.location.pathname.replace('/setup/', '');
   const { auth } = useAuth();
 
   // All hooks must be at the top level, before any conditional returns
