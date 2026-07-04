@@ -136,51 +136,67 @@ class Plugin:
         except Exception:
             pass
 
-    def _parse_auth_from_config(self) -> dict[str, dict]:
-        """Parse auth metadata dynamically from Hermes config.yaml comments.
-        Lines like: #   "anthropic" - Direct Anthropic API (requires: ANTHROPIC_API_KEY)
-        Providers not in config.yaml get inferred defaults.
-        """
+    def _parse_auth_from_registry(self) -> dict[str, dict]:
+        """Parse auth metadata from Hermes' PROVIDER_REGISTRY via text scan."""
         import re as _re
-        config_path = os.path.expanduser("~/.hermes/config.yaml")
+        hermes_dir = os.path.expanduser("~/.hermes/hermes-agent")
+        auth_path = os.path.join(hermes_dir, "hermes_cli", "auth.py")
         auth_map: dict[str, dict] = {}
-        if os.path.isfile(config_path):
-            try:
-                with open(config_path) as f:
-                    content = f.read()
-                for m in _re.finditer(r'#\s+"(\w[\w-]+)"\s+-\s+(.+)', content):
-                    pid = m.group(1)
-                    desc = m.group(2)
-                    auth: dict = {"hint": desc.strip()}
-                    req_match = _re.search(r"requires:\s*\$?(\w[\w-]*)", desc)
-                    if req_match:
-                        req = req_match.group(1)
-                        if req.startswith("hermes") or req in ("",):
-                            auth["type"] = "oauth"
-                        else:
-                            auth["type"] = "api_key"
-                            auth["credential"] = req
-                    else:
-                        auth["type"] = "manual"
-                    auth_map[pid] = auth
-            except Exception:
-                pass
-        # Infer type for providers not in config.yaml
-        for pid, atype, cred, hint in [
-            ("opencode-go",  "api_key", "OPENCODE_API_KEY", "API key de OpenCode Go"),
-            ("opencode-zen", "api_key", "OPENCODE_API_KEY", "API key de OpenCode Zen"),
-            ("openai-api",   "api_key", "OPENAI_API_KEY",   "API key de OpenAI (https://platform.openai.com)"),
-            ("bedrock",      "manual",  "",                 "Configura AWS credentials (aws configure)"),
-            ("custom",       "manual",  "",                 "Configura OPENAI_BASE_URL y OPENAI_API_KEY"),
-            ("lmstudio",     "manual",  "",                 "LM Studio corre localmente, no requiere API key"),
-            ("moa",          "manual",  "",                 "Mixture of Agents requiere múltiples providers"),
-            ("vertex",       "manual",  "",                 "Configura Google Vertex AI (gcloud auth)"),
-        ]:
-            if pid not in auth_map:
-                entry = {"type": atype, "hint": hint}
-                if cred:
-                    entry["credential"] = cred
+        if not os.path.isfile(auth_path):
+            return auth_map
+        try:
+            text = open(auth_path).read()
+            idx = text.find("PROVIDER_REGISTRY")
+            if idx < 0:
+                return auth_map
+            block = text[idx:]
+            # Extract each ProviderConfig block by counting parens
+            pos = 0
+            while True:
+                em = _re.search(r'"(\w[\w-]+)"\s*:\s*ProviderConfig\(', block[pos:])
+                if not em:
+                    break
+                pid = em.group(1)
+                start = pos + em.end()
+                depth = 1
+                i = start
+                while i < len(block) and depth > 0:
+                    if block[i] == '(':
+                        depth += 1
+                    elif block[i] == ')':
+                        depth -= 1
+                    i += 1
+                body = block[start:i-1]  # content inside ProviderConfig( ... )
+                # Extract fields from body
+                name = pid
+                auth_type = "manual"
+                env_vars: list[str] = []
+                for f in _re.finditer(r'(\w+)\s*=\s*"([^"]*)"', body):
+                    k, v = f.group(1), f.group(2)
+                    if k == "name":
+                        name = v
+                    elif k == "auth_type":
+                        if v.startswith("oauth") or v == "external_process":
+                            auth_type = "oauth"
+                        elif v == "api_key":
+                            auth_type = "api_key"
+                ev = _re.search(r'api_key_env_vars\s*=\s*\(([^)]*)\)', body)
+                if ev:
+                    env_vars = [v.strip().strip('"\'') for v in ev.group(1).split(",") if v.strip()]
+                entry: dict = {"type": auth_type}
+                if env_vars:
+                    entry["credential"] = env_vars[0]
+                if auth_type == "oauth":
+                    entry["hint"] = f"Autentícate con {name}"
+                elif auth_type == "api_key":
+                    var = env_vars[0] if env_vars else "API_KEY"
+                    entry["hint"] = f"Introduce tu API key ({var})"
+                else:
+                    entry["hint"] = f"Configura {name} manualmente"
                 auth_map[pid] = entry
+                pos = start + (i - start)
+        except Exception:
+            pass
         return auth_map
 
     def _discover_providers(self):
@@ -199,7 +215,7 @@ class Plugin:
             mod = _iu.module_from_spec(spec)
             spec.loader.exec_module(mod)
             entries = getattr(mod, "CANONICAL_PROVIDERS", [])
-            auth_map = self._parse_auth_from_config()
+            auth_map = self._parse_auth_from_registry()
             result = []
             for e in entries:
                 if e.slug.startswith("_"):
