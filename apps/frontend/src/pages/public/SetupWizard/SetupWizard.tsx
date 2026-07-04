@@ -41,46 +41,46 @@ const PROVEEDORES: ProviderInfo[] = [
     nombre: 'Anthropic',
     descripcion: 'Claude — modelos de última generación',
     logo: 'https://www.anthropic.com/favicon.ico',
-    color: 'text-orange-400',
+    color: 'text-orange-600',
   },
   {
     id: 'openai',
     nombre: 'OpenAI',
     descripcion: 'GPT-4, GPT-4o y más',
     logo: 'https://upload.wikimedia.org/wikipedia/commons/0/04/ChatGPT_logo.svg',
-    color: 'text-green-400',
+    color: 'text-green-600',
   },
   {
     id: 'google',
     nombre: 'Google IA',
     descripcion: 'Gemini y modelos de Google',
     logo: 'https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png',
-    color: 'text-blue-400',
+    color: 'text-blue-600',
   },
   {
     id: 'mistral',
     nombre: 'Mistral AI',
     descripcion: 'Modelos abiertos y eficientes',
     logo: 'https://mistral.ai/favicon.ico',
-    color: 'text-purple-400',
+    color: 'text-purple-600',
   },
   {
     id: 'xai',
     nombre: 'xAI',
     descripcion: 'Grok y modelos de xAI',
     logo: 'https://x.ai/favicon.ico',
-    color: 'text-gray-300',
+    color: 'text-gray-600',
   },
   {
     id: 'cohere',
     nombre: 'Cohere',
     descripcion: 'Modelos empresariales',
     logo: 'https://cohere.com/favicon.ico',
-    color: 'text-red-400',
+    color: 'text-red-600',
   },
 ];
 
-// ── AuthForm: registro e inicio de sesión para clientes ──
+// ── AuthForm: registro e inicio de sesión para clientes (tema claro) ──
 
 interface AuthFormProps {
   setupToken: string;
@@ -121,25 +121,22 @@ const AuthForm = ({ setupToken, onAutenticado }: AuthFormProps) => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(125,58,237,0.08),transparent_50%)] pointer-events-none" />
-
-      <div className="relative max-w-md w-full">
-        {/* Logo / branding */}
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="max-w-md w-full">
         <div className="flex items-center justify-center mb-8">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white font-bold text-sm">
               V
             </div>
-            <span className="text-white font-semibold text-lg">VCOO</span>
+            <span className="text-gray-900 font-semibold text-lg">VCOO</span>
           </div>
         </div>
 
-        <div className="bg-gray-900 border border-gray-700 rounded-xl p-8">
-          <h1 className="text-xl font-bold text-white mb-2">
+        <div className="bg-white border border-gray-200 rounded-xl p-8 shadow-sm">
+          <h1 className="text-xl font-bold text-gray-900 mb-2">
             {esRegistro ? 'Crear tu cuenta' : 'Iniciar sesión'}
           </h1>
-          <p className="text-gray-400 mb-6">
+          <p className="text-gray-500 mb-6">
             {esRegistro
               ? 'Regístrate para comenzar la configuración de tu VCOO'
               : 'Ingresa con tu cuenta para continuar la configuración'}
@@ -150,7 +147,7 @@ const AuthForm = ({ setupToken, onAutenticado }: AuthFormProps) => {
               <div>
                 <label
                   htmlFor="auth-nombre"
-                  className="block text-sm font-medium text-gray-300 mb-1"
+                  className="block text-sm font-medium text-gray-700 mb-1"
                 >
                   Nombre
                 </label>
@@ -159,7 +156,7 @@ const AuthForm = ({ setupToken, onAutenticado }: AuthFormProps) => {
                   type="text"
                   value={nombre}
                   onChange={(e) => setNombre(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 outline-none transition-colors"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 outline-none transition-colors"
                   placeholder="Tu nombre"
                   required={esRegistro}
                 />
@@ -169,7 +166,7 @@ const AuthForm = ({ setupToken, onAutenticado }: AuthFormProps) => {
             <div>
               <label
                 htmlFor="auth-email"
-                className="block text-sm font-medium text-gray-300 mb-1"
+                className="block text-sm font-medium text-gray-700 mb-1"
               >
                 Correo electrónico
               </label>
@@ -178,7 +175,7 @@ const AuthForm = ({ setupToken, onAutenticado }: AuthFormProps) => {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 outline-none transition-colors"
+                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 outline-none transition-colors"
                 placeholder="correo@ejemplo.com"
                 required
               />
@@ -187,7 +184,7 @@ const AuthForm = ({ setupToken, onAutenticado }: AuthFormProps) => {
             <div>
               <label
                 htmlFor="auth-password"
-                className="block text-sm font-medium text-gray-300 mb-1"
+                className="block text-sm font-medium text-gray-700 mb-1"
               >
                 Contraseña
               </label>
@@ -196,7 +193,7 @@ const AuthForm = ({ setupToken, onAutenticado }: AuthFormProps) => {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 outline-none transition-colors"
+                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 outline-none transition-colors"
                 placeholder="••••••••"
                 required
                 minLength={6}
@@ -204,7 +201,7 @@ const AuthForm = ({ setupToken, onAutenticado }: AuthFormProps) => {
             </div>
 
             {errorLocal && (
-              <div className="bg-red-900/30 border border-red-700 rounded-lg p-3 text-sm text-red-300">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
                 {errorLocal}
               </div>
             )}
@@ -228,7 +225,7 @@ const AuthForm = ({ setupToken, onAutenticado }: AuthFormProps) => {
                 setEsRegistro(!esRegistro);
                 setErrorLocal(null);
               }}
-              className="text-sm text-primary-400 hover:text-primary-300 transition-colors"
+              className="text-sm text-primary-600 hover:text-primary-700 transition-colors"
             >
               {esRegistro
                 ? '¿Ya tienes cuenta? Inicia sesión'
@@ -309,10 +306,10 @@ const SetupWizard = () => {
     // Still checking localStorage on first render
     if (checkBase && !auth.cargando) {
       return (
-        <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-400 mx-auto mb-4" />
-            <p className="text-gray-400">Verificando sesión...</p>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4" />
+            <p className="text-gray-500">Verificando sesión...</p>
           </div>
         </div>
       );
@@ -330,10 +327,10 @@ const SetupWizard = () => {
 
   if (cargando) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-400 mx-auto mb-4" />
-          <p className="text-gray-400">Cargando configuración...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4" />
+          <p className="text-gray-500">Cargando configuración...</p>
         </div>
       </div>
     );
@@ -343,13 +340,13 @@ const SetupWizard = () => {
 
   if (error && !onboarding) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
-        <div className="bg-gray-900 border border-red-800 rounded-xl p-8 max-w-md w-full text-center">
-          <div className="text-red-400 text-5xl mb-4">⚠</div>
-          <h1 className="text-xl font-bold text-white mb-2">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white border border-red-200 rounded-xl p-8 max-w-md w-full text-center shadow-sm">
+          <div className="text-red-500 text-5xl mb-4">⚠</div>
+          <h1 className="text-xl font-bold text-gray-900 mb-2">
             Error de conexión
           </h1>
-          <p className="text-gray-400 mb-6">{error}</p>
+          <p className="text-gray-500 mb-6">{error}</p>
           <Button variant="primary" onClick={fetchOnboarding}>
             Reintentar
           </Button>
@@ -426,77 +423,148 @@ const SetupWizard = () => {
 
   // ── Renderizado de cada paso ──
 
-  const renderPasoInstalacion = () => (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-white mb-2">
-          Instalar el Agente VCOO
-        </h2>
-        <p className="text-gray-400">
-          Ejecuta el siguiente comando en tu servidor para instalar el agente:
-        </p>
-      </div>
+  const renderPasoInstalacion = () => {
+    const cmdText =
+      onboarding.install_command ||
+      `curl -sSL ${API_URL}/install.sh | PROVISION_TOKEN=${token} bash -`;
 
-      <div className="bg-gray-900 border border-gray-700 rounded-xl p-4">
-        <div className="flex items-start justify-between gap-4">
-          <code className="text-sm text-gray-100 font-mono break-all whitespace-pre-wrap">
-            {onboarding.install_command ||
-              `curl -sSL ${API_URL}/install.sh | PROVISION_TOKEN=${token} bash -`}
-          </code>
-          <button
-            onClick={() => {
-              navigator.clipboard.writeText(
-                onboarding.install_command ||
-                  `curl -sSL ${API_URL}/install.sh | PROVISION_TOKEN=${token} bash -`
-              );
-            }}
-            className="flex-shrink-0 text-gray-500 hover:text-white transition-colors"
-            title="Copiar comando"
+    const subSteps = [
+      { num: 1, label: 'Copia el comando de instalación' },
+      { num: 2, label: 'Conéctate a tu VPS por SSH' },
+      { num: 3, label: 'Ejecuta el comando en la terminal' },
+      { num: 4, label: 'Espera a que la instalación termine' },
+      { num: 5, label: 'Haz clic en "Verificar" para continuar' },
+    ];
+
+    const [subPaso, setSubPaso] = useState(1);
+
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">
+            Instalar el Agente VCOO
+          </h2>
+          <p className="text-gray-600">
+            Sigue estos pasos para instalar el agente en tu servidor:
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          {subSteps.map((s) => {
+            const isCompleted = s.num < subPaso;
+            const isCurrent = s.num === subPaso;
+            return (
+              <div
+                key={s.num}
+                className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                  isCompleted
+                    ? 'bg-green-50 border border-green-200'
+                    : isCurrent
+                    ? 'bg-primary-50 border border-primary-200'
+                    : 'bg-gray-50 border border-gray-200'
+                }`}
+              >
+                <div
+                  className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold ${
+                    isCompleted
+                      ? 'bg-green-500 text-white'
+                      : isCurrent
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-300 text-gray-600'
+                  }`}
+                >
+                  {isCompleted ? (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    s.num
+                  )}
+                </div>
+                <span
+                  className={`text-sm font-medium ${
+                    isCompleted
+                      ? 'text-green-800'
+                      : isCurrent
+                      ? 'text-primary-800'
+                      : 'text-gray-500'
+                  }`}
+                >
+                  {s.label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <code className="text-sm text-gray-800 font-mono break-all whitespace-pre-wrap">
+              {cmdText}
+            </code>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(cmdText);
+                setSubPaso(Math.max(subPaso, 2));
+              }}
+              className="flex-shrink-0 text-gray-400 hover:text-primary-600 transition-colors"
+              title="Copiar comando"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div className="flex justify-between items-center">
+          <div className="flex gap-2">
+            {subPaso > 1 && (
+              <Button variant="ghost" size="sm" onClick={() => setSubPaso(subPaso - 1)}>
+                ← Anterior
+              </Button>
+            )}
+            {subPaso < 5 && (
+              <Button variant="ghost" size="sm" onClick={() => setSubPaso(subPaso + 1)}>
+                Siguiente →
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        <div className="flex justify-end pt-2">
+          <Button
+            onClick={manejarVerificar}
+            disabled={verificando}
+            variant="primary"
+            size="lg"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-            </svg>
-          </button>
+            {verificando ? 'Verificando...' : 'Verificar instalación'}
+          </Button>
         </div>
       </div>
-
-      <p className="text-sm text-gray-500">
-        Una vez que el comando termine de ejecutarse, haz clic en "Verificar"
-        para continuar.
-      </p>
-
-      {error && (
-        <div className="bg-red-900/30 border border-red-700 rounded-lg p-3 text-sm text-red-300">
-          {error}
-        </div>
-      )}
-
-      <div className="flex justify-end">
-        <Button
-          onClick={manejarVerificar}
-          disabled={verificando}
-          variant="primary"
-          size="lg"
-        >
-          {verificando ? 'Verificando...' : 'Verificar instalación'}
-        </Button>
-      </div>
-    </div>
-  );
+    );
+  };
 
   const renderPasoProveedor = () => (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-bold text-white mb-2">
+        <h2 className="text-xl font-bold text-gray-900 mb-2">
           Selecciona tu proveedor de IA
         </h2>
-        <p className="text-gray-400">
+        <p className="text-gray-600">
           Elige el proveedor que potenciará los servicios inteligentes de tu VCOO.
         </p>
       </div>
 
       {error && (
-        <div className="bg-red-900/30 border border-red-700 rounded-lg p-3 text-sm text-red-300">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
           {error}
         </div>
       )}
@@ -506,24 +574,24 @@ const SetupWizard = () => {
           <div
             key={proveedor.id}
             onClick={() => manejarConectarProveedor(proveedor.id)}
-            className={`group cursor-pointer bg-gray-900 border border-gray-700 rounded-xl p-5 transition-all duration-200 hover:border-primary-500 hover:shadow-lg hover:shadow-primary-900/20 ${
+            className={`group cursor-pointer bg-white border border-gray-200 rounded-xl p-5 transition-all duration-200 hover:border-primary-500 hover:shadow-lg hover:shadow-primary-100/50 ${
               conectando === proveedor.id ? 'opacity-60 pointer-events-none' : ''
             }`}
           >
             <div className="flex flex-col items-center text-center">
               <div
-                className={`w-14 h-14 rounded-full bg-gray-800 flex items-center justify-center mb-3 text-2xl font-bold ${proveedor.color}`}
+                className={`w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mb-3 text-2xl font-bold ${proveedor.color}`}
               >
                 {proveedor.nombre.charAt(0)}
               </div>
-              <h3 className="font-semibold text-white mb-1">
+              <h3 className="font-semibold text-gray-900 mb-1">
                 {proveedor.nombre}
               </h3>
               <p className="text-sm text-gray-500">{proveedor.descripcion}</p>
             </div>
             {conectando === proveedor.id && (
               <div className="mt-3 flex justify-center">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-400" />
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-500" />
               </div>
             )}
           </div>
@@ -539,64 +607,54 @@ const SetupWizard = () => {
       string,
       { nombre: string; descripcion: string; icono: string }
     > = {
-      gmail: {
+      office: {
+        nombre: 'Google Drive',
+        descripcion: 'Documentos, hojas de cálculo y almacenamiento en la nube',
+        icono: '📄',
+      },
+      mail: {
         nombre: 'Gmail',
         descripcion: 'Correo electrónico y bandeja de entrada inteligente',
         icono: '✉',
       },
-      trello: {
-        nombre: 'Trello',
-        descripcion: 'Gestión de tareas y tableros',
-        icono: '📋',
+      planner: {
+        nombre: 'Calendar + Trello',
+        descripcion: 'Calendario, tareas y organización del trabajo',
+        icono: '📅',
       },
-      google: {
-        nombre: 'Google Workspace',
-        descripcion: 'Docs, Drive, Calendar y más',
-        icono: '🔗',
-      },
-      slack: {
-        nombre: 'Slack',
-        descripcion: 'Mensajería y colaboración en equipo',
-        icono: '💬',
-      },
-      notion: {
-        nombre: 'Notion',
-        descripcion: 'Documentación y bases de conocimiento',
-        icono: '📝',
-      },
-      github: {
-        nombre: 'GitHub',
-        descripcion: 'Repositorios y control de versiones',
-        icono: '🐙',
+      developer: {
+        nombre: 'Developer',
+        descripcion: 'GitHub, Vercel, Supabase y herramientas para desarrolladores',
+        icono: '💻',
       },
     };
 
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="text-xl font-bold text-white mb-2">
+          <h2 className="text-xl font-bold text-gray-900 mb-2">
             Configurar módulos
           </h2>
-          <p className="text-gray-400">
+          <p className="text-gray-600">
             Conecta los servicios que VCOO podrá gestionar por ti.
           </p>
         </div>
 
         {error && (
-          <div className="bg-red-900/30 border border-red-700 rounded-lg p-3 text-sm text-red-300">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
             {error}
           </div>
         )}
 
         {modulosDisponibles.length === 0 ? (
-          <div className="bg-gray-900 border border-gray-700 rounded-xl p-8 text-center">
-            <p className="text-gray-400">No hay módulos disponibles para configurar.</p>
-            <p className="text-gray-500 text-sm mt-2">
+          <div className="bg-white border border-gray-200 rounded-xl p-8 text-center shadow-sm">
+            <p className="text-gray-500">No hay módulos disponibles para configurar.</p>
+            <p className="text-gray-400 text-sm mt-2">
               Todos los módulos han sido configurados o no aplican a esta instancia.
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {modulosDisponibles.map((modulo) => {
               const info = modulosInfo[modulo] || {
                 nombre: modulo.charAt(0).toUpperCase() + modulo.slice(1),
@@ -607,17 +665,17 @@ const SetupWizard = () => {
                 <div
                   key={modulo}
                   onClick={() => manejarConectarModulo(modulo)}
-                  className={`group cursor-pointer bg-gray-900 border border-gray-700 rounded-xl p-5 transition-all duration-200 hover:border-primary-500 hover:shadow-lg hover:shadow-primary-900/20 ${
+                  className={`group cursor-pointer bg-white border border-gray-200 rounded-xl p-5 transition-all duration-200 hover:border-primary-500 hover:shadow-lg hover:shadow-primary-100/50 ${
                     conectando === modulo
                       ? 'opacity-60 pointer-events-none'
                       : ''
                   }`}
                 >
                   <div className="flex flex-col items-center text-center">
-                    <div className="w-14 h-14 rounded-full bg-gray-800 flex items-center justify-center mb-3 text-2xl">
+                    <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mb-3 text-2xl">
                       {info.icono}
                     </div>
-                    <h3 className="font-semibold text-white mb-1">
+                    <h3 className="font-semibold text-gray-900 mb-1">
                       {info.nombre}
                     </h3>
                     <p className="text-sm text-gray-500">
@@ -626,7 +684,7 @@ const SetupWizard = () => {
                   </div>
                   {conectando === modulo && (
                     <div className="mt-3 flex justify-center">
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-400" />
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-500" />
                     </div>
                   )}
                 </div>
@@ -642,9 +700,9 @@ const SetupWizard = () => {
     <div className="space-y-6">
       <div className="text-center">
         <div className="flex items-center justify-center mb-6">
-          <div className="bg-green-900/40 border border-green-700 rounded-full p-4">
+          <div className="bg-green-100 border border-green-300 rounded-full p-4">
             <svg
-              className="h-12 w-12 text-green-400"
+              className="h-12 w-12 text-green-600"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -659,17 +717,17 @@ const SetupWizard = () => {
           </div>
         </div>
 
-        <h1 className="text-2xl font-bold text-white mb-4">
+        <h1 className="text-2xl font-bold text-gray-900 mb-4">
           ¡Configuración Completada!
         </h1>
-        <p className="text-gray-400 mb-6 max-w-md mx-auto">
+        <p className="text-gray-500 mb-6 max-w-md mx-auto">
           Tu instancia de VCOO ha sido configurada exitosamente y está lista
           para usar.
         </p>
       </div>
 
-      <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 max-w-lg mx-auto">
-        <h3 className="font-semibold text-white mb-4">
+      <div className="bg-white border border-gray-200 rounded-xl p-6 max-w-lg mx-auto shadow-sm">
+        <h3 className="font-semibold text-gray-900 mb-4">
           Resumen de Configuración
         </h3>
 
@@ -681,7 +739,7 @@ const SetupWizard = () => {
               }
             />
             <div>
-              <h4 className="font-medium text-white">Agente VCOO</h4>
+              <h4 className="font-medium text-gray-900">Agente VCOO</h4>
               <p className="text-sm text-gray-500">
                 {onboarding.agent_online
                   ? 'Instalado y activo'
@@ -697,7 +755,7 @@ const SetupWizard = () => {
               }
             />
             <div>
-              <h4 className="font-medium text-white">Proveedor de IA</h4>
+              <h4 className="font-medium text-gray-900">Proveedor de IA</h4>
               <p className="text-sm text-gray-500">
                 {pasoActual >= 2 ? 'Conectado' : 'No conectado'}
               </p>
@@ -715,7 +773,7 @@ const SetupWizard = () => {
               }
             />
             <div>
-              <h4 className="font-medium text-white">Módulos Configurados</h4>
+              <h4 className="font-medium text-gray-900">Módulos Configurados</h4>
               <p className="text-sm text-gray-500">
                 {completado
                   ? 'Todos los módulos conectados'
@@ -727,22 +785,22 @@ const SetupWizard = () => {
       </div>
 
       <div className="max-w-lg mx-auto">
-        <h3 className="font-semibold text-white mb-3">Próximos Pasos</h3>
-        <ol className="space-y-2 text-gray-400">
+        <h3 className="font-semibold text-gray-900 mb-3">Próximos Pasos</h3>
+        <ol className="space-y-2 text-gray-500">
           <li className="flex items-start gap-2">
-            <span className="text-primary-400 font-bold">1.</span>
+            <span className="text-primary-600 font-bold">1.</span>
             <span>Explora el panel de control para ver tus servicios activos</span>
           </li>
           <li className="flex items-start gap-2">
-            <span className="text-primary-400 font-bold">2.</span>
+            <span className="text-primary-600 font-bold">2.</span>
             <span>Configura notificaciones y alertas según tus preferencias</span>
           </li>
           <li className="flex items-start gap-2">
-            <span className="text-primary-400 font-bold">3.</span>
+            <span className="text-primary-600 font-bold">3.</span>
             <span>Invita a miembros de tu equipo para colaborar</span>
           </li>
           <li className="flex items-start gap-2">
-            <span className="text-primary-400 font-bold">4.</span>
+            <span className="text-primary-600 font-bold">4.</span>
             <span>Programa tu primera tarea de automatización</span>
           </li>
         </ol>
@@ -751,13 +809,13 @@ const SetupWizard = () => {
   );
 
   const renderTarjetaBienvenida = () => (
-    <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 mb-6">
+    <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6 shadow-sm">
       <div className="flex items-center gap-4">
-        <div className="w-12 h-12 rounded-full bg-primary-900/40 border border-primary-700 flex items-center justify-center text-primary-300 text-xl font-bold">
+        <div className="w-12 h-12 rounded-full bg-primary-100 border border-primary-200 flex items-center justify-center text-primary-700 text-xl font-bold">
           {onboarding.name ? onboarding.name.charAt(0).toUpperCase() : 'V'}
         </div>
         <div>
-          <h1 className="text-xl font-bold text-white">
+          <h1 className="text-xl font-bold text-gray-900">
             Configuración de {onboarding.name || 'VCOO'}
           </h1>
           <p className="text-sm text-gray-500">
@@ -769,26 +827,20 @@ const SetupWizard = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-950">
-      {/* Fondo decorativo */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(125,58,237,0.08),transparent_50%)] pointer-events-none" />
-
-      <div className="relative max-w-4xl mx-auto px-4 py-8 sm:py-12">
-        {/* Logo / branding */}
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-4xl mx-auto px-4 py-8 sm:py-12">
         <div className="flex items-center justify-center mb-8">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white font-bold text-sm">
               V
             </div>
-            <span className="text-white font-semibold text-lg">VCOO</span>
+            <span className="text-gray-900 font-semibold text-lg">VCOO</span>
           </div>
         </div>
 
-        {/* Bienvenida */}
         {renderTarjetaBienvenida()}
 
-        {/* StepIndicator */}
-        <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 mb-6">
+        <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6 shadow-sm">
           <StepIndicator
             pasoActual={pasoActual}
             pasosTotales={4}
@@ -796,8 +848,7 @@ const SetupWizard = () => {
           />
         </div>
 
-        {/* Contenido del paso actual */}
-        <div className="bg-gray-900 border border-gray-700 rounded-xl p-6">
+        <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
           {completado || pasoActual >= 4
             ? renderPasoFinalizacion()
             : pasoActual === 0
