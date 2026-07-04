@@ -222,6 +222,7 @@ const SetupWizard = () => {
   const [verificando, setVerificando] = useState(false);
   const [conectando, setConectando] = useState<string | null>(null);
   const [subPaso, setSubPaso] = useState(1);
+  const [proveedorSeleccionado, setProveedorSeleccionado] = useState<string | null>(null);
 
   // Check localStorage directly on mount for existing auth
   useEffect(() => {
@@ -349,8 +350,6 @@ const SetupWizard = () => {
   };
 
   // ── Conectar proveedor ──
-
-  const [proveedorSeleccionado, setProveedorSeleccionado] = useState<string | null>(null);
 
   const manejarConectarProveedor = async (service: string) => {
     if (!token) return;
