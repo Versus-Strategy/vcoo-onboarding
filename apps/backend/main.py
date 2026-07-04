@@ -606,7 +606,7 @@ def get_provision_token(vcoo_id: str, db: Session = Depends(get_db)):
         token = crud.create_provision_for_vcoo(db, vcoo_id)
     dashboard_url = _os.getenv('DASHBOARD_URL', 'https://vcoo-dashboard.vercel.app')
     control_plane = _os.getenv('CONTROL_PLANE', 'https://vcoo-onboarding.vercel.app')
-    install_cmd = f"curl -sSL {control_plane}/install.sh | CONTROL_PLANE={control_plane} PROVISION_TOKEN={token} bash -"
+    install_cmd = f"curl -sSL {control_plane}/install.sh | PROVISION_TOKEN={token} bash -"
     onboarding_url = f"{dashboard_url}/setup/{vcoo_id}"
     return {"token": token, "install_command": install_cmd, "onboarding_url": onboarding_url}
 
@@ -619,7 +619,7 @@ def regenerate_token(vcoo_id: str, db: Session = Depends(get_db)):
     token = crud.regenerate_token_for_vcoo(db, vcoo_id)
     dashboard_url = _os.getenv('DASHBOARD_URL', 'https://vcoo-dashboard.vercel.app')
     control_plane = _os.getenv('CONTROL_PLANE', 'https://vcoo-onboarding.vercel.app')
-    install_cmd = f"curl -sSL {control_plane}/install.sh | CONTROL_PLANE={control_plane} PROVISION_TOKEN={token} bash -"
+    install_cmd = f"curl -sSL {control_plane}/install.sh | PROVISION_TOKEN={token} bash -"
     onboarding_url = f"{dashboard_url}/setup/{vcoo_id}"
     return {"token": token, "install_command": install_cmd, "onboarding_url": onboarding_url}
 
@@ -638,7 +638,7 @@ def reactivate_vcoo(vcoo_id: str, db: Session = Depends(get_db)):
     if not token:
         raise HTTPException(status_code=404, detail="VCOO not found")
     control_plane = _os.getenv('CONTROL_PLANE', 'https://vcoo-onboarding.vercel.app')
-    install_cmd = f"curl -sSL {control_plane}/install.sh | CONTROL_PLANE={control_plane} PROVISION_TOKEN={token} bash -"
+    install_cmd = f"curl -sSL {control_plane}/install.sh | PROVISION_TOKEN={token} bash -"
     return {"status": "active", "token": token, "install_command": install_cmd}
 
 @app.delete("/vcoo/{vcoo_id}")
@@ -1092,20 +1092,18 @@ def get_install_script():
     if not _os.path.isfile(path):
         raise HTTPException(status_code=404, detail='Not found')
     content = open(path).read()
-    # Inyectar fix para HOME unbound variable (systemd no exporta HOME)
-    fix = '\n# Fix HOME unbound (systemd) - inyectado por backend\n'
-    fix += 'export HOME="${HOME:-/root}"\n'
-    if 'export HOME' not in content:
-        # Insertar después del shebang y set, antes del primer uso de $HOME
-        lines = content.split('\n')
-        insert_at = 0
-        for i, line in enumerate(lines):
-            if line.startswith('CONTROL_PLANE='):
-                insert_at = i
-                break
-        if insert_at > 0:
-            lines.insert(insert_at, fix)
-            content = '\n'.join(lines)
+    # Inyectar CONTROL_PLANE real y fix para HOME unbound
+    control_plane_url = _os.getenv('CONTROL_PLANE', 'https://vcoo-onboarding.vercel.app')
+    lines = content.split('\n')
+    home_fix = '\n# Fix HOME unbound (systemd) - inyectado por backend\n'
+    home_fix += 'export HOME="${HOME:-/root}"\n'
+    for i, line in enumerate(lines):
+        if line.startswith('CONTROL_PLANE='):
+            lines[i] = f'CONTROL_PLANE="{control_plane_url}"'
+            if 'export HOME' not in content:
+                lines.insert(i, home_fix)
+            break
+    content = '\n'.join(lines)
     from fastapi.responses import PlainTextResponse
     return PlainTextResponse(content, media_type='text/x-sh')
 
