@@ -1,4 +1,24 @@
 import os, json, socket, subprocess, time, urllib.request
+import re as _re
+
+# Proveedores que Hermes soporta, extraídos de su config.yaml
+HERMES_PROVIDERS = [
+    {"id": "anthropic",    "nombre": "Anthropic",   "descripcion": "Claude — modelos de última generación"},
+    {"id": "openai",       "nombre": "OpenAI",      "descripcion": "GPT-4, GPT-4o y más"},
+    {"id": "google",       "nombre": "Google IA",   "descripcion": "Gemini y modelos de Google"},
+    {"id": "mistral",      "nombre": "Mistral AI",  "descripcion": "Modelos abiertos y eficientes"},
+    {"id": "xai",          "nombre": "xAI",         "descripcion": "Grok y modelos de xAI"},
+    {"id": "cohere",       "nombre": "Cohere",      "descripcion": "Modelos empresariales"},
+    {"id": "openrouter",   "nombre": "OpenRouter",  "descripcion": "Múltiples modelos en un solo API"},
+    {"id": "copilot",      "nombre": "GitHub Copilot", "descripcion": "Modelos de GitHub y socios"},
+    {"id": "gemini",       "nombre": "Google Gemini","descripcion": "Modelos Gemini de Google"},
+    {"id": "huggingface",  "nombre": "Hugging Face", "descripcion": "Modelos open source"},
+    {"id": "nvidia",       "nombre": "NVIDIA NIM",  "descripcion": "Modelos acelerados por NVIDIA"},
+    {"id": "ollama-cloud", "nombre": "Ollama Cloud","descripcion": "Modelos locales en la nube"},
+    {"id": "azure-foundry","nombre": "Azure Foundry","descripcion": "Microsoft Azure OpenAI"},
+    {"id": "lmstudio",     "nombre": "LM Studio",   "descripcion": "Servidor local OpenAI-compatible"},
+    {"id": "custom",       "nombre": "Custom API",  "descripcion": "Cualquier endpoint OpenAI-compatible"},
+]
 
 COMMAND_MAP = {
     "verify-bootstrap": ["python3", os.path.expanduser("~/.hermes/scripts/vcoo/vcoo-bootstrap.py")],
@@ -100,9 +120,66 @@ class Plugin:
         except Exception:
             pass
 
+    def _detect_hermes_config(self):
+        """Returns (hermes_version, current_provider) or (None, None)."""
+        config_path = os.path.expanduser("~/.hermes/config.yaml")
+        if not os.path.isfile(config_path):
+            return None, None
+        version = None
+        provider = None
+        try:
+            r = subprocess.run(["hermes", "--version"], capture_output=True, text=True, timeout=10)
+            if r.returncode == 0:
+                version = r.stdout.strip().split("\n")[0]
+        except Exception:
+            pass
+        try:
+            with open(config_path) as f:
+                content = f.read()
+            m = _re.search(r"default:\s*['\"]?(\w[\w./-]*)", content)
+            if m:
+                full = m.group(1)
+                if "/" in full:
+                    provider, _ = full.split("/", 1)
+                else:
+                    provider = full
+        except Exception:
+            pass
+        return version, provider
+
+    def _report_capabilities(self):
+        if getattr(self, "_caps_reported", False):
+            return
+        version, current_provider = self._detect_hermes_config()
+        if version is None and current_provider is None:
+            caps = {"providers": HERMES_PROVIDERS}
+        else:
+            caps = {
+                "hermes_version": version,
+                "providers": HERMES_PROVIDERS,
+                "current_provider": current_provider,
+            }
+        data = json.dumps(caps).encode()
+        req = urllib.request.Request(
+            f"{self.control_plane}/agent/{self.agent_id}/capabilities",
+            data=data,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.agent_token}",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=15):
+                pass
+            self._caps_reported = True
+        except Exception:
+            pass
+
     def tick(self):
         if not self.agent_id:
             return
+        self._report_capabilities()
         payload = self._get_health_payload()
         body = json.dumps({"health": payload, "last_command_id": self.last_command_id}).encode()
         req = urllib.request.Request(
