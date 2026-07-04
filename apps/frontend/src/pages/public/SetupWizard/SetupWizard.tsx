@@ -261,6 +261,7 @@ const SetupWizard = () => {
   const [error, setError] = useState<string | null>(null);
   const [verificando, setVerificando] = useState(false);
   const [conectando, setConectando] = useState<string | null>(null);
+  const [subPaso, setSubPaso] = useState(1);
 
   // Check localStorage directly on mount for existing auth
   useEffect(() => {
@@ -443,8 +444,6 @@ const SetupWizard = () => {
       { num: 4, label: 'Espera a que la instalación termine' },
       { num: 5, label: 'Haz clic en "Verificar" para continuar' },
     ];
-
-    const [subPaso, setSubPaso] = useState(1);
 
     return (
       <div className="space-y-6">
