@@ -17,7 +17,7 @@ function AppContent() {
   const { auth } = useAuth();
 
   // Ruta pública para el wizard de onboarding — no requiere autenticación
-  if (window.location.pathname.startsWith('/setup/')) {
+  if (window.location.pathname.startsWith('/setup/') || window.location.pathname.startsWith('/onboarding/')) {
     return <SetupWizard />;
   }
 

@@ -1,18 +1,21 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { useAuth } from '../auth/authContext';
 import Servicios from '../pages/cliente/Servicios/Servicios';
-import InstalacionDeAgente from '../pages/cliente/configuracion/InstalacionDeAgente/InstalacionDeAgente';
-import ConfiguracionDeProveedor from '../pages/cliente/configuracion/ConfiguracionDeProveedor/ConfiguracionDeProveedor';
-import ConfiguracionDeModulo from '../pages/cliente/configuracion/ConfiguracionDeModulo/ConfiguracionDeModulo';
-import Finalizacion from '../pages/cliente/configuracion/Finalizacion/Finalizacion';
+
+const RedirectToOnboarding = () => {
+  const { auth } = useAuth();
+  const vcooId = auth.usuario?.vcoo_id;
+  if (vcooId) {
+    return <Navigate to={`/onboarding/${vcooId}`} replace />;
+  }
+  return <Navigate to="/servicios" replace />;
+};
 
 const RutasCliente = () => {
   return (
     <Routes>
       <Route path="/servicios" element={<Servicios />} />
-      <Route path="/configuracion/instalacion-de-agente" element={<InstalacionDeAgente />} />
-      <Route path="/configuracion/configuracion-de-proveedor" element={<ConfiguracionDeProveedor />} />
-      <Route path="/configuracion/configuracion-de-modulo/:idDeModulo" element={<ConfiguracionDeModulo />} />
-      <Route path="/configuracion/finalizacion" element={<Finalizacion />} />
+      <Route path="/configuracion/*" element={<RedirectToOnboarding />} />
       <Route path="/" element={<Servicios />} />
     </Routes>
   );
