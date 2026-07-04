@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useDetalleVCOO, useTokenDeProvision } from '@/query/useConsulta';
 import apiClient from '@/api/apiClient';
 import StatusBadge from '@/components/StatusBadge';
 import Button from '@/components/Button';
@@ -17,17 +16,32 @@ const DetalleClientePage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const {
-    data: estado,
-    isLoading: cargandoEstado,
-    isError: errorEstado,
-  } = useDetalleVCOO(id || '');
+  const [estado, setEstado] = useState<Record<string, unknown> | null>(null);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [tokenData, setTokenData] = useState<{ token?: string; install_command?: string; onboarding_url?: string } | null>(null);
 
-  const {
-    data: tokenData,
-    isLoading: cargandoToken,
-    isError: errorToken,
-  } = useTokenDeProvision(id || '');
+  const cargarDatos = useCallback(async () => {
+    if (!id) return;
+    setCargando(true);
+    setError(null);
+    try {
+      const [estadoRes, tokenRes] = await Promise.all([
+        apiClient.get(`/vcoo/${id}/state`),
+        apiClient.get(`/vcoo/${id}/provision-token`),
+      ]);
+      setEstado(estadoRes.data as Record<string, unknown>);
+      setTokenData(tokenRes.data as { token?: string; install_command?: string; onboarding_url?: string });
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+        || (err as Error).message || 'Error al cargar datos';
+      setError(msg);
+    } finally {
+      setCargando(false);
+    }
+  }, [id]);
+
+  useEffect(() => { cargarDatos(); }, [cargarDatos]);
 
   const [copiado, setCopiado] = useState<string | null>(null);
 
@@ -56,7 +70,7 @@ const DetalleClientePage = () => {
     );
   }
 
-  if (cargandoEstado || cargandoToken) {
+  if (cargando) {
     return (
       <div className="space-y-6">
         <div className="flex items-center space-x-3">
@@ -76,7 +90,7 @@ const DetalleClientePage = () => {
     );
   }
 
-  if (errorEstado) {
+  if (error) {
     return (
       <div className="space-y-6">
         <div className="flex items-center space-x-3">
@@ -97,24 +111,23 @@ const DetalleClientePage = () => {
     );
   }
 
-  const estadoData = estado as Record<string, unknown> | undefined;
-  const nombre = (estadoData?.name as string) || (estadoData?.nombre as string) || 'Cliente sin nombre';
-  const estadoCliente = statusMap[(estadoData?.status as string) || 'offline'] || 'fuera-de-linea';
-  const createdAt = (estadoData?.created_at as string) || (estadoData?.createdAt as string) || '';
-  const agentInfo = estadoData?.agent as Record<string, unknown> | undefined;
+  const nombre = (estado?.name as string) || (estado?.nombre as string) || 'Cliente sin nombre';
+  const estadoCliente = statusMap[(estado?.status as string) || 'offline'] || 'fuera-de-linea';
+  const createdAt = (estado?.created_at as string) || (estado?.createdAt as string) || '';
+  const agentInfo = estado?.agent as Record<string, unknown> | undefined;
   const agentStatus = agentInfo?.status as string || 'offline';
   const agentStatusLocal = statusMap[agentStatus] || agentStatus || 'fuera-de-linea';
   const lastSeen = agentInfo?.last_seen as string | undefined;
   const capabilities = agentInfo?.capabilities as Record<string, unknown> | undefined;
   const providers = capabilities?.providers as Array<Record<string, unknown>> | undefined;
-  const completedSteps = (estadoData?.completed_steps as string[]) || [];
-  const onboardingStatus = (estadoData?.onboarding_status as string) || 'in_progress';
-  const modulos = (estadoData?.modules as string[]) || [];
-  const totalPasos = 5; // Assuming 5 onboarding steps
+  const completedSteps = (estado?.completed_steps as string[]) || [];
+  const onboardingStatus = (estado?.onboarding_status as string) || 'in_progress';
+  const modulos = (estado?.modules as string[]) || [];
+  const totalPasos = 5;
 
-  const provisionToken = tokenData?.token as string | undefined;
-  const installCommand = tokenData?.install_command as string | undefined;
-  const onboardingUrl = tokenData?.onboarding_url as string | undefined;
+  const provisionToken = tokenData?.token;
+  const installCommand = tokenData?.install_command;
+  const onboardingUrl = tokenData?.onboarding_url;
 
   // ── Provider configuration state ──
   const [provider, setProvider] = useState('openrouter');
@@ -209,7 +222,7 @@ const DetalleClientePage = () => {
       <div className="bg-white rounded-lg shadow p-6 space-y-4">
         <h2 className="text-lg font-semibold text-gray-900">Provisionamiento</h2>
 
-        {cargandoToken && (
+        {cargando && !tokenData && (
           <div className="animate-pulse space-y-2">
             <div className="h-4 bg-gray-200 rounded w-1/4" />
             <div className="h-10 bg-gray-200 rounded" />
@@ -218,7 +231,7 @@ const DetalleClientePage = () => {
           </div>
         )}
 
-        {errorToken && !cargandoToken && (
+        {!cargando && !tokenData && (
           <p className="text-sm text-red-600">
             No se pudo obtener el token de provisionamiento. Es posible que el cliente no tenga un
             token activo.
@@ -485,13 +498,13 @@ const DetalleClientePage = () => {
       </div>
 
       {/* Raw state data (expandable for debugging) */}
-      {estadoData && Object.keys(estadoData).length > 0 && (
+      {estado && Object.keys(estado).length > 0 && (
         <details className="bg-white rounded-lg shadow p-6">
           <summary className="text-sm font-medium text-gray-700 cursor-pointer hover:text-gray-900">
             Datos técnicos (JSON)
           </summary>
           <pre className="mt-3 text-xs text-gray-600 bg-gray-50 rounded-lg p-3 overflow-x-auto max-h-96">
-            {JSON.stringify(estadoData, null, 2)}
+            {JSON.stringify(estado, null, 2)}
           </pre>
         </details>
       )}
