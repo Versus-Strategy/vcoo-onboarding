@@ -1,4 +1,4 @@
-import sys, os as _os
+import sys, os as _os, re as _re
 _sys_path = _os.path.dirname(__file__)
 if _sys_path not in sys.path:
     sys.path.insert(0, _sys_path)
@@ -15,6 +15,20 @@ from ws_routes import register_ws_routes
 import asyncio
 import json
 import os as _os
+
+
+# ── Helper: resolve VCOO ID from onboarding URL param ─────────
+# Accepts either a VCOO UUID or a legacy JWT provision token.
+_UUID_RE = _re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+
+def _resolve_setup_vcoo(identifier: str, db: Session) -> str | None:
+    """Return vcoo_id from a UUID (lookup active token) or a JWT (decode)."""
+    if _UUID_RE.match(identifier):
+        v = crud.get_vcoo(db, identifier)
+        if v:
+            return identifier
+    vcoo_id = crud.lookup_provision_token(db, identifier)
+    return vcoo_id
 
 app = FastAPI(title="VCOO Onboarding API v2")
 
@@ -215,7 +229,7 @@ def create_vcoo(payload: dict = {}, db: Session = Depends(get_db)):
     # Generate provision token
     token = crud.create_provision_for_vcoo(db, str(vcoo.id))
     frontend_url = _os.getenv('FRONTEND_URL', 'https://vcoo-dashboard.vercel.app')
-    onboarding_url = frontend_url.rstrip('/') + '/setup/' + token
+    onboarding_url = frontend_url.rstrip('/') + '/setup/' + str(vcoo.id)
     return {
         "id": str(vcoo.id),
         "name": vcoo.name,
@@ -247,7 +261,7 @@ def list_vcoos(db: Session = Depends(get_db)):
             "active_token": v.active_token.token if v.active_token else None,
             "token_expires_at": v.active_token.expires_at.isoformat() if v.active_token and v.active_token.expires_at else None,
             "modules": v.modules if hasattr(v, 'modules') and v.modules else ["core"],
-            "onboarding_url": f"{dashboard_url}/setup/{v.active_token.token}" if v.active_token else None,
+            "onboarding_url": f"{dashboard_url}/setup/{v.id}" if v.active_token else None,
         }
         for v in vcoos
     ]
@@ -255,15 +269,16 @@ def list_vcoos(db: Session = Depends(get_db)):
 
 # ── Setup wizard (SPEC v2 §4.2) ───────────────────────────
 
-@app.get("/setup/{token}")
-def get_setup_info(token: str, authorization: str = Header(None), db: Session = Depends(get_db)):
+@app.get("/setup/{identifier}")
+def get_setup_info(identifier: str, authorization: str = Header(None), db: Session = Depends(get_db)):
     """Returns onboarding state for the wizard frontend.
+    Accepts VCOO UUID (preferred) or legacy JWT provision token as {identifier}.
     Handles 3 cases:
     1. No auth → {requires_registration: true, token_valid, vcoo_name}
     2. Auth but client doesn't own this VCOO → {requires_registration: false, ...state}
     3. Auth and owns it → full onboarding state (existing behavior)
     Read-only — does not consume the token."""
-    vcoo_id = crud.lookup_provision_token(db, token)
+    vcoo_id = _resolve_setup_vcoo(identifier, db)
     if not vcoo_id:
         raise HTTPException(
             status_code=400,
@@ -351,11 +366,11 @@ def get_setup_info(token: str, authorization: str = Header(None), db: Session = 
     }
 
 
-@app.post("/setup/{token}/verify")
-def trigger_step_verification(token: str, db: Session = Depends(get_db)):
+@app.post("/setup/{identifier}/verify")
+def trigger_step_verification(identifier: str, db: Session = Depends(get_db)):
     """Client clicks 'Verificar' in the wizard — enqueues the verification command.
     If no agent is connected, auto-advances the step for dev/demo mode."""
-    vcoo_id = crud.lookup_provision_token(db, token)
+    vcoo_id = _resolve_setup_vcoo(identifier, db)
     if not vcoo_id:
         raise HTTPException(
             status_code=400,
@@ -405,10 +420,10 @@ def trigger_step_verification(token: str, db: Session = Depends(get_db)):
 
 # ── Auth URL generation (dynamic OAuth tabs) ────────────
 
-@ app.get("/setup/{token}/auth-url")
-def get_auth_url(token: str, service: str = "", db: Session = Depends(get_db)):
+@ app.get("/setup/{identifier}/auth-url")
+def get_auth_url(identifier: str, service: str = "", db: Session = Depends(get_db)):
     """Generates an OAuth authorization URL for the given service."""
-    vcoo_id = crud.lookup_provision_token(db, token)
+    vcoo_id = _resolve_setup_vcoo(identifier, db)
     if not vcoo_id:
         raise HTTPException(
             status_code=400,
@@ -559,10 +574,10 @@ def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session
 
 # ── Hermes CLI commands (dynamic) ──────────────────────
 
-@ app.get("/setup/{token}/hermes-commands")
-def get_hermes_commands_endpoint(token: str, service: str = "", db: Session = Depends(get_db)):
+@ app.get("/setup/{identifier}/hermes-commands")
+def get_hermes_commands_endpoint(identifier: str, service: str = "", db: Session = Depends(get_db)):
     """Returns Hermes CLI config commands for a service."""
-    vcoo_id = crud.lookup_provision_token(db, token)
+    vcoo_id = _resolve_setup_vcoo(identifier, db)
     if not vcoo_id:
         raise HTTPException(
             status_code=400,
@@ -600,7 +615,7 @@ def get_provision_token(vcoo_id: str, db: Session = Depends(get_db)):
     dashboard_url = _os.getenv('DASHBOARD_URL', 'https://vcoo-dashboard.vercel.app')
     control_plane = _os.getenv('CONTROL_PLANE', 'https://vcoo-onboarding.vercel.app')
     install_cmd = f"curl -sSL {control_plane}/install.sh | PROVISION_TOKEN={token} bash -"
-    onboarding_url = f"{dashboard_url}/setup/{token}"
+    onboarding_url = f"{dashboard_url}/setup/{vcoo_id}"
     return {"token": token, "install_command": install_cmd, "onboarding_url": onboarding_url}
 
 @app.post("/vcoo/{vcoo_id}/regenerate-token")
@@ -613,7 +628,7 @@ def regenerate_token(vcoo_id: str, db: Session = Depends(get_db)):
     dashboard_url = _os.getenv('DASHBOARD_URL', 'https://vcoo-dashboard.vercel.app')
     control_plane = _os.getenv('CONTROL_PLANE', 'https://vcoo-onboarding.vercel.app')
     install_cmd = f"curl -sSL {control_plane}/install.sh | PROVISION_TOKEN={token} bash -"
-    onboarding_url = f"{dashboard_url}/setup/{token}"
+    onboarding_url = f"{dashboard_url}/setup/{vcoo_id}"
     return {"token": token, "install_command": install_cmd, "onboarding_url": onboarding_url}
 
 @app.post("/vcoo/{vcoo_id}/complete")
