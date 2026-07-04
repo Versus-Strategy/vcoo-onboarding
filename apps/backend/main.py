@@ -285,10 +285,11 @@ def list_vcoos(db: Session = Depends(get_db)):
 def get_setup_info(identifier: str, authorization: str = Header(None), db: Session = Depends(get_db)):
     """Returns onboarding state for the wizard frontend.
     Accepts VCOO UUID (preferred) or legacy JWT provision token as {identifier}.
-    Handles 3 cases:
-    1. No auth → {requires_registration: true, token_valid, vcoo_name}
-    2. Auth but client doesn't own this VCOO → {requires_registration: false, ...state}
-    3. Auth and owns it → full onboarding state (existing behavior)
+    Access:
+    - No auth → Case 1: requires_registration
+    - Client who owns VCOO → Case 3: full state
+    - Operator → Case 3: full state
+    - Other → 403: access denied
     Read-only — does not consume the token."""
     v = crud.get_vcoo(db, identifier)
     if not v:
@@ -303,12 +304,22 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
     vcoo_id = str(v.id)
 
     # Determine auth state
-    client_payload = None
+    is_operator = False
+    is_owner = False
     if authorization and authorization.lower().startswith('bearer '):
         bearer_token = authorization.split(None, 1)[1]
-        client_payload = auth.verify_client_token(bearer_token)
+        payload = auth.verify_client_token(bearer_token)
+        if payload:
+            if payload.get('role') == 'operador':
+                is_operator = True
+            else:
+                client_email = payload.get("email", "")
+                client_obj = crud.get_client_by_email(db, client_email)
+                is_owner = client_obj and client_obj.vcoo_id and str(client_obj.vcoo_id) == vcoo_id
 
-    if not client_payload:
+    if not is_operator and not is_owner:
+        if authorization and authorization.lower().startswith('bearer '):
+            raise HTTPException(status_code=403, detail="No tienes acceso a este VCOO")
         # Case 1: No auth — tell frontend to show registration form
         return {
             "requires_registration": True,
@@ -316,25 +327,7 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
             "vcoo_name": v.name,
         }
 
-    # Has auth — check if this client owns the VCOO
-    client_email = client_payload.get("email", "")
-    client_obj = crud.get_client_by_email(db, client_email)
-    owns_vcoo = client_obj and client_obj.vcoo_id and str(client_obj.vcoo_id) == vcoo_id
-
-    if not owns_vcoo:
-        # Case 2: Auth but doesn't own this VCOO
-        st = crud.get_onboarding_state(db, vcoo_id)
-        from onboarding import get_total_steps, get_module_label, get_module_description, get_wizard_step, is_onboarding_complete
-        modules = list(st.modules or ["core"]) if st else ["core"]
-        module_labels: dict[str, dict[str, str]] = {
-            m: {"label": get_module_label(m), "description": get_module_description(m)}
-            for m in modules
-        }
-        current_step = st.step if st else "bootstrap"
-        completed_steps = st.completed or [] if st else []
-        all_done = is_onboarding_complete(current_step, completed_steps, modules)
-
-    # Case 3: Auth and owns it — full onboarding state (existing behavior)
+    # Case 3: Full onboarding state (owner or operator)
     st = crud.get_onboarding_state(db, vcoo_id)
     if not st:
         raise HTTPException(status_code=404, detail="No hay datos de onboarding")
