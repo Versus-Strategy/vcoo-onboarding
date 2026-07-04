@@ -8,6 +8,8 @@ class Plugin:
         self.agent_id = os.environ.get("AGENT_ID", config.get("agent_id", ""))
         self.agent_token = os.environ.get("AGENT_TOKEN", config.get("agent_token", ""))
         self.control_plane = os.environ.get("CONTROL_PLANE", config.get("control_plane", "http://localhost:8000"))
+        # Enviar reporte inmediato al arrancar
+        self.tick()
 
     def stop(self):
         pass
