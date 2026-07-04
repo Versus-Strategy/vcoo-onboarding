@@ -111,3 +111,24 @@ class ClientResponse(BaseModel):
     name: str | None = None
     vcoo_id: str | None = None
     created_at: str | None = None
+
+
+# ── Tick (unified health + command poll) ──
+
+class HealthPayload(BaseModel):
+    hostname: str | None = None
+    cpu_pct: float | None = None
+    memory_pct: float | None = None
+    disk_pct: float | None = None
+    hermes_running: bool | None = None
+    template_version: str | None = None
+
+class TickRequest(BaseModel):
+    health: HealthPayload | None = None
+    last_command_id: str | None = None
+
+class TickResponse(BaseModel):
+    commands: list[dict] = []
+    tick_interval: int = 60
+    step: str | None = None
+    progress: dict | None = None

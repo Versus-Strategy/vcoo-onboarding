@@ -211,11 +211,38 @@ def create_command(db: Session, agent_id: str, command: str, step: str = None, r
     return c
 
 
-def get_pending_commands(db: Session, agent_id: str):
-    return db.query(models.Command).filter(
+def get_pending_commands(db: Session, agent_id: str, last_command_id: str | None = None):
+    query = db.query(models.Command).filter(
         models.Command.agent_id == agent_id,
         models.Command.status == 'pending'
-    ).all()
+    )
+    if last_command_id:
+        query = query.filter(models.Command.id > last_command_id)
+    return query.order_by(models.Command.created_at).limit(10).all()
+
+
+def acknowledge_command(db: Session, command_id: str) -> None:
+    cmd = db.query(models.Command).filter(models.Command.id == command_id).first()
+    if cmd:
+        cmd.status = "acknowledged"
+        db.commit()
+
+
+def get_tick_progress(db: Session, vcoo_id: str) -> dict | None:
+    st = get_onboarding_state(db, vcoo_id)
+    if not st:
+        return None
+    from onboarding import get_total_steps
+    total = get_total_steps(list(st.modules or ["core"]))
+    done = len(st.completed or [])
+    return {"total": total, "done": done}
+
+
+def get_vcoo_by_agent(db: Session, agent_id: str):
+    agent = db.query(models.Agent).filter(models.Agent.id == agent_id).first()
+    if agent and agent.vcoo_id:
+        return db.query(models.VCOO).filter(models.VCOO.id == agent.vcoo_id).first()
+    return None
 
 
 def mark_command_sent(db: Session, command_id: str):

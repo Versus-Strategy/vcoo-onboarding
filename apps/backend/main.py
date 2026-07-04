@@ -381,6 +381,7 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
 @app.post("/setup/{identifier}/verify")
 def trigger_step_verification(identifier: str, db: Session = Depends(get_db)):
     """Client clicks 'Verificar' in the wizard — enqueues the verification command.
+    Waits up to 10s for the agent to register (race condition fix).
     If no agent is connected, auto-advances the step for dev/demo mode."""
     v = crud.get_vcoo(db, identifier)
     if not v:
@@ -402,16 +403,22 @@ def trigger_step_verification(identifier: str, db: Session = Depends(get_db)):
         return {"status": "skip", "message": "Onboarding ya completado"}
     cmd_name = get_step_command(step)
 
+    # Wait up to 10s for agent to appear (race condition fix)
+    import time as _time
     agent = crud.get_agent_by_vcoo(db, vcoo_id)
-    # Check if agent is active (seen within last 2 minutes)
     agent_alive = False
-    if agent and agent.last_seen:
-        import datetime as dt
-        ago = (dt.datetime.utcnow() - agent.last_seen.replace(tzinfo=None)).total_seconds()
-        agent_alive = ago < 120
+    for _ in range(10):
+        if agent and agent.last_seen:
+            import datetime as dt
+            ago = (dt.datetime.utcnow() - agent.last_seen.replace(tzinfo=None)).total_seconds()
+            if ago < 120:
+                agent_alive = True
+                break
+        _time.sleep(1)
+        db.commit()  # refresh session
+        agent = crud.get_agent_by_vcoo(db, vcoo_id)
 
     if agent and agent_alive:
-        # Real agent connected — enqueue the command
         cmd = crud.create_command(db, agent_id=str(agent.id), command=cmd_name, step=step)
         return {
             "status": "enqueued",
@@ -420,7 +427,6 @@ def trigger_step_verification(identifier: str, db: Session = Depends(get_db)):
             "command": cmd_name,
         }
     else:
-        # Dev/demo mode — auto-advance the step
         crud.advance_onboarding_step(db, vcoo_id, step)
         db.refresh(st)
         return {
@@ -1046,6 +1052,69 @@ def agent_capabilities_endpoint(agent_id: str, payload: dict, authorization: str
     crud.set_agent_capabilities(db, agent_id, payload)
     crud.touch_agent(db, agent_id)
     return {"status": "ok"}
+
+
+# ── Agent tick (unified health + command poll) ─────────────
+
+@app.post("/agent/{agent_id}/tick")
+def agent_tick(agent_id: str, body: schemas.TickRequest, authorization: str = Header(None), db: Session = Depends(get_db)):
+    """Unified tick: agent sends health + last_command_id, receives commands + tick_interval."""
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="missing auth")
+    token = authorization.split(None, 1)[1]
+    token_payload = auth.decode_agent_token(token)
+    if not token_payload or token_payload.get('agent_id') != agent_id:
+        raise HTTPException(status_code=401, detail="invalid agent token")
+
+    agent = crud.get_agent(db, agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="agent not found")
+
+    if body.health:
+        agent.last_seen = datetime.utcnow()
+        agent.health_payload = json.dumps(body.health.model_dump())
+        db.commit()
+
+    if body.last_command_id:
+        crud.acknowledge_command(db, body.last_command_id)
+
+    pending = crud.get_pending_commands(db, agent_id, body.last_command_id)
+    VALID_COMMANDS = {
+        "verify-bootstrap", "verify-google", "verify-trello", "verify-email",
+        "verify-github", "verify-vercel", "verify-supabase",
+        "save-creds", "finalize", "set-provider",
+    }
+    cmd_dicts = []
+    for cmd in pending:
+        if cmd.command not in VALID_COMMANDS:
+            crud.mark_command_done(db, cmd.id, result="BLOCKED: comando no reconocido, descartado")
+            continue
+        entry = {"cmd_id": str(cmd.id), "command": cmd.command, "step": cmd.step}
+        if cmd.command in ("save-creds", "set-provider") and cmd.result:
+            try:
+                entry["payload"] = json.loads(cmd.result)
+            except Exception:
+                entry["payload"] = {"raw": cmd.result}
+        cmd_dicts.append(entry)
+        crud.mark_command_sent(db, cmd.id)
+
+    has_commands = len(cmd_dicts) > 0
+    tick_interval = 5 if has_commands else 60
+
+    vcoo = crud.get_vcoo_by_agent(db, agent_id)
+    progress = crud.get_tick_progress(db, str(vcoo.id)) if vcoo else None
+    step = None
+    if vcoo:
+        st = crud.get_onboarding_state(db, str(vcoo.id))
+        if st:
+            step = st.step
+
+    return schemas.TickResponse(
+        commands=cmd_dicts,
+        tick_interval=tick_interval,
+        step=step,
+        progress=progress,
+    )
 
 
 # ── VCOO Secrets (for installer) ───────────────────────────
