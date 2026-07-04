@@ -61,9 +61,19 @@ const DetalleClientePage = () => {
   const [configResult, setConfigResult] = useState<string | null>(null);
 
   const copiarAlPortapapeles = (texto: string, label: string) => {
-    navigator.clipboard.writeText(texto).then(() => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(texto).then(() => setCopiado(label));
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = texto;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
       setCopiado(label);
-    });
+    }
   };
 
   if (!id) {

@@ -52,10 +52,23 @@ const NuevoClientePage = () => {
   };
 
   const copiarAlPortapapeles = (texto: string) => {
-    navigator.clipboard.writeText(texto).then(() => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(texto).then(() => {
+        setCopiado(true);
+        setTimeout(() => setCopiado(false), 3000);
+      });
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = texto;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
       setCopiado(true);
       setTimeout(() => setCopiado(false), 3000);
-    });
+    }
   };
 
   const installCommand = resultado?.install_command as string | undefined;
