@@ -122,6 +122,14 @@ def get_wizard_step(step: str) -> int:
     return WIZARD_STEP_MAP.get(step, 0)
 
 
+def is_onboarding_complete(step: str, completed: list[str], modules: list[str]) -> bool:
+    """True when all required steps are done or we're on finalize."""
+    all_steps = get_steps_for_modules(modules)
+    if not all_steps:
+        return True
+    return step == "finalize" or len(completed) >= len(all_steps) - 1
+
+
 def get_step_command(step: str) -> str:
     """Devuelve el comando de verificación para un paso."""
     mapping = {

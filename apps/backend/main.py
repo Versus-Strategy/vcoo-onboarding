@@ -324,7 +324,7 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
     if not owns_vcoo:
         # Case 2: Auth but doesn't own this VCOO
         st = crud.get_onboarding_state(db, vcoo_id)
-        from onboarding import get_total_steps, get_module_label, get_module_description, get_wizard_step, get_steps_for_modules
+        from onboarding import get_total_steps, get_module_label, get_module_description, get_wizard_step, is_onboarding_complete
         modules = list(st.modules or ["core"]) if st else ["core"]
         module_labels: dict[str, dict[str, str]] = {
             m: {"label": get_module_label(m), "description": get_module_description(m)}
@@ -332,14 +332,13 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
         }
         current_step = st.step if st else "bootstrap"
         completed_steps = st.completed or [] if st else []
-        all_steps = get_steps_for_modules(modules) if st else ["bootstrap", "finalize"]
-        all_done = len(completed_steps) >= len(all_steps) - 1 or current_step == "finalize"
+        all_done = is_onboarding_complete(current_step, completed_steps, modules)
 
     # Case 3: Auth and owns it — full onboarding state (existing behavior)
     st = crud.get_onboarding_state(db, vcoo_id)
     if not st:
         raise HTTPException(status_code=404, detail="No hay datos de onboarding")
-    from onboarding import get_total_steps, get_module_label, get_module_description, get_wizard_step, get_steps_for_modules
+    from onboarding import get_total_steps, get_module_label, get_module_description, get_wizard_step, is_onboarding_complete
     modules = list(st.modules or ["core"])
     total = get_total_steps(modules)
     done = len(st.completed or [])
@@ -349,8 +348,7 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
     }
     current_step = st.step
     completed_steps = st.completed or []
-    all_steps = get_steps_for_modules(modules)
-    all_done = len(completed_steps) >= len(all_steps) - 1 or current_step == "finalize"
+    all_done = is_onboarding_complete(current_step, completed_steps, modules)
     control_plane = _os.getenv('CONTROL_PLANE', 'http://localhost:8000')
     active_token_obj = crud.get_active_token_for_vcoo(db, vcoo_id)
     raw_token = active_token_obj.token if active_token_obj else ''
