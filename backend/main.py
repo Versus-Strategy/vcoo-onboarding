@@ -214,7 +214,7 @@ def create_vcoo(payload: dict = {}, db: Session = Depends(get_db)):
     crud.get_or_create_onboarding_state(db, str(vcoo.id), modules)
     # Generate provision token
     token = crud.create_provision_for_vcoo(db, str(vcoo.id))
-    frontend_url = _os.getenv('FRONTEND_URL', 'https://frontend-ivory-seven-d0aw1wzkae.vercel.app')
+    frontend_url = _os.getenv('FRONTEND_URL', 'https://vcoo-dashboard.vercel.app')
     onboarding_url = frontend_url.rstrip('/') + '/setup/' + token
     return {
         "id": str(vcoo.id),
@@ -326,7 +326,6 @@ def get_setup_info(token: str, authorization: str = Header(None), db: Session = 
     modules = list(st.modules or ["core"])
     total = get_total_steps(modules)
     done = len(st.completed or [])
-    frontend_url = _os.getenv('FRONTEND_URL', 'https://vcoo-onboarding.vercel.app')
     control_plane = _os.getenv('CONTROL_PLANE', 'https://vcoo-onboarding.vercel.app')
     install_cmd = f"curl -sSL {control_plane}/install.sh | PROVISION_TOKEN=*** bash -"
     # Check if agent is online
@@ -598,7 +597,6 @@ def get_provision_token(vcoo_id: str, db: Session = Depends(get_db)):
         token = active.token
     else:
         token = crud.create_provision_for_vcoo(db, vcoo_id)
-    frontend_url = _os.getenv('FRONTEND_URL', 'https://vcoo-onboarding.vercel.app')
     dashboard_url = _os.getenv('DASHBOARD_URL', 'https://vcoo-dashboard.vercel.app')
     control_plane = _os.getenv('CONTROL_PLANE', 'https://vcoo-onboarding.vercel.app')
     install_cmd = f"curl -sSL {control_plane}/install.sh | PROVISION_TOKEN=*** bash -"
@@ -612,7 +610,6 @@ def regenerate_token(vcoo_id: str, db: Session = Depends(get_db)):
     if not v:
         raise HTTPException(status_code=404, detail="VCOO not found")
     token = crud.regenerate_token_for_vcoo(db, vcoo_id)
-    frontend_url = _os.getenv('FRONTEND_URL', 'https://vcoo-onboarding.vercel.app')
     dashboard_url = _os.getenv('DASHBOARD_URL', 'https://vcoo-dashboard.vercel.app')
     control_plane = _os.getenv('CONTROL_PLANE', 'https://vcoo-onboarding.vercel.app')
     install_cmd = f"curl -sSL {control_plane}/install.sh | PROVISION_TOKEN=*** bash -"
@@ -633,9 +630,7 @@ def reactivate_vcoo(vcoo_id: str, db: Session = Depends(get_db)):
     token = crud.reactivate_vcoo(db, vcoo_id)
     if not token:
         raise HTTPException(status_code=404, detail="VCOO not found")
-    frontend_url = _os.getenv('FRONTEND_URL', 'https://vcoo-onboarding.vercel.app')
     control_plane = _os.getenv('CONTROL_PLANE', 'https://vcoo-onboarding.vercel.app')
-    install_cmd = f"curl -sSL {control_plane}/install.sh | PROVISION_TOKEN=*** bash -"
     return {"status": "active", "token": token, "install_command": install_cmd}
 
 @app.delete("/vcoo/{vcoo_id}")
