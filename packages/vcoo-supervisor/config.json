@@ -1,0 +1,17 @@
+{
+  "plugins": {
+    "health_reporter": {
+      "enabled": true,
+      "interval": 60
+    },
+    "watchdog": {
+      "enabled": true,
+      "interval": 30,
+      "service": "hermes-gateway"
+    },
+    "updater": {
+      "enabled": true,
+      "interval": 604800
+    }
+  }
+}
