@@ -169,13 +169,17 @@ Esto descarga `install_vsd.sh` que:
 
 ### 2.6 Renombramiento de módulos
 
-| Backend ID | Frontend actual | Frontend nuevo | Descripción |
-|-----------|-----------------|----------------|-------------|
-| core | — | — | Instalación base (siempre incluido) |
-| google-drive | office | Google Drive | Acceso a Drive, Docs y Calendar |
-| gmail | mail | Gmail | Correo electrónico inteligente |
-| developer | developer | GitHub + Vercel + Supabase | Repositorios, deploys y base de datos |
-| planner | planner | *(pospuesto)* | Trello se implementa más adelante |
+Los scripts del backend y los IDs internos mantienen nombres **genéricos** para soportar múltiples proveedores futuros. Solo cambia la etiqueta visible en el frontend.
+
+| Backend ID (script) | Frontend (etiqueta visible) | Descripción |
+|--------------------|---------------------------|-------------|
+| core | — | Instalación base (siempre incluido) |
+| office | Google Drive | Acceso a Drive, Docs y Calendar |
+| mail | Gmail | Correo electrónico inteligente |
+| developer | GitHub + Vercel + Supabase | Repositorios, deploys y base de datos |
+| planner | *(pospuesto)* | Trello se implementa más adelante |
+
+**Regla:** El backend siempre usa `office`, `mail`, `planner`, `developer`. El frontend mapea a nombres descriptivos que el cliente entiende. Si en el futuro `office` soporta también Microsoft 365, el script `vcoo-office.py` sigue siendo válido.
 
 ### 2.7 Comunicación: Long Polling
 
@@ -199,7 +203,7 @@ VPS:  si 200: ejecuta comando → POST /agent/{id}/result
 2. **One-liner con token real en vista cliente** — El cliente ve su comando con su token
 3. **Paso a paso guiado** — Copiar → pegar → verificar, con bloqueo/desbloqueo
 4. **OAuth en el navegador** — No simulado, flujo real con redirect
-5. **Nombres de módulos representativos** — google-drive, gmail, developer
+5. **Nombres de módulos representativos en frontend** — backend mantiene IDs genéricos (office, mail, developer), frontend muestra etiquetas descriptivas (Google Drive, Gmail, GitHub + Vercel + Supabase)
 6. **Agente permanente** — versusd nunca se autodestruye, siempre sincronizado
 7. **Long polling** — Comandos llegan en tiempo real al VPS
 8. **Estilo consistente** — Mismo tema claro en operador y cliente onboarding
