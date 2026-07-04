@@ -8,6 +8,16 @@ export default defineConfig({
       fastRefresh: false,
     }),
     {
+      name: 'remove-react-refresh-preamble',
+      enforce: 'post',
+      transformIndexHtml(html) {
+        return html.replace(
+          /<script type="module">import.*?react-refresh.*?<\/script>\n*/g,
+          ''
+        );
+      },
+    },
+    {
       name: 'spa-fallback',
       configureServer(server) {
         server.middlewares.use((req, res, next) => {
