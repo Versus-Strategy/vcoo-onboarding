@@ -350,6 +350,8 @@ const SetupWizard = () => {
 
   // ── Conectar proveedor ──
 
+  const [proveedorSeleccionado, setProveedorSeleccionado] = useState<string | null>(null);
+
   const manejarConectarProveedor = async (service: string) => {
     if (!token) return;
     setConectando(service);
@@ -357,16 +359,34 @@ const SetupWizard = () => {
       const { data } = await apiClient.get(
         `/setup/${token}/auth-url?service=${service}`
       );
-      const { url } = data as { url: string; service: string };
-      if (url) {
-        window.location.href = url;
+      const { commands } = data as { commands: string[]; service: string };
+      if (commands && commands.length > 0) {
+        setProveedorSeleccionado(service);
+        setConectando(null);
+        return;
       }
-    } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : 'Error al conectar proveedor';
-      setError(msg);
-      setConectando(null);
+    } catch {
+      // fallback: show instructions anyway
     }
+    setProveedorSeleccionado(service);
+    setConectando(null);
+  };
+
+  const CONFIG_INSTRUCTIONS: Record<string, { titulo: string; pasos: string[] }> = {
+    anthropic: { titulo: "Anthropic (Claude)", pasos: [
+      "1. Obtén tu API key en console.anthropic.com",
+      "2. Ejecuta en tu VPS: export ANTHROPIC_API_KEY=sk-ant-tu-clave",
+      '3. Ejecuta: hermes config set model.provider anthropic',
+    ]},
+    openai: { titulo: "OpenAI", pasos: [
+      "1. Obtén tu API key en platform.openai.com",
+      "2. Ejecuta en tu VPS: export OPENAI_API_KEY=sk-tu-clave",
+      '3. Ejecuta: hermes config set model.provider openai',
+    ]},
+    opencode: { titulo: "OpenCode", pasos: [
+      '1. Ejecuta en tu VPS: hermes config set model.provider opencode',
+      '2. Ejecuta: hermes config set model.default opencode/claude-sonnet-4',
+    ]},
   };
 
   // ── Conectar módulo ──
@@ -519,8 +539,56 @@ const SetupWizard = () => {
     );
   };
 
-  const renderPasoProveedor = () => (
-    <div className="space-y-6">
+  const renderPasoProveedor = () => {
+    const providers = [...(onboarding.providers || [])].sort((a, b) =>
+      a.nombre.localeCompare(b.nombre)
+    );
+
+    if (proveedorSeleccionado) {
+      const prov = providers.find(p => p.id === proveedorSeleccionado);
+      const instr = CONFIG_INSTRUCTIONS[proveedorSeleccionado];
+      return (
+        <div className="space-y-6">
+          <button onClick={() => setProveedorSeleccionado(null)}
+            className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Volver a proveedores
+          </button>
+
+          <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">
+              {prov?.nombre || proveedorSeleccionado}
+            </h3>
+            <p className="text-sm text-gray-500 mb-4">{prov?.descripcion}</p>
+
+            {instr ? (
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-gray-700">Pasos para configurar:</p>
+                {instr.pasos.map((paso, i) => (
+                  <div key={i} className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3 border border-gray-100">
+                    {paso}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-sm text-gray-500 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <p className="font-medium text-yellow-800 mb-1">Configuración manual requerida</p>
+                <p>Para usar {prov?.nombre || proveedorSeleccionado}, configura la API key en tu VPS:</p>
+                <code className="block mt-2 bg-gray-800 text-gray-100 rounded-lg p-3 font-mono text-xs">
+                  hermes config set model.provider {proveedorSeleccionado}
+                </code>
+                <p className="mt-2 text-yellow-700">Luego vuelve aquí y haz clic en "Verificar" para continuar.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+    <div className="space-y-4">
       <div>
         <h2 className="text-xl font-bold text-gray-900 mb-2">
           Selecciona tu proveedor de IA
@@ -543,37 +611,47 @@ const SetupWizard = () => {
           <p className="text-gray-400 text-sm mt-2">Completa el paso 1 (Instalar Agente) para continuar.</p>
         </div>
       ) : (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {(onboarding.providers || []).map((proveedor, idx) => (
+      <div className="space-y-1 max-w-2xl">
+        {providers.map((proveedor, idx) => {
+          const isRec = proveedor.id === 'opencode-go' || proveedor.id === 'opencode-zen';
+          return (
           <div
             key={proveedor.id}
             onClick={() => manejarConectarProveedor(proveedor.id)}
-            className={`group cursor-pointer bg-white border border-gray-200 rounded-xl p-5 transition-all duration-200 hover:border-primary-500 hover:shadow-lg hover:shadow-primary-100/50 ${
-              conectando === proveedor.id ? 'opacity-60 pointer-events-none' : ''
+            className={`flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer transition-colors ${
+              isRec
+                ? 'bg-primary-50 border border-primary-200 hover:bg-primary-100'
+                : 'hover:bg-gray-50 border border-transparent'
             }`}
           >
-            <div className="flex flex-col items-center text-center">
-              <div
-                className={`w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mb-3 text-2xl font-bold ${COLORS[idx % COLORS.length]}`}
-              >
-                {proveedor.nombre.charAt(0)}
+            <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white ${COLORS[idx % COLORS.length].replace('text-', 'bg-').replace('-600', '-500')}`}>
+              {proveedor.nombre.charAt(0)}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-gray-900">{proveedor.nombre}</span>
+                {isRec && (
+                  <span className="text-xs bg-primary-200 text-primary-800 px-2 py-0.5 rounded-full font-medium">
+                    Recomendado
+                  </span>
+                )}
               </div>
-              <h3 className="font-semibold text-gray-900 mb-1">
-                {proveedor.nombre}
-              </h3>
-              <p className="text-sm text-gray-500">{proveedor.descripcion}</p>
+              <p className="text-xs text-gray-500 truncate">{proveedor.descripcion}</p>
             </div>
             {conectando === proveedor.id && (
-              <div className="mt-3 flex justify-center">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-500" />
-              </div>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-500" />
             )}
+            <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
           </div>
-        ))}
+          );
+        })}
       </div>
       )}
     </div>
-  );
+    );
+  };
 
   const renderPasoModulos = () => {
     const modulosDisponibles = onboarding.modules || [];
