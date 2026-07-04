@@ -42,10 +42,11 @@ const PASOS = [
   'Finalización',
 ];
 
-const COLORS = [
-  'text-orange-600', 'text-green-600', 'text-blue-600',
-  'text-purple-600', 'text-gray-600', 'text-red-600',
-  'text-teal-600', 'text-pink-600', 'text-indigo-600',
+const BG_COLORS = [
+  'bg-orange-500', 'bg-green-500', 'bg-blue-500',
+  'bg-purple-500', 'bg-gray-500', 'bg-red-500',
+  'bg-teal-500', 'bg-pink-500', 'bg-indigo-500',
+  'bg-yellow-500', 'bg-cyan-500', 'bg-rose-500',
 ];
 
 // ── AuthForm: registro e inicio de sesión para clientes (tema claro) ──
@@ -223,6 +224,7 @@ const SetupWizard = () => {
   const [conectando, setConectando] = useState<string | null>(null);
   const [subPaso, setSubPaso] = useState(1);
   const [proveedorSeleccionado, setProveedorSeleccionado] = useState<string | null>(null);
+  const [verMas, setVerMas] = useState(false);
 
   // Check localStorage directly on mount for existing auth
   useEffect(() => {
@@ -539,15 +541,17 @@ const SetupWizard = () => {
   };
 
   const renderPasoProveedor = () => {
-    const providers = [...(onboarding.providers || [])].sort((a, b) =>
-      a.nombre.localeCompare(b.nombre)
-    );
+    const raw = onboarding.providers || [];
+    const recomendado = raw.find(p => p.id === 'opencode-go' || p.id === 'opencode-go');
+    const destacadosIds = new Set(['opencode-go', 'opencode-zen', 'anthropic', 'openai', 'openai-api', 'openai-codex', 'google', 'gemini', 'copilot', 'openrouter']);
+    const destacados = raw.filter(p => p.id !== 'opencode-go' && destacadosIds.has(p.id));
+    const resto = raw.filter(p => p.id !== 'opencode-go' && !destacadosIds.has(p.id));
 
     if (proveedorSeleccionado) {
-      const prov = providers.find(p => p.id === proveedorSeleccionado);
+      const prov = raw.find(p => p.id === proveedorSeleccionado);
       const instr = CONFIG_INSTRUCTIONS[proveedorSeleccionado];
       return (
-        <div className="space-y-6">
+        <div className="space-y-6 max-w-2xl">
           <button onClick={() => setProveedorSeleccionado(null)}
             className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -586,6 +590,37 @@ const SetupWizard = () => {
       );
     }
 
+    const renderRow = (proveedor: typeof raw[0], idx: number, rec: boolean) => (
+      <div key={proveedor.id}
+        onClick={() => manejarConectarProveedor(proveedor.id)}
+        className={`flex items-center gap-3 px-4 py-2.5 rounded-lg cursor-pointer transition-colors ${
+          rec
+            ? 'bg-primary-50 border border-primary-200 hover:bg-primary-100'
+            : 'hover:bg-gray-50 border border-transparent'
+        }`}
+      >
+        <div className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white ${BG_COLORS[idx % BG_COLORS.length]}`}>
+          {proveedor.nombre.charAt(0)}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className={`text-sm font-medium ${rec ? 'text-primary-900' : 'text-gray-900'}`}>
+              {proveedor.nombre}
+            </span>
+            {rec && (
+              <span className="text-xs bg-primary-200 text-primary-800 px-2 py-0.5 rounded-full font-medium">
+                Recomendado
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-gray-500 truncate">{proveedor.descripcion}</p>
+        </div>
+        <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </div>
+    );
+
     return (
     <div className="space-y-4">
       <div>
@@ -611,41 +646,25 @@ const SetupWizard = () => {
         </div>
       ) : (
       <div className="space-y-1 max-w-2xl">
-        {providers.map((proveedor, idx) => {
-          const isRec = proveedor.id === 'opencode-go' || proveedor.id === 'opencode-zen';
-          return (
-          <div
-            key={proveedor.id}
-            onClick={() => manejarConectarProveedor(proveedor.id)}
-            className={`flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer transition-colors ${
-              isRec
-                ? 'bg-primary-50 border border-primary-200 hover:bg-primary-100'
-                : 'hover:bg-gray-50 border border-transparent'
-            }`}
-          >
-            <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white ${COLORS[idx % COLORS.length].replace('text-', 'bg-').replace('-600', '-500')}`}>
-              {proveedor.nombre.charAt(0)}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-gray-900">{proveedor.nombre}</span>
-                {isRec && (
-                  <span className="text-xs bg-primary-200 text-primary-800 px-2 py-0.5 rounded-full font-medium">
-                    Recomendado
-                  </span>
-                )}
+        {recomendado && renderRow(recomendado, 0, true)}
+        <div className="border-t border-gray-100 pt-2 mt-2">
+          <p className="text-xs text-gray-400 font-medium mb-1 px-4">POPULARES</p>
+          {destacados.map((p, i) => renderRow(p, i + 1, false))}
+        </div>
+        {resto.length > 0 && (
+          <>
+            {verMas && (
+              <div className="border-t border-gray-100 pt-2 mt-2">
+                <p className="text-xs text-gray-400 font-medium mb-1 px-4">OTROS</p>
+                {resto.map((p, i) => renderRow(p, i + 1 + destacados.length, false))}
               </div>
-              <p className="text-xs text-gray-500 truncate">{proveedor.descripcion}</p>
-            </div>
-            {conectando === proveedor.id && (
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-500" />
             )}
-            <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </div>
-          );
-        })}
+            <button onClick={() => setVerMas(!verMas)}
+              className="text-sm text-primary-600 hover:text-primary-700 px-4 py-2">
+              {verMas ? 'Mostrar menos' : `Ver más (${resto.length} proveedores)`}
+            </button>
+          </>
+        )}
       </div>
       )}
     </div>
