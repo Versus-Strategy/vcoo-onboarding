@@ -4,7 +4,9 @@ import { resolve } from 'path'
 
 export default defineConfig({
   plugins: [
-    react(),
+    react({
+      fastRefresh: false,
+    }),
     {
       name: 'spa-fallback',
       configureServer(server) {
