@@ -1,3 +1,5 @@
+# Vercel serverless dependencies (api/[...slug].py)
+# Backend deps: see apps/backend/requirements.txt
 fastapi
 uvicorn[standard]
 SQLAlchemy
