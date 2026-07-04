@@ -18,12 +18,14 @@ interface OnboardingState {
   name: string;
   modules: string[];
   module_labels?: Record<string, ModuleLabel>;
-  step: number;
+  step: string;
+  wizard_step?: number;
   status: string;
-  completed: boolean;
+  completed: string[];
+  all_done?: boolean;
   install_command: string;
   agent_online: boolean;
-  progress: number;
+  progress: number | { total: number; done: number };
 }
 
 interface ProviderInfo {
@@ -365,8 +367,8 @@ const SetupWizard = () => {
 
   // ── Wizard steps ──
 
-  const pasoActual = onboarding.step;
-  const completado = onboarding.completed;
+  const pasoActual = onboarding.wizard_step ?? 0;
+  const completado = onboarding.all_done ?? false;
 
   // ── Verificar instalación del agente ──
 

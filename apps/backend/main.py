@@ -324,35 +324,22 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
     if not owns_vcoo:
         # Case 2: Auth but doesn't own this VCOO
         st = crud.get_onboarding_state(db, vcoo_id)
-        from onboarding import get_total_steps, get_module_label, get_module_description
+        from onboarding import get_total_steps, get_module_label, get_module_description, get_wizard_step, get_steps_for_modules
         modules = list(st.modules or ["core"]) if st else ["core"]
         module_labels: dict[str, dict[str, str]] = {
             m: {"label": get_module_label(m), "description": get_module_description(m)}
             for m in modules
         }
-        return {
-            "requires_registration": False,
-            "token_valid": True,
-            "vcoo_name": v.name,
-            "vcoo_id": str(v.id),
-            "modules": modules,
-            "module_labels": module_labels,
-            "step": st.step if st else "unknown",
-            "status": st.status if st else "unknown",
-            "completed": st.completed or [] if st else [],
-            "errors": st.errors or [] if st else [],
-            "retry_count": st.retry_count or {} if st else {},
-            "progress": {
-                "total": get_total_steps(modules),
-                "done": len(st.completed or []) if st else 0,
-            },
-        }
+        current_step = st.step if st else "bootstrap"
+        completed_steps = st.completed or [] if st else []
+        all_steps = get_steps_for_modules(modules) if st else ["bootstrap", "finalize"]
+        all_done = len(completed_steps) >= len(all_steps) - 1 or current_step == "finalize"
 
     # Case 3: Auth and owns it — full onboarding state (existing behavior)
     st = crud.get_onboarding_state(db, vcoo_id)
     if not st:
         raise HTTPException(status_code=404, detail="No hay datos de onboarding")
-    from onboarding import get_total_steps, get_module_label, get_module_description
+    from onboarding import get_total_steps, get_module_label, get_module_description, get_wizard_step, get_steps_for_modules
     modules = list(st.modules or ["core"])
     total = get_total_steps(modules)
     done = len(st.completed or [])
@@ -360,6 +347,10 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
         m: {"label": get_module_label(m), "description": get_module_description(m)}
         for m in modules
     }
+    current_step = st.step
+    completed_steps = st.completed or []
+    all_steps = get_steps_for_modules(modules)
+    all_done = len(completed_steps) >= len(all_steps) - 1 or current_step == "finalize"
     control_plane = _os.getenv('CONTROL_PLANE', 'http://localhost:8000')
     active_token_obj = crud.get_active_token_for_vcoo(db, vcoo_id)
     raw_token = active_token_obj.token if active_token_obj else ''
@@ -376,9 +367,11 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
         "name": v.name,
         "modules": modules,
         "module_labels": module_labels,
-        "step": st.step,
+        "step": current_step,
+        "wizard_step": get_wizard_step(current_step),
         "status": st.status,
-        "completed": st.completed or [],
+        "completed": completed_steps,
+        "all_done": all_done,
         "errors": st.errors or [],
         "retry_count": st.retry_count or {},
         "progress": {"total": total, "done": done},

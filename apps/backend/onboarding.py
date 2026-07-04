@@ -104,6 +104,24 @@ def get_next_step(current_completed: list[str], modules: list[str]) -> Optional[
     return None
 
 
+# Mapeo de pasos del backend a pasos del wizard frontend (0-3)
+# 0 = Instalar Agente, 1 = Proveedor IA, 2 = Módulos, 3 = Finalización
+WIZARD_STEP_MAP: dict[str, int] = {
+    "bootstrap":      0,
+    "google-oauth":   1,
+    "gmail-setup":    2,
+    "trello-setup":   2,
+    "github-setup":   2,
+    "vercel-setup":   2,
+    "supabase-setup": 2,
+    "finalize":       3,
+}
+
+
+def get_wizard_step(step: str) -> int:
+    return WIZARD_STEP_MAP.get(step, 0)
+
+
 def get_step_command(step: str) -> str:
     """Devuelve el comando de verificación para un paso."""
     mapping = {
