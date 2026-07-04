@@ -1,0 +1,125 @@
+# ═══════════════════════════════════════════════════════════════════
+# VCOO Virtual — Docker Test Image
+# ═══════════════════════════════════════════════════════════════════
+# Simula una instalación limpia en VPS (Ubuntu 22.04 LTS).
+#
+# Build:
+#   docker build -f Dockerfile.test -t vcoo-test .
+#
+# Con test tokens (los que proporcione el operador):
+#   docker build -f Dockerfile.test \
+#     --build-arg OPENROUTER_API_KEY=sk-or-... \
+#     --build-arg DISCORD_BOT_TOKEN=MTIz... \
+#     --build-arg TELEGRAM_BOT_TOKEN=123456:... \
+#     --build-arg TRELLO_API_KEY=... \
+#     --build-arg TRELLO_TOKEN=ATT... \
+#     -t vcoo-test .
+#
+# Run interactivo (con claves de test montadas + Google OAuth + pairing):
+#   docker run -it --rm --name vcoo-test-agent \
+#     -v ~/.env.test:/root/.hermes/.env \
+#     -v ~/.hermes/google_token.json:/root/.hermes/google_token.json \
+#     -v ~/.hermes/google_client_secret.json:/root/.hermes/google_client_secret.json \
+#     -v ~/.hermes/auth.json:/root/.hermes/auth.json \
+#     -v ~/.hermes/channel_directory.json:/root/.hermes/channel_directory.json \
+#     vcoo-test \
+#     bash -l -c 'cd /opt/vcoo-template && hermes gateway run > /tmp/gw.log 2>&1 & disown && sleep 3 && hermes'
+#
+# Run test suite:
+#   docker run --rm \
+#     -v ~/.env.test:/root/.hermes/.env \
+#     -v ~/.hermes/google_token.json:/root/.hermes/google_token.json \
+#     vcoo-test \
+#     python3 /opt/vcoo-template/scripts/vcoo-tester.py
+#
+# ═══════════════════════════════════════════════════════════════════
+
+FROM ubuntu:22.04
+
+LABEL maintainer="VERSUS Strategy SL"
+LABEL description="VCOO Virtual — Test environment (clean VPS simulation)"
+LABEL version="1.0.0"
+
+# ─── Build args (placeholders por defecto, el operador los reemplaza) ─────
+ARG OPENROUTER_API_KEY=__TEST_PLACEHOLDER__
+ARG DISCORD_BOT_TOKEN=__TEST_PLACEHOLDER__
+ARG TELEGRAM_BOT_TOKEN=__TEST_PLACEHOLDER__
+ARG TRELLO_API_KEY=__TEST_PLACEHOLDER__
+ARG TRELLO_TOKEN=__TEST_PLACEHOLDER__
+
+# ─── Evitar prompts interactivos ─────────────────────────────────────────
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+
+# ─── 1. Dependencias base del sistema (las mínimas para install.sh) ──────
+# Nota: Ubuntu 22.04 trae Python 3.10, pero Hermes Agent requiere 3.11+
+RUN apt-get update -qq && \
+    apt-get install -y -qq \
+        software-properties-common \
+        curl \
+        git \
+        sudo \
+        ca-certificates \
+        build-essential \
+        libssl-dev \
+    && add-apt-repository -y ppa:deadsnakes/ppa \
+    && apt-get update -qq \
+    && apt-get install -y -qq \
+        python3.11 \
+        python3.11-distutils \
+        python3.11-venv \
+        python3.11-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /var/cache/apt/*
+
+# Make python3.11 the default python3
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 && \
+    update-alternatives --set python3 /usr/bin/python3.11 && \
+    python3 --version
+
+# Install pip for Python 3.11 (via ensurepip — método oficial)
+RUN python3.11 -m ensurepip --upgrade && \
+    python3.11 -m pip install --upgrade pip setuptools
+ENV PIP_REQUIRE_VIRTUALENV=false
+
+# ─── 2. Copiar template VCOO (excluye .git, test-output, etc.) ──────────
+COPY . /opt/vcoo-template/
+WORKDIR /opt/vcoo-template
+
+# ─── 3. Generar .env con los tokens de test ──────────────────────────────
+RUN cp .env.example .env && \
+    sed -i "s|^OPENROUTER_API_KEY=.*|OPENROUTER_API_KEY=${OPENROUTER_API_KEY}|" .env && \
+    sed -i "s|^DISCORD_BOT_TOKEN=.*|DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}|" .env && \
+    sed -i "s|^TELEGRAM_BOT_TOKEN=.*|TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}|" .env && \
+    sed -i "s|^CONTROL_PLANE_URL=.*|CONTROL_PLANE_URL=https://vcoo-onboarding.vercel.app|" .env && \
+    sed -i "s|^MASTER_KEY=.*|MASTER_KEY=__TEST_PLACEHOLDER__|" .env && \
+    sed -i "s|^PROVISION_TOKEN=.*|PROVISION_TOKEN=__TEST_PLACEHOLDER__|" .env && \
+    echo "✅ .env generado con placeholders" && \
+    cat .env | grep -v '^#' | grep -v '^$' | head -10
+
+# ─── 4. Ejecutar install.sh (la instalación real del cliente) ────────────
+RUN bash install.sh 2>&1 | tee /tmp/install.log | tail -30
+
+# ─── 5. Verificar que Hermes se instaló correctamente ────────────────────
+RUN echo "=== Hermes instalado ===" && \
+    which hermes && \
+    hermes --version 2>&1 || true && \
+    echo "=== Skills VCOO ===" && \
+    ls -la ~/.hermes/skills/versus-multiagent-orchestration/ 2>/dev/null || echo "(skills se cargan en runtime)" && \
+    echo "=== Scripts VCOO ===" && \
+    ls -la ~/.hermes/scripts/vcoo/ 2>/dev/null || echo "(scripts se copian en runtime)" && \
+    echo "✅ Build completado"
+
+# ─── 6. Crear credenciales Trello si se proporcionaron ───────────────────
+RUN if [ "${TRELLO_API_KEY}" != "__TEST_PLACEHOLDER__" ] && [ "${TRELLO_TOKEN}" != "__TEST_PLACEHOLDER__" ]; then \
+        mkdir -p ~/versus && \
+        echo "TRELLO_API_KEY=\"${TRELLO_API_KEY}\"" > ~/versus/.env.trello && \
+        echo "TRELLO_TOKEN=\"${TRELLO_TOKEN}\"" >> ~/versus/.env.trello && \
+        chmod 600 ~/versus/.env.trello && \
+        echo "✅ Trello credentials created"; \
+    else \
+        echo "⚠️  Trello credentials not provided (TRELLO_API_KEY/TRELLO_TOKEN)"; \
+    fi
+
+# ─── 7. Punto de entrada: mantener vivo para tests interactivos ──────────
+CMD ["bash", "-c", "echo 'VCOO Test container ready'; echo; echo 'Run: python3 /opt/vcoo-template/scripts/vcoo-tester.py'; bash"]

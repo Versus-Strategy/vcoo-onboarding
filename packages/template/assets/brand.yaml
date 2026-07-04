@@ -1,0 +1,54 @@
+# VERSUS Strategy SL — Brand Identity
+# Used by vcoo-pdf.py to style documents
+
+brand:
+  name: "VERSUS Strategy"
+  short_name: "VERSUS"
+
+  # Color palette
+  colors:
+    primary: "#1a1a2e"       # Deep navy — headers, titles
+    secondary: "#16213e"     # Dark blue — secondary elements
+    accent: "#e94560"        # Coral red — highlights, accents
+    light: "#f8f9fa"         # Off-white — backgrounds
+    text: "#2d3436"          # Dark gray — body text
+    muted: "#636e72"         # Medium gray — secondary text
+    border: "#dfe6e9"        # Light gray — borders, rules
+    white: "#ffffff"
+
+  # Typography
+  fonts:
+    heading: "Helvetica-Bold"
+    body: "Helvetica"
+    mono: "Courier"
+    sizes:
+      title: 24
+      heading1: 16
+      heading2: 14
+      body: 10
+      small: 8
+
+  # Logo (SVG preferred, PNG fallback)
+  logo:
+    path: "assets/logo.png"        # Relative to template root
+    max_width_mm: 50
+    max_height_mm: 20
+
+  # Company info (default sender)
+  company:
+    name: "VERSUS Strategy, S.L."
+    tax_id: "B-00000000"
+    address: "C/ Ejemplo, 123"
+    city: "20001 San Sebastián"
+    country: "España"
+    email: "info@versusstrategy.com"
+    phone: "+34 000 00 00 00"
+
+  # Default document settings
+  defaults:
+    page_size: "A4"
+    margin_top_mm: 25
+    margin_bottom_mm: 20
+    margin_left_mm: 20
+    margin_right_mm: 20
+    footer_height_mm: 15

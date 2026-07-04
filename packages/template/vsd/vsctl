@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# vsctl – front‑end para operar versusd y hermes
+set -euo pipefail
+
+VSD_LOG="/var/log/versusd.log"
+HERMES_LOG="/var/log/hermes-gateway.log"   # si el gateway lo escribe aquí
+
+usage() {
+    cat <<'EOU'
+Usage: vsctl <command> [args]
+
+Comandos disponibles:
+  status          Estado de hermes‑gateway y versusd
+  start           Inicia hermes‑gateway
+  stop            Detiene hermes‑gateway
+  restart         Reinicia hermes‑gateway
+  update          Ejecuta 'hermes update' (actualiza Hermes y plantilla VCOO)
+  logs            Sigue el log de versusd (versusd.log)
+  hermes-logs     Sigue el log de hermes‑gateway
+  self-update     (placeholder) recarga versusd (en el futuro con verificación de firma)
+  help            Muestra esta ayuda
+EOU
+}
+
+case "${1:-}" in
+    status)
+        echo "=== hermes‑gateway ==="
+        systemctl status hermes-gateway.service --no-pager -l
+        echo -e "\n=== versusd (watchdog) ==="
+        systemctl status versusd.service --no-pager -l
+        ;;
+    start)   sudo systemctl start hermes-gateway.service ;;
+    stop)    sudo systemctl stop hermes-gateway.service ;;
+    restart) sudo systemctl restart hermes-gateway.service ;;
+    update)
+        echo "Actualizando Hermes y plantilla VCOO…"
+        hermes update
+        ;;
+    logs)    sudo tail -f "$VSD_LOG" ;;
+    hermes-logs) sudo tail -f "$HERMES_LOG" ;;
+    self-update)
+        echo "Actualizando versusd (recargando unidades)…"
+        sudo systemctl daemon-reload
+        sudo systemctl restart versusd.service
+        echo "versusd recargado."
+        ;;
+    help|*)  usage ;;
+esac

@@ -1,0 +1,23 @@
+# Docker ignore for VCOO test image
+# Exclude everything that shouldn't be in the clean VPS simulation
+
+.git/
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+.env.trello
+.env.local
+google_token.json
+google_client_secret.json
+*.log
+tmp/
+.vcoo-agent/
+node_modules/
+.hermes/
+hermes-agent/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

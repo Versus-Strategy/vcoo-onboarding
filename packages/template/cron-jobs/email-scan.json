@@ -1,0 +1,7 @@
+{
+  "name": "vcoo-email-scan",
+  "schedule": "every 60m",
+  "prompt": "Revisa la bandeja de entrada de Gmail usando el script vcoo-email.py en el venv VCOO. Busca correos no leídos de clientes conocidos o con palabras clave como 'urgente', 'factura', 'presupuesto'. Si encuentras algo importante, resume el contenido y notifícaselo al equipo en Discord. Si no hay correos relevantes, responde [SILENT].",
+  "deliver": "origin",
+  "enabled_toolsets": ["terminal"]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "vcoo-trello-hygiene",
+  "schedule": "every 240m",
+  "prompt": "Revisa el tablero de Trello del equipo. Busca tarjetas en 'Pending' que no hayan tenido actividad en más de 7 días, o tarjetas en 'To Do' que lleven más de 14 días sin moverse. Si encuentras alguna, añade un comentario preguntando si necesita atención y notifícalo en Discord. Si no hay nada que reportar, responde [SILENT].",
+  "deliver": "origin",
+  "enabled_toolsets": ["terminal"]
+}

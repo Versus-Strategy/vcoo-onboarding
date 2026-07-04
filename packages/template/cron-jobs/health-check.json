@@ -1,0 +1,7 @@
+{
+  "name": "vcoo-health-check",
+  "schedule": "every 30m",
+  "prompt": "Ejecuta un health check del sistema VCOO: verifica que el proceso de Hermes está activo, que hay conexión a Internet (ping a google.com), y que el uso de disco y RAM están dentro de límites seguros. Si todo está bien, responde [SILENT]. Si hay algún problema, reporta los detalles.",
+  "deliver": "origin",
+  "enabled_toolsets": ["terminal"]
+}

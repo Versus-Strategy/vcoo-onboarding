@@ -1,0 +1,145 @@
+# ═══════════════════════════════════════════════════════════════════
+# VCOO Virtual — Escenarios de tests de comportamiento
+# ═══════════════════════════════════════════════════════════════════
+# Cada escenario define un prompt en lenguaje natural que se envía
+# al agente VCOO. El script vcoo-behavior-tester.py se encarga de:
+#   1. Ejecutar el prompt contra el agente (vía hermes -z)
+#   2. Evaluar la respuesta mediante un LLM judge
+#   3. Verificar efectos secundarios (generación de PDFs, etc.)
+#
+# Criterios de evaluación:
+#   - completed:  El agente ejecutó la acción y presentó resultados
+#   - failed:     El agente se excusó, respondió genéricamente o erró
+#   - skipped:    Prerrequisito no cumplido (token faltante, etc.)
+#
+# Añadir o quitar escenarios es tan simple como editar este archivo.
+# ═══════════════════════════════════════════════════════════════════
+
+version: 1.1
+description: "VCOO Behavioral Test Scenarios"
+
+# ─── Condiciones de skip ──────────────────────────────────────
+# Referenciadas desde cada escenario con when_skip:
+skip_conditions:
+  missing_openrouter: "OPENROUTER_API_KEY no disponible"
+  missing_google_token: "Token de Google OAuth no disponible o expirado"
+  missing_trello: "TRELLO_API_KEY o TRELLO_TOKEN no configurados"
+  missing_hermes: "hermes CLI no disponible en el PATH"
+
+scenarios:
+  # ─── Calendario ──────────────────────────────────────────────
+  - id: calendar-events
+    name: "📅 Mostrar eventos del calendario"
+    description: "El usuario pide ver sus eventos semanales"
+    prompt: "¿Qué tengo esta semana en el calendario?"
+    expected_skills: [google-workspace]
+    judge: true
+    side_effects: null
+    severity: critical
+    when_skip: missing_google_token
+
+  # ─── Gmail ──────────────────────────────────────────────────
+  - id: email-inbox
+    name: "📬 Leer correos recientes"
+    description: "El usuario pide revisar su bandeja de entrada"
+    prompt: "Revísame los 3 últimos correos de mi bandeja de entrada"
+    expected_skills: [vcoo-email]
+    judge: true
+    side_effects: null
+    severity: high
+    when_skip: null
+
+  - id: email-labels
+    name: "🏷️ Listar etiquetas de Gmail"
+    description: "El usuario pide ver sus etiquetas configuradas"
+    prompt: "Enséñame las etiquetas que tengo configuradas en Gmail"
+    expected_skills: [vcoo-email]
+    judge: true
+    side_effects: null
+    severity: low
+    when_skip: null
+
+  # ─── PDF ─────────────────────────────────────────────────────
+  - id: generate-invoice
+    name: "📄 Generar factura PDF"
+    description: "El usuario pide generar una factura"
+    prompt: "Genera una factura de ejemplo para el cliente 'VERSUS Strategy' por 500€ + IVA al 21%. La fecha es hoy."
+    expected_skills: [vcoo-pdf]
+    judge: true
+    side_effects:
+      type: file_created
+      name_pattern: "factura"
+      extension: ".pdf"
+      min_size_bytes: 500
+    severity: critical
+    when_skip: null
+
+  - id: generate-report
+    name: "📊 Generar informe PDF"
+    description: "El usuario pide un informe de proyecto"
+    prompt: "Crea un informe de prueba para el proyecto VCOO correspondiente al Q2-2026. Incluye un resumen ejecutivo."
+    expected_skills: [vcoo-pdf]
+    judge: true
+    side_effects:
+      type: file_created
+      extension: ".pdf"
+      min_size_bytes: 500
+    severity: high
+    when_skip: null
+
+  - id: generate-quote
+    name: "💰 Generar presupuesto PDF"
+    description: "El usuario pide un presupuesto en PDF"
+    prompt: "Prepara un presupuesto en PDF para un nuevo cliente de diseño web por 1200€. Incluye diseño, desarrollo y testing."
+    expected_skills: [vcoo-pdf]
+    judge: true
+    side_effects:
+      type: file_created
+      name_pattern: "presupuesto"
+      extension: ".pdf"
+      min_size_bytes: 500
+    severity: high
+    when_skip: null
+
+  # ─── Google Drive ───────────────────────────────────────────
+  - id: drive-files
+    name: "📁 Listar archivos de Drive"
+    description: "El usuario pide ver sus archivos en Google Drive"
+    prompt: "Enséñame los archivos que tengo en Google Drive"
+    expected_skills: [google-workspace]
+    judge: true
+    side_effects: null
+    severity: medium
+    when_skip: missing_google_token
+
+  - id: drive-search
+    name: "🔍 Buscar en Drive"
+    description: "El usuario pide buscar un documento concreto"
+    prompt: "Busca en mi Drive el documento 'Sistema de Ventas' o algo relacionado con ventas"
+    expected_skills: [google-workspace]
+    judge: true
+    side_effects: null
+    severity: medium
+    when_skip: missing_google_token
+
+  # ─── Trello ─────────────────────────────────────────────────
+  - id: trello-boards
+    name: "📋 Listar tableros Trello"
+    description: "El usuario pide ver sus tableros de Trello"
+    prompt: "Muéstrame mis tableros de Trello"
+    expected_skills: [vcoo-trello]
+    judge: true
+    side_effects: null
+    severity: optional
+    when_skip: missing_trello
+
+  # ─── Búsqueda web (si aplica) ───────────────────────────────
+  - id: web-search
+    name: "🌐 Búsqueda web"
+    description: "El usuario pide buscar información actualizada"
+    prompt: "Búscame información actual sobre el tipo de cambio EUR/USD hoy"
+    expected_skills: []
+    judge: true
+    side_effects: null
+    severity: low
+    when_skip: null

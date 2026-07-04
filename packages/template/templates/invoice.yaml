@@ -1,0 +1,139 @@
+# Invoice Template — Professional Layout
+# Based on QuickBooks / FreshBooks best practices
+# Fields populated by vcoo-pdf.py invoice command
+
+template:
+  name: "invoice"
+  label: "FACTURA"
+  page_size: "A4"
+
+  sections:
+    # ── Header: logo + document ID + dates ──────────────────────
+    - type: "split_header"
+      left:
+        - field: "logo"
+          max_width_mm: 50
+      right:
+        - field: "document_label"
+          style: "heading1"
+          color: "accent"
+        - field: "invoice_number"
+          label: "Nº Factura"
+          style: "title"
+        - field: "date"
+          label: "Fecha"
+        - field: "due_date"
+          label: "Vencimiento"
+        - field: "payment_terms"
+          label: "Forma de pago"
+
+    - type: "rule"
+      thickness: 2
+      color: "accent"
+      spacing_after_mm: 8
+
+    # ── Address blocks: FROM / TO ────────────────────────────────
+    - type: "address_block"
+      columns: 2
+      left:
+        title: "EMISOR"
+        lines:
+          - field: "company_name"
+          - field: "company_address"
+          - field: "company_city"
+          - field: "company_tax_id"
+          - field: "company_email"
+      right:
+        title: "CLIENTE"
+        lines:
+          - field: "client_name"
+          - field: "client_address"
+          - field: "client_city"
+          - field: "client_tax_id"
+          - field: "client_email"
+
+    - type: "spacer"
+      height_mm: 8
+
+    # ── Items table ──────────────────────────────────────────────
+    - type: "items_table"
+      title: "Servicios / Productos"
+      header_style: "table_header"
+      header_bg: "primary"
+      columns:
+        - header: "#"
+          field: "item_num"
+          width_mm: 10
+          align: "center"
+        - header: "Descripción"
+          field: "description"
+          width_mm: 90
+          align: "left"
+        - header: "Cant."
+          field: "qty"
+          width_mm: 15
+          align: "center"
+        - header: "Precio Ud."
+          field: "unit_price"
+          width_mm: 25
+          align: "right"
+        - header: "Total"
+          field: "total"
+          width_mm: 25
+          align: "right"
+
+    - type: "spacer"
+      height_mm: 5
+
+    # ── Totals section ───────────────────────────────────────────
+    - type: "totals_block"
+      align: "right"
+      lines:
+        - label: "Base Imponible"
+          field: "subtotal"
+          style: "normal"
+        - label: "IVA (21%)"
+          field: "vat"
+          style: "normal"
+        - label: "Retención IRPF (si aplica)"
+          field: "withholding"
+          style: "small"
+        - type: "rule"
+        - label: "TOTAL"
+          field: "grand_total"
+          style: "bold_highlight"
+          color: "accent"
+          font_size: 14
+
+    - type: "spacer"
+      height_mm: 10
+
+    # ── Payment info ─────────────────────────────────────────────
+    - type: "info_block"
+      title: "Datos Bancarios"
+      style: "boxed"
+      border_color: "border"
+      lines:
+        - label: "Banco"
+          value: "Banco Santander"
+        - label: "IBAN"
+          value: "ES00 0000 0000 0000 0000 0000"
+        - label: "BIC/SWIFT"
+          value: "BSCHESMMXXX"
+        - label: "Titular"
+          value: "VERSUS Strategy, S.L."
+
+    - type: "spacer"
+      height_mm: 5
+
+    # ── Footer ───────────────────────────────────────────────────
+    - type: "footer_text"
+      text: "Gracias por su confianza. Para cualquier consulta sobre esta factura, contacte a info@versusstrategy.com"
+      style: "small"
+      align: "center"
+
+    - type: "footer_text"
+      text: "* Documento generado automáticamente. Válido sin firma. {page}/{pages}"
+      style: "small"
+      align: "center"
+      color: "muted"

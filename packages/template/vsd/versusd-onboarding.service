@@ -1,0 +1,15 @@
+[Unit]
+Description=Versusd onboarding – obtain and install VCOO components after versusd is up
+After=versusd.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/vsd/onboard.sh
+RemainAfterExit=yes
+# The service runs as root (needed to read /etc/versusd/…)
+StandardOutput=journal
+StandardError=inherit
+
+[Install]
+WantedBy=multi-user.target

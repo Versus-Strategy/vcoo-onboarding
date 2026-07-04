@@ -1,0 +1,7 @@
+[Unit]
+Description=Versusd daily update (hermes update)
+
+[Service]
+Type=oneshot
+User=%i
+ExecStart=/opt/vsd/vsctl update

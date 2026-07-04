@@ -1,0 +1,51 @@
+# .gitignore
+# VCOO Virtual Template
+
+# Sensitive config files
+.env
+.env.trello
+.env.local
+.env.test
+google_token.json
+google_client_secret.json
+
+# Hermes Agent runtime
+.hermes/
+hermes-agent/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Temp
+tmp/
+*.tmp
+
+# VCOO local state
+.vcoo-agent/
+
+# Test output (auto-generated)
+test-output/*.json
+test-output/logs/*
+!test-output/.gitkeep
+
+# Control plane local
+node_modules/
+.next/
+dist/
+.vercel

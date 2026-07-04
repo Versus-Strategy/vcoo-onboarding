@@ -1,0 +1,74 @@
+# Report Template — Professional Layout
+# Fields populated by vcoo-pdf.py report command
+
+template:
+  name: "report"
+  label: "INFORME"
+  page_size: "A4"
+
+  sections:
+    # ── Header ───────────────────────────────────────────────────
+    - type: "split_header"
+      left:
+        - field: "logo"
+          max_width_mm: 45
+      right:
+        - field: "document_label"
+          style: "heading1"
+          color: "accent"
+        - field: "title"
+          style: "title"
+
+    - type: "rule"
+      thickness: 2
+      color: "accent"
+      spacing_after_mm: 6
+
+    # ── Metadata block ───────────────────────────────────────────
+    - type: "info_block"
+      layout: "grid"
+      columns: 3
+      lines:
+        - label: "Fecha"
+          field: "date"
+        - label: "Versión"
+          field: "version"
+          default: "1.0"
+        - label: "Autor"
+          field: "author"
+          default: "VCOO Agent"
+        - label: "Clasificación"
+          field: "classification"
+          default: "Uso interno"
+        - label: "Departamento"
+          field: "department"
+          default: "General"
+        - label: "Páginas"
+          field: "pages"
+          default: "{pages}"
+
+    - type: "rule"
+      thickness: 1
+      color: "border"
+      spacing_after_mm: 6
+
+    # ── Body ─────────────────────────────────────────────────────
+    - type: "body"
+      field: "body"
+      style: "body"
+
+    - type: "spacer"
+      height_mm: 15
+
+    # ── Footer ───────────────────────────────────────────────────
+    - type: "footer_text"
+      text: "CONFIDENCIAL — Este documento contiene información privilegiada. Si lo has recibido por error, por favor notifícalo a info@versusstrategy.com."
+      style: "small"
+      align: "center"
+      color: "muted"
+
+    - type: "footer_text"
+      text: "Generado por VCOO Agent · {date} · {page}/{pages}"
+      style: "small"
+      align: "center"
+      color: "muted"

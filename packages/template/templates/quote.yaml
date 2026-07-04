@@ -1,0 +1,130 @@
+# Quote / Proposal Template — Professional Layout
+# Fields populated by vcoo-pdf.py quote command
+
+template:
+  name: "quote"
+  label: "PRESUPUESTO"
+  page_size: "A4"
+
+  sections:
+    # ── Header ───────────────────────────────────────────────────
+    - type: "split_header"
+      left:
+        - field: "logo"
+          max_width_mm: 50
+      right:
+        - field: "document_label"
+          style: "heading1"
+          color: "accent"
+        - field: "quote_number"
+          label: "Nº Presupuesto"
+          style: "title"
+        - field: "date"
+          label: "Fecha emisión"
+        - field: "valid_until"
+          label: "Válido hasta"
+
+    - type: "rule"
+      thickness: 2
+      color: "accent"
+      spacing_after_mm: 8
+
+    # ── Address blocks ───────────────────────────────────────────
+    - type: "address_block"
+      columns: 2
+      left:
+        title: "EMISOR"
+        lines:
+          - field: "company_name"
+          - field: "company_address"
+          - field: "company_city"
+          - field: "company_tax_id"
+          - field: "company_email"
+      right:
+        title: "CLIENTE"
+        lines:
+          - field: "client_name"
+          - field: "client_address"
+          - field: "client_city"
+          - field: "client_tax_id"
+          - field: "client_email"
+
+    - type: "spacer"
+      height_mm: 8
+
+    # ── Items table ──────────────────────────────────────────────
+    - type: "items_table"
+      title: "Servicios Propuestos"
+      header_style: "table_header"
+      header_bg: "primary"
+      columns:
+        - header: "#"
+          field: "item_num"
+          width_mm: 10
+          align: "center"
+        - header: "Servicio"
+          field: "service"
+          width_mm: 70
+          align: "left"
+        - header: "Descripción"
+          field: "description"
+          width_mm: 60
+          align: "left"
+        - header: "Importe"
+          field: "total"
+          width_mm: 25
+          align: "right"
+
+    - type: "spacer"
+      height_mm: 5
+
+    # ── Totals ───────────────────────────────────────────────────
+    - type: "totals_block"
+      align: "right"
+      lines:
+        - label: "Base Imponible"
+          field: "subtotal"
+          style: "normal"
+        - label: "IVA (21%)"
+          field: "vat"
+          style: "normal"
+        - type: "rule"
+        - label: "TOTAL PRESUPUESTO"
+          field: "grand_total"
+          style: "bold_highlight"
+          color: "accent"
+          font_size: 14
+
+    - type: "spacer"
+      height_mm: 8
+
+    # ── Terms & conditions ───────────────────────────────────────
+    - type: "info_block"
+      title: "Condiciones"
+      style: "boxed"
+      border_color: "border"
+      lines:
+        - label: "Validez"
+          value: "30 días desde la fecha de emisión"
+        - label: "Forma de pago"
+          value: "Transferencia bancaria / Bizum"
+        - label: "Plazo de entrega"
+          value: "A convenir, según disponibilidad"
+        - label: "Garantía"
+          value: "3 meses sobre los servicios prestados"
+
+    - type: "spacer"
+      height_mm: 5
+
+    # ── Footer ───────────────────────────────────────────────────
+    - type: "footer_text"
+      text: "Este presupuesto no constituye una factura. Los precios incluyen IVA salvo que se indique lo contrario."
+      style: "small"
+      align: "center"
+      color: "muted"
+
+    - type: "footer_text"
+      text: "Generado por VCOO Agent · {date} · {page}/{pages}"
+      style: "small"
+      align: "center"
+      color: "muted"

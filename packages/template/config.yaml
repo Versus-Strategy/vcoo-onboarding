@@ -1,0 +1,66 @@
+# ── VCOO Virtual - Hermes Agent Configuration ───────────────────
+
+model:
+  default: openrouter/free
+  provider: openrouter
+  context_length: 128000
+
+# ── Fallback providers ───────────────────────────────────────────
+# Si OpenRouter falla (rate-limit, timeout), se prueba NVIDIA
+fallback_providers:
+  - provider: openrouter
+    model: nvidia/nemotron-3-super-120b-a12b:free
+    base_url: https://openrouter.ai/api/v1
+    api_mode: chat_completions
+  - provider: nvidia
+    model: nvidia/nemotron-3-super-120b-a12b
+    base_url: https://integrate.api.nvidia.com/v1
+    api_key_env: NVIDIA_API_KEY
+
+agent:
+  max_turns: 90
+
+terminal:
+  backend: local
+  timeout: 180
+
+gateway:
+  enabled: true
+  platforms:
+    discord:
+      enabled: true
+      intents: [message_content, guild_members]
+    telegram:
+      enabled: true
+
+skills:
+  auto_load:
+    - vcoo-core
+    - vcoo-trello
+    - vcoo-google-workspace
+    - vcoo-email
+    - vcoo-pdf
+    - vcoo-testing
+
+memory:
+  memory_enabled: true
+  user_profile_enabled: true
+  provider: builtin
+
+security:
+  tirith_enabled: true
+  redact_secrets: true
+
+approvals:
+  mode: yolo
+
+delegation:
+  max_iterations: 50
+  max_concurrent_children: 3
+
+cron:
+  enabled: true
+
+display:
+  skin: default
+  tool_progress: false
