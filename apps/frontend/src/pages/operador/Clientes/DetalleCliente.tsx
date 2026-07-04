@@ -59,6 +59,17 @@ const DetalleClientePage = () => {
   const [apiKey, setApiKey] = useState('');
   const [configuring, setConfiguring] = useState(false);
   const [configResult, setConfigResult] = useState<string | null>(null);
+  const [regenerando, setRegenerando] = useState(false);
+
+  const handleRegenerateToken = async () => {
+    if (!id) return;
+    setRegenerando(true);
+    try {
+      const { data } = await apiClient.post(`/vcoo/${id}/regenerate-token`);
+      setTokenData(data as { token?: string; install_command?: string; onboarding_url?: string });
+    } catch {}
+    setRegenerando(false);
+  };
 
   const copiarAlPortapapeles = (texto: string, label: string) => {
     if (navigator.clipboard) {
@@ -263,6 +274,14 @@ const DetalleClientePage = () => {
                 onClick={() => copiarAlPortapapeles(provisionToken, 'token')}
               >
                 {copiado === 'token' ? '¡Copiado!' : 'Copiar'}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleRegenerateToken}
+                disabled={regenerando}
+              >
+                {regenerando ? 'Regenerando...' : 'Regenerar'}
               </Button>
             </div>
           </div>
