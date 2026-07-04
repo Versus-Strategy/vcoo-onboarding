@@ -174,7 +174,19 @@ versusd se convierte en el agente permanente. Se reescribe en Python (reemplazan
 - `save-creds` → guarda tokens OAuth en `~/.hermes/`
 - `finalize` → marca onboarding como completo (no se autodestruye)
 
-**Importante:** versusd NUNCA se autodestruye. Después del onboarding, sigue vivo haciendo health reports + watchdog.
+**Ciclo de vida del command_worker:**
+- **Durante onboarding:** polling frecuente (timeout=25s, reconexión inmediata si hay comandos)
+- **Post-onboarding (inactivo):** polling reducido (timeout=60s, reconexión cada 60s si no hay comandos)
+- **Nuevo módulo contratado:** el backend encola comandos, el siguiente poll los entrega, el worker se reactiva temporalmente
+- **Nunca se detiene:** versusd SIEMPRE hace polling, pero a menor frecuencia cuando no hay trabajo activo
+
+El backend controla la frecuencia del poll sugiriendo `poll_interval` en la respuesta:
+```
+200 OK → { commands: [...], poll_interval: 5 }
+204 No Content → { poll_interval: 60 }
+```
+
+versusd NUNCA se autodestruye. Después del onboarding, sigue vivo haciendo health reports + watchdog + polling de baja frecuencia.
 
 ### 2.5 One-liner
 
