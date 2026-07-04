@@ -1,6 +1,7 @@
 from sqlalchemy import Column, String, DateTime, Boolean, Text, ForeignKey, JSON, Integer
 from sqlalchemy.orm import relationship, deferred
 import uuid
+import json
 from datetime import datetime
 from db import Base
 
@@ -58,6 +59,9 @@ class Agent(Base):
             "last_seen": self.last_seen.isoformat() if self.last_seen else None,
             "status": effective_status,
             "capabilities": caps,
+            "health_payload": json.loads(self.health_payload) if self.health_payload else None,
+            "template_version": self.template_version,
+            "supervisor_version": self.supervisor_version,
         }
 
 class Command(Base):

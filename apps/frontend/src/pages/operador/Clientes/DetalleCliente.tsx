@@ -32,6 +32,8 @@ const DetalleClientePage = () => {
       ]);
       setEstado(estadoRes.data as Record<string, unknown>);
       setTokenData(tokenRes.data as { token?: string; install_command?: string; onboarding_url?: string });
+      const auditRes = await apiClient.get(`/vcoo/${id}/audit`);
+      setAuditLog(auditRes.data.audit_log as typeof auditLog);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
         || (err as Error).message || 'Error al cargar datos';
@@ -60,6 +62,7 @@ const DetalleClientePage = () => {
   const [configuring, setConfiguring] = useState(false);
   const [configResult, setConfigResult] = useState<string | null>(null);
   const [regenerando, setRegenerando] = useState(false);
+  const [auditLog, setAuditLog] = useState<Array<{action: string; actor_email: string | null; metadata: Record<string, unknown> | null; created_at: string}>>([]);
 
   const handleRegenerateToken = async () => {
     if (!id) return;
@@ -148,6 +151,9 @@ const DetalleClientePage = () => {
   const lastSeen = agentInfo?.last_seen as string | undefined;
   const capabilities = agentInfo?.capabilities as Record<string, unknown> | undefined;
   const providers = capabilities?.providers as Array<Record<string, unknown>> | undefined;
+  const healthPayload = agentInfo?.health_payload as Record<string, unknown> | undefined;
+  const templateVersion = healthPayload?.template_version as string | undefined;
+  const supervisorVersion = healthPayload?.supervisor_version as string | undefined;
   const completedSteps = (estado?.completed_steps as string[]) || [];
   const onboardingStatus = (estado?.onboarding_status as string) || 'in_progress';
   const modulos = (estado?.modules as string[]) || [];
@@ -237,6 +243,49 @@ const DetalleClientePage = () => {
             </p>
           </div>
         </div>
+      </div>
+
+      {/* 📊 Server metrics */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">📊 Métricas del servidor</h2>
+        {healthPayload ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            <div>
+              <span className="text-sm text-gray-500">Hostname</span>
+              <p className="text-sm font-medium text-gray-900">{healthPayload.hostname as string || '—'}</p>
+            </div>
+            <div>
+              <span className="text-sm text-gray-500">Disco</span>
+              <p className="text-sm font-medium text-gray-900">
+                {healthPayload.disk_used_pct != null ? `${healthPayload.disk_used_pct}%` : '—'}
+              </p>
+            </div>
+            <div>
+              <span className="text-sm text-gray-500">Uptime</span>
+              <p className="text-sm font-medium text-gray-900">
+                {healthPayload.uptime_seconds
+                  ? `${Math.floor(healthPayload.uptime_seconds as number / 3600)}h ${Math.floor((healthPayload.uptime_seconds as number % 3600) / 60)}m`
+                  : '—'}
+              </p>
+            </div>
+            <div>
+              <span className="text-sm text-gray-500">Hermes</span>
+              <p className="text-sm font-medium text-gray-900">
+                {healthPayload.hermes_running ? '● En ejecución' : '○ Detenido'}
+              </p>
+            </div>
+            <div>
+              <span className="text-sm text-gray-500">Template</span>
+              <p className="text-sm font-medium text-gray-900">{templateVersion || '—'}</p>
+            </div>
+            <div>
+              <span className="text-sm text-gray-500">Supervisor</span>
+              <p className="text-sm font-medium text-gray-900">{supervisorVersion || '—'}</p>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500">Esperando primer reporte de métricas...</p>
+        )}
       </div>
 
       {/* Provision Token & Install Command */}
@@ -503,6 +552,27 @@ const DetalleClientePage = () => {
           <p className="text-sm text-gray-500">No hay módulos configurados.</p>
         )}
       </div>
+
+      {/* 📋 Activity log */}
+      {auditLog.length > 0 && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">📋 Actividad reciente</h2>
+          <div className="space-y-3">
+            {auditLog.map((entry, idx) => (
+              <div key={idx} className="flex items-start gap-3 text-sm">
+                <div className="w-2 h-2 rounded-full bg-primary-500 mt-1.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-gray-900">{entry.action}</p>
+                  <p className="text-gray-500 text-xs">
+                    {entry.created_at ? new Date(entry.created_at).toLocaleString('es-ES') : ''}
+                    {entry.actor_email ? ` — ${entry.actor_email}` : ''}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Delete client */}
       <div className="bg-white rounded-lg shadow p-6 border border-red-200">
