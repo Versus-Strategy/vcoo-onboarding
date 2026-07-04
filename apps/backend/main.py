@@ -327,7 +327,7 @@ def get_setup_info(token: str, authorization: str = Header(None), db: Session = 
     total = get_total_steps(modules)
     done = len(st.completed or [])
     control_plane = _os.getenv('CONTROL_PLANE', 'https://vcoo-onboarding.vercel.app')
-    install_cmd = f"curl -sSL {control_plane}/install.sh | PROVISION_TOKEN=*** bash -"
+    install_cmd = f"curl -sSL {control_plane}/install.sh | PROVISION_TOKEN={token} bash -"
     # Check if agent is online
     agent = crud.get_agent_by_vcoo(db, vcoo_id)
     agent_online = False
@@ -599,7 +599,7 @@ def get_provision_token(vcoo_id: str, db: Session = Depends(get_db)):
         token = crud.create_provision_for_vcoo(db, vcoo_id)
     dashboard_url = _os.getenv('DASHBOARD_URL', 'https://vcoo-dashboard.vercel.app')
     control_plane = _os.getenv('CONTROL_PLANE', 'https://vcoo-onboarding.vercel.app')
-    install_cmd = f"curl -sSL {control_plane}/install.sh | PROVISION_TOKEN=*** bash -"
+    install_cmd = f"curl -sSL {control_plane}/install.sh | PROVISION_TOKEN={token} bash -"
     onboarding_url = f"{dashboard_url}/setup/{token}"
     return {"token": token, "install_command": install_cmd, "onboarding_url": onboarding_url}
 
@@ -612,7 +612,7 @@ def regenerate_token(vcoo_id: str, db: Session = Depends(get_db)):
     token = crud.regenerate_token_for_vcoo(db, vcoo_id)
     dashboard_url = _os.getenv('DASHBOARD_URL', 'https://vcoo-dashboard.vercel.app')
     control_plane = _os.getenv('CONTROL_PLANE', 'https://vcoo-onboarding.vercel.app')
-    install_cmd = f"curl -sSL {control_plane}/install.sh | PROVISION_TOKEN=*** bash -"
+    install_cmd = f"curl -sSL {control_plane}/install.sh | PROVISION_TOKEN={token} bash -"
     onboarding_url = f"{dashboard_url}/setup/{token}"
     return {"token": token, "install_command": install_cmd, "onboarding_url": onboarding_url}
 
