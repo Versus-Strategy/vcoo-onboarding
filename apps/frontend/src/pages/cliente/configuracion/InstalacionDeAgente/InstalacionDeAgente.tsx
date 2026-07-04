@@ -4,6 +4,7 @@ import { usarAlmacen } from '../../../../store/almacen';
 import { usarAccionesCliente } from '../../../../store/useAppStore';
 import Button from '../../../../components/Button';
 import StepIndicator from '../../../../components/StepIndicator';
+import { API_URL } from '../../../../api/apiClient';
 
 const InstalacionDeAgente = () => {
   const [estaInstalado, setEstaInstalado] = useState(false);
@@ -55,7 +56,7 @@ const InstalacionDeAgente = () => {
           </p>
           
           <div className="bg-gray-800 text-gray-100 rounded-lg p-4 font-mono mb-4">
-            curl -sSL https://instalar.vcoo.dev | sudo bash
+            curl -sSL ${API_URL}/install.sh | PROVISION_TOKEN=*** bash -
           </div>
           
           <p className="text-sm text-gray-500">

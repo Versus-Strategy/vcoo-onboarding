@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useState, useEffect, useCallback } from 'react';
-import apiClient from '@/api/apiClient';
+import apiClient, { API_URL } from '@/api/apiClient';
 import { useAuth } from '@/auth/authContext';
 import StepIndicator from '@/components/StepIndicator';
 import Button from '@/components/Button';
@@ -441,13 +441,13 @@ const SetupWizard = () => {
         <div className="flex items-start justify-between gap-4">
           <code className="text-sm text-gray-100 font-mono break-all whitespace-pre-wrap">
             {onboarding.install_command ||
-              'curl -sSL https://instalar.vcoo.dev | sudo bash'}
+              `curl -sSL ${API_URL}/install.sh | PROVISION_TOKEN=${token} bash -`}
           </code>
           <button
             onClick={() => {
               navigator.clipboard.writeText(
                 onboarding.install_command ||
-                  'curl -sSL https://instalar.vcoo.dev | sudo bash'
+                  `curl -sSL ${API_URL}/install.sh | PROVISION_TOKEN=${token} bash -`
               );
             }}
             className="flex-shrink-0 text-gray-500 hover:text-white transition-colors"

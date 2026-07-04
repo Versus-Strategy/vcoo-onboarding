@@ -286,7 +286,8 @@ def generate_tui(debug=None):
         # Auth URL hint for OAuth steps
         auth_hint = ""
         if step in ("google-oauth", "trello-setup"):
-            setup_url = f"{TUI['base'].replace('vcoo-onboarding.vercel.app', 'frontend-ivory-seven-d0aw1wzkae.vercel.app')}/setup/{TUI.get('vcoo_id','')}"
+            dashboard_url = os.environ.get('DASHBOARD_URL', TUI['base'])
+            setup_url = f"{dashboard_url}/setup/{TUI.get('vcoo_id','')}"
             auth_hint = f"\n[bold yellow]⚠[/] [cyan]Abre el wizard para autorizar:[/]\n[dim]{setup_url}[/]\n"
 
         body = (

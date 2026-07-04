@@ -2,7 +2,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 import os
 
-DATABASE_URL = os.getenv('POSTGRES_URL', 'postgresql://postgres:***@db:5432/vcoo')
+DATABASE_URL = os.getenv('POSTGRES_URL', 'sqlite:///./test.db')
 
 # SQLAlchemy 2.0 maneja URLs con dots en username sin problema.
 # connect_args={'sslmode': 'require'} para Supabase.

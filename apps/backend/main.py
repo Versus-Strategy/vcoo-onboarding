@@ -217,7 +217,7 @@ def create_vcoo(payload: dict = {}, db: Session = Depends(get_db)):
     crud.get_or_create_onboarding_state(db, str(vcoo.id), modules)
     # Generate provision token
     token = crud.create_provision_for_vcoo(db, str(vcoo.id))
-    frontend_url = _os.getenv('FRONTEND_URL', 'https://vcoo-dashboard.vercel.app')
+    frontend_url = _os.getenv('FRONTEND_URL', 'http://localhost:5173')
     onboarding_url = frontend_url.rstrip('/') + '/setup/' + str(vcoo.id)
     return {
         "id": str(vcoo.id),
@@ -231,7 +231,7 @@ def create_vcoo(payload: dict = {}, db: Session = Depends(get_db)):
 def list_vcoos(db: Session = Depends(get_db)):
     """List all VCOOs with agent status and active token."""
     vcoos = crud.list_vcoos(db)
-    dashboard_url = _os.getenv('DASHBOARD_URL', 'https://vcoo-dashboard.vercel.app')
+    dashboard_url = _os.getenv('DASHBOARD_URL', 'http://localhost:3000')
     return [
         {
             "id": str(v.id),
@@ -328,7 +328,7 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
     modules = list(st.modules or ["core"])
     total = get_total_steps(modules)
     done = len(st.completed or [])
-    control_plane = _os.getenv('CONTROL_PLANE', 'https://vcoo-onboarding.vercel.app')
+    control_plane = _os.getenv('CONTROL_PLANE', 'http://localhost:8000')
     active_token_obj = crud.get_active_token_for_vcoo(db, vcoo_id)
     raw_token = active_token_obj.token if active_token_obj else ''
     install_cmd = f"curl -sSL {control_plane}/install.sh | CONTROL_PLANE={control_plane} PROVISION_TOKEN={raw_token} bash -"
@@ -427,17 +427,18 @@ def get_auth_url(identifier: str, service: str = "", db: Session = Depends(get_d
     service = service.lower().strip()
     if service == "google":
         client_id = _os.getenv("GOOGLE_CLIENT_ID", "")
-        # Google strips extra query params from redirect_uri — encode service in state
-        redirect = _os.getenv("GOOGLE_REDIRECT_URI", "https://vcoo-onboarding.vercel.app/auth/callback")
+        redirect = _os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/callback")
         state = f"{vcoo_id}:google"
         if not client_id:
-            url = "https://accounts.google.com/o/oauth2/v2/auth?client_id=vcoo-dev&redirect_uri={}&response_type=code&scope=https://www.googleapis.com/auth/drive.readonly+https://www.googleapis.com/auth/gmail.readonly&access_type=offline&prompt=consent&state={}".format(redirect, state)
-        else:
-            url = "https://accounts.google.com/o/oauth2/v2/auth?client_id={}&redirect_uri={}&response_type=code&scope=https://www.googleapis.com/auth/drive.readonly+https://www.googleapis.com/auth/gmail.readonly&access_type=offline&prompt=consent&state={}".format(client_id, redirect, state)
+            raise HTTPException(status_code=400, detail="GOOGLE_CLIENT_ID no configurado. Contacta al administrador.")
+        url = "https://accounts.google.com/o/oauth2/v2/auth?client_id={}&redirect_uri={}&response_type=code&scope=https://www.googleapis.com/auth/drive.readonly+https://www.googleapis.com/auth/gmail.readonly&access_type=offline&prompt=consent&state={}".format(client_id, redirect, state)
         return {"url": url, "service": "google"}
     elif service == "trello":
-        api_key = _os.getenv("TRELLO_API_KEY", "vcoo-dev-key")
-        url = "https://trello.com/1/authorize?expiration=never&name=VCOO&scope=read,write&response_type=token&key={}&return_url={}".format(api_key, "https://vcoo-onboarding.vercel.app/auth/callback?service=trello")
+        api_key = _os.getenv("TRELLO_API_KEY", "")
+        if not api_key:
+            raise HTTPException(status_code=400, detail="TRELLO_API_KEY no configurado. Contacta al administrador.")
+        control_plane_oauth = _os.getenv('CONTROL_PLANE', 'http://localhost:8000')
+        url = "https://trello.com/1/authorize?expiration=never&name=VCOO&scope=read,write&response_type=token&key={}&return_url={}".format(api_key, f"{control_plane_oauth}/auth/callback?service=trello")
         return {"url": url, "service": "trello"}
     elif service == "github":
         return {"url": "https://cli.github.com/manual/gh_auth_login", "service": "github", "instructions": "Ejecuta 'gh auth login' en tu VPS."}
@@ -494,7 +495,7 @@ def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session
     if service == "google":
         client_id = _os.getenv("GOOGLE_CLIENT_ID", "")
         client_secret = _os.getenv("GOOGLE_CLIENT_SECRET", "")
-        redirect_uri = _os.getenv("GOOGLE_REDIRECT_URI", "https://vcoo-onboarding.vercel.app/auth/callback")
+        redirect_uri = _os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/callback")
         if client_id and client_secret:
             try:
                 import urllib.request
@@ -604,8 +605,8 @@ def get_provision_token(vcoo_id: str, db: Session = Depends(get_db)):
         token = active.token
     else:
         token = crud.create_provision_for_vcoo(db, vcoo_id)
-    dashboard_url = _os.getenv('DASHBOARD_URL', 'https://vcoo-dashboard.vercel.app')
-    control_plane = _os.getenv('CONTROL_PLANE', 'https://vcoo-onboarding.vercel.app')
+    dashboard_url = _os.getenv('DASHBOARD_URL', 'http://localhost:3000')
+    control_plane = _os.getenv('CONTROL_PLANE', 'http://localhost:8000')
     install_cmd = f"curl -sSL {control_plane}/install.sh | PROVISION_TOKEN={token} bash -"
     onboarding_url = f"{dashboard_url}/setup/{vcoo_id}"
     return {"token": token, "install_command": install_cmd, "onboarding_url": onboarding_url}
@@ -617,8 +618,8 @@ def regenerate_token(vcoo_id: str, db: Session = Depends(get_db)):
     if not v:
         raise HTTPException(status_code=404, detail="VCOO not found")
     token = crud.regenerate_token_for_vcoo(db, vcoo_id)
-    dashboard_url = _os.getenv('DASHBOARD_URL', 'https://vcoo-dashboard.vercel.app')
-    control_plane = _os.getenv('CONTROL_PLANE', 'https://vcoo-onboarding.vercel.app')
+    dashboard_url = _os.getenv('DASHBOARD_URL', 'http://localhost:3000')
+    control_plane = _os.getenv('CONTROL_PLANE', 'http://localhost:8000')
     install_cmd = f"curl -sSL {control_plane}/install.sh | PROVISION_TOKEN={token} bash -"
     onboarding_url = f"{dashboard_url}/setup/{vcoo_id}"
     return {"token": token, "install_command": install_cmd, "onboarding_url": onboarding_url}
@@ -637,7 +638,7 @@ def reactivate_vcoo(vcoo_id: str, db: Session = Depends(get_db)):
     token = crud.reactivate_vcoo(db, vcoo_id)
     if not token:
         raise HTTPException(status_code=404, detail="VCOO not found")
-    control_plane = _os.getenv('CONTROL_PLANE', 'https://vcoo-onboarding.vercel.app')
+    control_plane = _os.getenv('CONTROL_PLANE', 'http://localhost:8000')
     install_cmd = f"curl -sSL {control_plane}/install.sh | PROVISION_TOKEN={token} bash -"
     return {"status": "active", "token": token, "install_command": install_cmd}
 
