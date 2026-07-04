@@ -77,10 +77,7 @@ function App() {
     <ProveedorDeAuth>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<AppContent />} />
-          {/* Ruta explícita para login por si acaso */}
           <Route path="/login" element={<Login />} />
-          {/* Cualquier otra ruta se maneja internamente en AppContent */}
           <Route path="*" element={<AppContent />} />
         </Routes>
       </BrowserRouter>

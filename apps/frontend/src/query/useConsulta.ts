@@ -9,12 +9,14 @@ export function useApiConsulta<TData = unknown, TError = unknown>(
   options?: {
     staleTime?: number;
     cacheTime?: number;
+    enabled?: boolean;
   }
 ) {
   return useQuery<TData, TError>({
     queryKey: key,
     queryFn,
     ...options,
+    enabled: options?.enabled ?? true,
   });
 }
 
@@ -124,7 +126,7 @@ export const useTokenDeProvision = (vcooId: string) => {
   return useApiConsulta<{ token: string; install_command: string }, Error>(
     ['vcoo', vcooId, 'token'],
     () => apiClient.get(`/vcoo/${vcooId}/provision-token`).then(res => res.data as { token: string; install_command: string }),
-    { staleTime: 60 * 1000 }
+    { staleTime: 60 * 1000, enabled: !!vcooId }
   );
 };
 
@@ -163,5 +165,6 @@ export const useDetalleVCOO = (vcooId: string) => {
   return useApiConsulta<Record<string, unknown>, Error>(
     ['vcoo', vcooId, 'detail'],
     () => apiClient.get(`/vcoo/${vcooId}/state`).then(res => res.data as Record<string, unknown>),
+    { enabled: !!vcooId }
   );
 };
