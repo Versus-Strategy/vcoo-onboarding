@@ -324,14 +324,19 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
     if not owns_vcoo:
         # Case 2: Auth but doesn't own this VCOO
         st = crud.get_onboarding_state(db, vcoo_id)
-        from onboarding import get_total_steps
+        from onboarding import get_total_steps, get_module_label, get_module_description
         modules = list(st.modules or ["core"]) if st else ["core"]
+        module_labels: dict[str, dict[str, str]] = {
+            m: {"label": get_module_label(m), "description": get_module_description(m)}
+            for m in modules
+        }
         return {
             "requires_registration": False,
             "token_valid": True,
             "vcoo_name": v.name,
             "vcoo_id": str(v.id),
             "modules": modules,
+            "module_labels": module_labels,
             "step": st.step if st else "unknown",
             "status": st.status if st else "unknown",
             "completed": st.completed or [] if st else [],
@@ -347,15 +352,18 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
     st = crud.get_onboarding_state(db, vcoo_id)
     if not st:
         raise HTTPException(status_code=404, detail="No hay datos de onboarding")
-    from onboarding import get_total_steps
+    from onboarding import get_total_steps, get_module_label, get_module_description
     modules = list(st.modules or ["core"])
     total = get_total_steps(modules)
     done = len(st.completed or [])
+    module_labels: dict[str, dict[str, str]] = {
+        m: {"label": get_module_label(m), "description": get_module_description(m)}
+        for m in modules
+    }
     control_plane = _os.getenv('CONTROL_PLANE', 'http://localhost:8000')
     active_token_obj = crud.get_active_token_for_vcoo(db, vcoo_id)
     raw_token = active_token_obj.token if active_token_obj else ''
     install_cmd = f"curl -sSL {control_plane}/install.sh | CONTROL_PLANE={control_plane} PROVISION_TOKEN={raw_token} bash -"
-    # Check if agent is online
     agent = crud.get_agent_by_vcoo(db, vcoo_id)
     agent_online = False
     if agent and agent.last_seen:
@@ -367,6 +375,7 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
         "vcoo_id": str(v.id),
         "name": v.name,
         "modules": modules,
+        "module_labels": module_labels,
         "step": st.step,
         "status": st.status,
         "completed": st.completed or [],

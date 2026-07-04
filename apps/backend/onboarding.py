@@ -27,6 +27,29 @@ MODULE_STEPS: dict[str, list[str]] = {
     "developer": ["github-setup", "vercel-setup", "supabase-setup"],
 }
 
+# Etiquetas descriptivas para mostrar en el frontend
+MODULE_LABELS: dict[str, str] = {
+    "office":    "Google Drive",
+    "mail":      "Gmail",
+    "planner":   "Calendar + Trello",
+    "developer": "Developer",
+}
+
+MODULE_DESCRIPTIONS: dict[str, str] = {
+    "office":    "Documentos, hojas de cálculo y almacenamiento en la nube",
+    "mail":      "Correo electrónico y bandeja de entrada inteligente",
+    "planner":   "Calendario, tareas y organización del trabajo",
+    "developer": "GitHub, Vercel, Supabase y herramientas para desarrolladores",
+}
+
+
+def get_module_label(module_id: str) -> str:
+    return MODULE_LABELS.get(module_id, module_id.capitalize())
+
+
+def get_module_description(module_id: str) -> str:
+    return MODULE_DESCRIPTIONS.get(module_id, "Servicio conectable")
+
 
 def get_steps_for_modules(modules: list[str]) -> list[str]:
     """Devuelve los pasos necesarios según módulos contratados, en orden."""

@@ -8,10 +8,16 @@ import StatusBadge from '@/components/StatusBadge';
 
 // ── Tipos ──
 
+interface ModuleLabel {
+  label: string;
+  description: string;
+}
+
 interface OnboardingState {
   vcoo_id: string;
   name: string;
   modules: string[];
+  module_labels?: Record<string, ModuleLabel>;
   step: number;
   status: string;
   completed: boolean;
@@ -608,23 +614,23 @@ const SetupWizard = () => {
       { nombre: string; descripcion: string; icono: string }
     > = {
       office: {
-        nombre: 'Google Drive',
-        descripcion: 'Documentos, hojas de cálculo y almacenamiento en la nube',
+        nombre: onboarding.module_labels?.office?.label || 'Google Drive',
+        descripcion: onboarding.module_labels?.office?.description || 'Documentos, hojas de cálculo y almacenamiento en la nube',
         icono: '📄',
       },
       mail: {
-        nombre: 'Gmail',
-        descripcion: 'Correo electrónico y bandeja de entrada inteligente',
+        nombre: onboarding.module_labels?.mail?.label || 'Gmail',
+        descripcion: onboarding.module_labels?.mail?.description || 'Correo electrónico y bandeja de entrada inteligente',
         icono: '✉',
       },
       planner: {
-        nombre: 'Calendar + Trello',
-        descripcion: 'Calendario, tareas y organización del trabajo',
+        nombre: onboarding.module_labels?.planner?.label || 'Calendar + Trello',
+        descripcion: onboarding.module_labels?.planner?.description || 'Calendario, tareas y organización del trabajo',
         icono: '📅',
       },
       developer: {
-        nombre: 'Developer',
-        descripcion: 'GitHub, Vercel, Supabase y herramientas para desarrolladores',
+        nombre: onboarding.module_labels?.developer?.label || 'Developer',
+        descripcion: onboarding.module_labels?.developer?.description || 'GitHub, Vercel, Supabase y herramientas para desarrolladores',
         icono: '💻',
       },
     };
