@@ -218,20 +218,24 @@ class Plugin:
             pass
         return auth_map
 
-    RECOMMENDED_MODELS: dict[str, str] = {
-        "opencode-go": "opencode-go/gpt-5.4-mini",
-        "opencode-zen": "opencode-zen/claude-haiku-4.5",
-        "anthropic": "anthropic/claude-haiku-4.5",
-        "openai-api": "openai/gpt-5.4-mini",
-        "openai-codex": "openai/gpt-5.4-mini",
-        "openrouter": "openrouter/anthropic/claude-haiku-4.5",
-        "gemini": "gemini/gemini-3.5-flash",
-        "copilot": "copilot/gpt-5.4-mini",
-        "xai": "x-ai/grok-4.3-mini",
-        "deepseek": "deepseek/deepseek-v4-flash",
-        "google": "gemini/gemini-3.5-flash",
-        "mistral": "mistral/mistral-small-3.1",
-    }
+    _FLASH_KEYWORDS = ("flash", "haiku", "mini", "nano", "small", "fast", "light", "turbo")
+
+    @staticmethod
+    def _pick_fastest_model(models: list[str]) -> str:
+        """Pick the cheapest/fastest model from a list."""
+        best = models[0] if models else ""
+        best_score = -1
+        for m in models:
+            name = m.split("/")[-1].lower()
+            score = 0
+            for kw in Plugin._FLASH_KEYWORDS:
+                if kw in name:
+                    score += 1
+            # Prefer shorter names (fewer capabilities = cheaper)
+            if score > best_score or (score == best_score and len(name) < len(best.split("/")[-1])):
+                best = m
+                best_score = score
+        return best
 
     def _discover_models(self, provider_id: str) -> list[str]:
         """Read available models for a provider from Hermes' OPENROUTER_MODELS and OpenCode lists."""
@@ -370,7 +374,7 @@ class Plugin:
         caps = {"providers": providers, "checks": self._checks}
         if current_provider:
             models = self._discover_models(current_provider)
-            recommended = self.RECOMMENDED_MODELS.get(current_provider, "")
+            recommended = self._pick_fastest_model(models)
             caps["models"] = {current_provider: {"list": models, "recommended": recommended}}
         self._last_reported_checks = dict(self._checks)
         if version:
