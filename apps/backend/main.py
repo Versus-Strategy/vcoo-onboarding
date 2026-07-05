@@ -1034,10 +1034,6 @@ def setup_set_provider(identifier: str, payload: dict, authorization: str = Head
         "encrypted": False,
     })
     cmd = crud.create_command(db, agent_id=str(agent.id), command="set-provider", result=command_payload)
-    # Advance onboarding step after setting provider
-    st = crud.get_onboarding_state(db, vcoo_id)
-    if st and st.step and st.step != "finalize":
-        crud.advance_onboarding_step(db, vcoo_id, st.step)
     return {"status": "command_sent", "cmd_id": str(cmd.id), "provider": provider}
 
 
