@@ -753,6 +753,7 @@ def register_agent(payload: dict, db: Session = Depends(get_db)):
             crud.create_command(db, agent_id=str(agent.id), command=cmd_name, step=st.step)
     # ────────────────────────────────────────────────────────────────
 
+    crud.create_provision_for_vcoo(db, vcoo_id)
     return {"agent_id": str(agent.id), "vcoo_id": str(vcoo_id), "agent_token": agent_token, "encryption_key": enc_key}
 
 
