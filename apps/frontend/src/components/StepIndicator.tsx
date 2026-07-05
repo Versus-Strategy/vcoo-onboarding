@@ -20,9 +20,10 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({
   const porcentaje = progreso ?? Math.round(Math.min(pasoCompletado, pasosReales) / pasosReales * 100);
 
   const status = (idx: number): 'done' | 'degraded' | 'current' | 'next' | 'locked' => {
-    if (idx < pasoCompletado) return 'done';
     if (pasosDegradados.includes(idx)) return 'degraded';
+    if (idx < pasoCompletado) return 'done';
     if (idx === pasoActual) return 'current';
+    if (idx <= unlockedLimit) return idx === unlockedLimit ? 'current' : 'done';
     if (idx === unlockedLimit + 1) return 'next';
     return 'locked';
   };
