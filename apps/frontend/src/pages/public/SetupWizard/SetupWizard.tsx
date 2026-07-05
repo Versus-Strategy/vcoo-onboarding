@@ -399,15 +399,24 @@ const SetupWizard = () => {
   const enviarApiKey = async (providerId: string) => {
     if (!apiKeyValue.trim() || !token) return;
     setEnviando(true);
+    setError(null);
     try {
       await apiClient.post(`/setup/${token}/set-provider`, {
         provider: providerId,
         api_key: apiKeyValue.trim(),
       });
-      await fetchOnboarding();
-      setProveedorSeleccionado(null);
-      setApiKeyValue('');
-      setError(null);
+      // Poll for agent confirmation (max 60s)
+      for (let i = 0; i < 12; i++) {
+        await new Promise(r => setTimeout(r, 5000));
+        await fetchOnboarding();
+        if ((checks as Record<string, string>).provider === 'ok') break;
+      }
+      if ((checks as Record<string, string>).provider === 'ok') {
+        setProveedorSeleccionado(null);
+        setApiKeyValue('');
+      } else {
+        setError('El agente está procesando la configuración. Vuelve a intentarlo en un momento.');
+      }
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 403) {

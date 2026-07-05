@@ -78,6 +78,8 @@ class Plugin:
                 [hermes_bin, "config", "set", "model.provider", provider],
                 capture_output=True, text=True, timeout=15
             )
+            self._run_health_checks()
+            self._report_capabilities()
             return {"status": "ok", "output": f"Provider {provider} configurado como predeterminado"}
         except FileNotFoundError:
             return {"status": "error", "output": "hermes command not found"}
