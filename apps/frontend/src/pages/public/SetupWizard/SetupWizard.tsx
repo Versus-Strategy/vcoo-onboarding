@@ -357,10 +357,18 @@ const SetupWizard = () => {
   const pasoActual = vistaActual ?? onboarding.wizard_step ?? 0;
   const completado = onboarding.all_done ?? false;
   const pasoBackend = onboarding.wizard_step ?? 0;
-  // Pasos degradados según checks del agente (ej: proveedor borrado del VPS)
+  // Pasos degradados según checks del agente
   const checks: Record<string, string> = (onboarding as any).checks || {};
+  const modules = onboarding.modules || [];
   const pasosDegradados: number[] = [];
   if (checks.provider === "missing") pasosDegradados.push(1);
+  const moduleSteps: Record<string, number> = { google: 2, trello: 2, github: 2, vercel: 2, supabase: 2 };
+  const moduleMap: Record<string, string> = { google: "office", trello: "planner", github: "developer", vercel: "developer", supabase: "developer" };
+  for (const [check, step] of Object.entries(moduleSteps)) {
+    if (checks[check] === "missing" && modules.includes(moduleMap[check])) {
+      if (!pasosDegradados.includes(step)) pasosDegradados.push(step);
+    }
+  }
   const pasoBackendEfectivo = pasosDegradados.length > 0
     ? Math.min(...pasosDegradados)
     : pasoBackend;

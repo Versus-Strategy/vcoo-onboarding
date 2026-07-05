@@ -264,20 +264,37 @@ class Plugin:
         hermes_bin = os.path.expanduser("~/.local/bin/hermes")
         if not os.path.isfile(hermes_bin):
             hermes_bin = "hermes"
-        # Check provider auth
+        config_text = ""
+        auth_text = ""
         try:
-            r = subprocess.run([hermes_bin, "auth", "list"], capture_output=True, text=True, timeout=15)
-            output = r.stdout + r.stderr
-            # If we have a configured provider, check it exists in auth list
-            config_r = subprocess.run([hermes_bin, "config", "show"], capture_output=True, text=True, timeout=15)
-            for line in config_r.stdout.split("\n"):
-                if "provider" in line and ":" in line:
-                    prov = line.split(":")[-1].strip().strip("'\"")
-                    if prov and prov != "auto":
-                        result["provider"] = "ok" if prov in output else "missing"
-                        break
+            cr = subprocess.run([hermes_bin, "config", "show"], capture_output=True, text=True, timeout=15)
+            config_text = cr.stdout
         except Exception:
-            result["provider"] = "unknown"
+            pass
+        try:
+            ar = subprocess.run([hermes_bin, "auth", "list"], capture_output=True, text=True, timeout=15)
+            auth_text = ar.stdout + ar.stderr
+        except Exception:
+            pass
+        # Check provider
+        prov_ok = False
+        for line in config_text.split("\n"):
+            if "provider" in line and ":" in line:
+                p = line.split(":")[-1].strip().strip("'\"")
+                if p and p != "auto":
+                    prov_ok = p in auth_text
+                    break
+        result["provider"] = "ok" if prov_ok else "missing"
+        # Check Google OAuth (office/mail modules)
+        result["google"] = "ok" if ("google" in auth_text or "google.client_id" in config_text) else "missing"
+        # Check Trello (planner module)
+        result["trello"] = "ok" if "trello" in auth_text or "trello.api_key" in config_text else "missing"
+        # Check GitHub (developer module)
+        result["github"] = "ok" if "github" in auth_text or "github.token" in config_text else "missing"
+        # Check Vercel (developer module)
+        result["vercel"] = "ok" if "vercel.token" in config_text else "missing"
+        # Check Supabase (developer module)
+        result["supabase"] = "ok" if "supabase.access_token" in config_text else "missing"
         self._checks = result
 
     def _report_capabilities(self):
