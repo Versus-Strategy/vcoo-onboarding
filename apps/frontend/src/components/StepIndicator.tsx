@@ -8,15 +8,16 @@ interface StepIndicatorProps {
   onStepClick?: (idx: number) => void;
   maxUnlocked?: number;
   pasosDegradados?: number[];
+  progreso?: number;
 }
 
 const StepIndicator: React.FC<StepIndicatorProps> = ({
   pasoActual, pasoCompletado, pasosTotales, pasos,
-  onStepClick, maxUnlocked, pasosDegradados = [],
+  onStepClick, maxUnlocked, pasosDegradados = [], progreso,
 }) => {
   const unlockedLimit = maxUnlocked ?? pasoCompletado;
   const pasosReales = pasosTotales - 1;
-  const porcentaje = Math.round(Math.min(pasoCompletado, pasosReales) / pasosReales * 100);
+  const porcentaje = progreso ?? Math.round(Math.min(pasoCompletado, pasosReales) / pasosReales * 100);
 
   const status = (idx: number): 'done' | 'degraded' | 'current' | 'next' | 'locked' => {
     if (idx < pasoCompletado) return 'done';

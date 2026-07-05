@@ -362,7 +362,7 @@ const SetupWizard = () => {
   const pasosDegradados: number[] = [];
   if (checks.provider === "missing") pasosDegradados.push(1);
   const pasoBackendEfectivo = pasosDegradados.length > 0
-    ? Math.min(...pasosDegradados, pasoBackend)
+    ? Math.min(...pasosDegradados)
     : pasoBackend;
 
   // ── Conectar proveedor ──
@@ -832,15 +832,18 @@ const SetupWizard = () => {
         {renderTarjetaBienvenida()}
 
         <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6 shadow-sm">
+          const progreso = Math.round(Math.min(pasoBackendEfectivo, 3) / 3 * 100);
+          
           <StepIndicator
             pasoActual={pasoActual}
-            pasoCompletado={pasoBackendEfectivo}
+            pasoCompletado={pasoBackend}
             pasosTotales={4}
             pasos={PASOS}
             pasosDegradados={pasosDegradados}
-            maxUnlocked={pasoBackendEfectivo + 1}
+            progreso={progreso}
+            maxUnlocked={pasoBackend + 1}
             onStepClick={(idx) => {
-              if (idx <= pasoBackendEfectivo + 1 && idx !== pasoActual) {
+              if (idx <= pasoBackend + 1 && idx !== pasoActual) {
                 setVistaActual(idx);
                 setProveedorSeleccionado(null);
                 setModuloSeleccionado(null);
