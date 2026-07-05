@@ -220,7 +220,6 @@ const SetupWizard = () => {
   const [onboarding, setOnboarding] = useState<OnboardingState | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [verificando, setVerificando] = useState(false);
   const [conectando, setConectando] = useState<string | null>(null);
   const [proveedorSeleccionado, setProveedorSeleccionado] = useState<string | null>(null);
   const [verMas, setVerMas] = useState(false);
@@ -274,6 +273,13 @@ const SetupWizard = () => {
     if (mostrarWizard) {
       fetchOnboarding();
     }
+  }, [mostrarWizard, fetchOnboarding]);
+
+  // ── Polling: auto-refresh every 15s to detect backend advances ──
+  useEffect(() => {
+    if (!mostrarWizard) return;
+    const interval = setInterval(fetchOnboarding, 15000);
+    return () => clearInterval(interval);
   }, [mostrarWizard, fetchOnboarding]);
 
   // ── Timeout for provider loading ──
@@ -348,23 +354,6 @@ const SetupWizard = () => {
   const pasoActual = vistaActual ?? onboarding.wizard_step ?? 0;
   const completado = onboarding.all_done ?? false;
   const pasoBackend = onboarding.wizard_step ?? 0;
-
-  // ── Verificar instalación del agente ──
-
-  const manejarVerificar = async () => {
-    if (!token) return;
-    setVerificando(true);
-    try {
-      await apiClient.post(`/setup/${token}/verify`);
-      await fetchOnboarding();
-    } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : 'Error al verificar instalación';
-      setError(msg);
-    } finally {
-      setVerificando(false);
-    }
-  };
 
   // ── Conectar proveedor ──
 
@@ -456,7 +445,7 @@ const SetupWizard = () => {
             Instalar el Agente VCOO
           </h2>
           <p className="text-gray-600">
-            Copia el comando y ejecútalo en la terminal de tu VPS. Cuando termine, vuelve aquí y haz clic en <strong>Verificar</strong>.
+            Copia el comando y ejecútalo en la terminal de tu VPS. El sistema detectará automáticamente cuando el agente esté instalado.
           </p>
         </div>
 
@@ -945,41 +934,17 @@ const SetupWizard = () => {
             : renderPasoInstalacion()}
         </div>
 
-        {onboarding && (
-          <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-100">
-            <div className="flex gap-2">
-              {pasoActual > 0 && (
-                <Button variant="ghost" size="sm" onClick={() => {
-                  setVistaActual(pasoActual - 1);
-                  setProveedorSeleccionado(null);
-                  setModuloSeleccionado(null);
-                  setError(null);
-                }}>
-                  ← Anterior
-                </Button>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <Button variant="ghost" size="sm" onClick={() => { fetchOnboarding(); setVistaActual(null); }}>
-                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Refrescar
-              </Button>
-              {pasoActual === 0 && pasoActual === pasoBackend ? (
-                <Button onClick={manejarVerificar} disabled={verificando} loading={verificando} variant="primary" size="sm">
-                  {verificando ? 'Verificando...' : 'Verificar instalación'}
-                </Button>
-              ) : pasoActual < 3 && pasoActual < pasoBackend ? (
-                <Button onClick={() => setVistaActual(pasoActual + 1)} variant="ghost" size="sm">
-                  Siguiente →
-                </Button>
-              ) : pasoActual === 3 ? (
-                <Button onClick={() => { fetchOnboarding(); setVistaActual(null); }} variant="ghost" size="sm">
-                  Ir al inicio
-                </Button>
-              ) : null}
-            </div>
+        {onboarding && pasoActual > 0 && (
+          <div className="flex mt-6 pt-4 border-t border-gray-100">
+            <Button variant="ghost" size="sm" onClick={() => {
+              setVistaActual(pasoActual - 1);
+              setProveedorSeleccionado(null);
+              setModuloSeleccionado(null);
+              setError(null);
+            }}>
+              ← Anterior
+            </Button>
+            <span className="ml-auto text-xs text-gray-400">El sistema avanza automáticamente</span>
           </div>
         )}
       </div>
