@@ -1048,6 +1048,33 @@ def setup_set_provider(identifier: str, payload: dict, authorization: str = Head
     return {"status": "command_sent", "cmd_id": str(cmd.id), "provider": provider}
 
 
+@app.post("/setup/{identifier}/advance")
+def setup_advance_step(identifier: str, authorization: str = Header(None), db: Session = Depends(get_db)):
+    """Advance onboarding step to next phase (after provider+model configured)."""
+    if not authorization or not authorization.lower().startswith('bearer '):
+        raise HTTPException(status_code=401, detail="auth required")
+    bearer = authorization.split(None, 1)[1]
+    token_payload = auth.verify_client_token(bearer)
+    if not token_payload:
+        raise HTTPException(status_code=401, detail="invalid token")
+    v = crud.get_vcoo(db, identifier)
+    if not v:
+        raise HTTPException(status_code=400, detail="invalid identifier")
+    vcoo_id = str(v.id)
+    is_operator = token_payload.get('role') == 'operador'
+    if not is_operator:
+        client_email = token_payload.get("email", "")
+        client_obj = crud.get_client_by_email(db, client_email)
+        owns = client_obj and client_obj.vcoo_id and str(client_obj.vcoo_id) == vcoo_id
+        if not owns:
+            raise HTTPException(status_code=403, detail="not your VCOO")
+    st = crud.get_onboarding_state(db, vcoo_id)
+    if not st:
+        raise HTTPException(status_code=404, detail="no onboarding state")
+    crud.advance_onboarding_step(db, vcoo_id, st.step)
+    return {"status": "advanced", "step": st.step}
+
+
 # ── VCOO Logs ────────────────────────────────────────────
 
 @app.get("/vcoo/{vcoo_id}/audit")

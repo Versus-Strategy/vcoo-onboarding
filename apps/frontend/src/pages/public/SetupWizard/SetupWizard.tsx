@@ -540,7 +540,7 @@ const SetupWizard = () => {
             const { data: fresh } = await apiClient.get(`/setup/${token}`);
             if (((fresh as any).models || {})[prov!.id]) break;
           }
-          await apiClient.post(`/setup/${token}/verify`).catch(() => {});
+          await apiClient.post(`/setup/${token}/advance`).catch(() => {});
           await fetchOnboarding();
           setProveedorSeleccionado(null);
           setApiKeyValue('');
