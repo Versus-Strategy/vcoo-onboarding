@@ -532,6 +532,7 @@ const SetupWizard = () => {
       const rest = list.filter(m => m !== recommended);
       const configurar = async (modelo: string) => {
         setEnviando(true);
+        setModeloSeleccionado(modelo);
         try {
           await apiClient.post(`/setup/${token}/set-provider`, { provider: prov!.id, model: modelo });
           for (let i = 0; i < 18; i++) {
@@ -540,11 +541,24 @@ const SetupWizard = () => {
             if (((fresh as any).models || {})[prov!.id]) break;
           }
           await apiClient.post(`/setup/${token}/verify`).catch(() => {});
+          // Poll until step advances to modules
+          for (let i = 0; i < 18; i++) {
+            await new Promise(r => setTimeout(r, 5000));
+            const { data: fresh } = await apiClient.get(`/setup/${token}`);
+            if ((fresh as any).wizard_step >= 2) {
+              await fetchOnboarding();
+              setProveedorSeleccionado(null);
+              setApiKeyValue('');
+              setModeloSeleccionado(null);
+              return;
+            }
+          }
+          // Timeout — just go back, step might advance later
           await fetchOnboarding();
           setProveedorSeleccionado(null);
           setApiKeyValue('');
-        } catch { setError('Error al configurar el modelo'); }
-        finally { setEnviando(false); }
+          setModeloSeleccionado(null);
+        } catch { setError('Error al configurar el modelo'); setEnviando(false); setModeloSeleccionado(null); }
       };
       return (
         <div className="space-y-6 max-w-2xl">
@@ -559,14 +573,23 @@ const SetupWizard = () => {
               {recommended && (
                 <div className="bg-primary-50 border border-primary-300 rounded-xl p-5">
                   <div className="flex items-start justify-between gap-4">
-                    <div>
+                    <div className="flex-1">
                       <p className="text-xs text-primary-600 font-medium mb-1">RECOMENDADO</p>
-                      <p className="text-sm font-semibold text-primary-900">{recommended}</p>
+                      <p className="text-sm font-semibold text-primary-900 flex items-center gap-2">
+                        {recommended}
+                        {modeloSeleccionado === recommended && !enviando && (
+                          <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </p>
                       <p className="text-xs text-primary-600 mt-1">Rápido y económico — ideal para empezar</p>
                     </div>
-                    <Button variant="primary" size="sm" loading={enviando} disabled={enviando}
+                    <Button variant="primary" size="sm" loading={enviando && modeloSeleccionado === recommended} disabled={enviando}
                       onClick={() => configurar(recommended)}
-                    >{enviando ? 'Configurando...' : 'Seleccionar'}</Button>
+                    >
+                      {modeloSeleccionado === recommended && !enviando ? 'Configurado' : enviando ? 'Configurando...' : 'Seleccionar'}
+                    </Button>
                   </div>
                 </div>
               )}
@@ -575,8 +598,15 @@ const SetupWizard = () => {
                   <p className="text-xs text-gray-400 font-medium">OTROS MODELOS</p>
                   <div className="space-y-1 max-h-48 overflow-y-auto">
                     {rest.map((m: string) => (
-                      <div key={m} className="px-3 py-2 text-sm text-gray-600 border border-gray-100 rounded-lg hover:bg-gray-50 cursor-pointer" onClick={() => configurar(m)}>
-                        {m}
+                      <div key={m} className={`px-3 py-2 text-sm border rounded-lg cursor-pointer flex items-center justify-between ${modeloSeleccionado === m && !enviando ? 'bg-green-50 border-green-300 text-green-800' : 'border-gray-100 text-gray-600 hover:bg-gray-50'}`}
+                        onClick={() => !enviando && configurar(m)}
+                      >
+                        <span>{m}</span>
+                        {modeloSeleccionado === m && !enviando && (
+                          <svg className="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
                       </div>
                     ))}
                   </div>
