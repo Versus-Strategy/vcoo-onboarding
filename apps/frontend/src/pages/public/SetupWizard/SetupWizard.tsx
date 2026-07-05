@@ -534,13 +534,20 @@ const SetupWizard = () => {
         setModeloSeleccionado(modelo);
         try {
           await apiClient.post(`/setup/${token}/set-provider`, { provider: prov!.id, model: modelo });
-          await new Promise(r => setTimeout(r, 2000));
+          // Wait for VPS confirmation (up to 90s)
+          for (let i = 0; i < 18; i++) {
+            await new Promise(r => setTimeout(r, 5000));
+            const { data: fresh } = await apiClient.get(`/setup/${token}`);
+            const cfg = (fresh as any).checks || {};
+            if (cfg.provider === 'ok') break;
+          }
           await apiClient.post(`/setup/${token}/advance`);
           setVistaActual(null);
           await fetchOnboarding();
           setProveedorSeleccionado(null);
           setApiKeyValue('');
-        } catch { setError('Error al configurar el modelo'); }
+          setModeloSeleccionado(null);
+        } catch { setError('Error al configurar el modelo'); setModeloSeleccionado(null); }
       };
       return (
         <div className="space-y-6 max-w-2xl">
