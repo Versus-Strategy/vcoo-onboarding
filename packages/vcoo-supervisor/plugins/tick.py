@@ -63,16 +63,13 @@ class Plugin:
         api_key = payload.get("api_key") or payload.get("encrypted", "")
         if not provider or not api_key:
             return {"status": "error", "output": "missing provider or key"}
-        # Remove duplicate key from other providers
+        # Check if already configured for this provider
         try:
             existing = subprocess.run([hermes_bin, "auth", "list"], capture_output=True, text=True, timeout=15)
-            if api_key in existing.stdout:
-                for old_prov in existing.stdout.split("\n"):
-                    if "(" in old_prov and api_key in existing.stdout:
-                        old_id = old_prov.split("(")[0].strip()
-                        if old_id and old_id != provider:
-                            subprocess.run([hermes_bin, "auth", "remove", "--provider", old_id],
-                                capture_output=True, timeout=10)
+            if provider in existing.stdout:
+                self._run_health_checks()
+                self._report_capabilities()
+                return {"status": "ok", "output": f"Provider {provider} ya configurado"}
         except Exception:
             pass
         # Run hermes auth add + set as default provider
@@ -295,7 +292,7 @@ class Plugin:
         has_provider = False
         for line in auth_text.split("\n"):
             line = line.strip()
-            if line and not line.startswith("#") and not line.startswith("(") and " " not in line:
+            if line and not line.startswith("#") and not line.startswith("(") and not line.startswith("Credential"):
                 has_provider = True
                 break
         result["provider"] = "ok" if has_provider else "missing"
