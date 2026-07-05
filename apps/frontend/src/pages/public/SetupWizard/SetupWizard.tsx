@@ -559,8 +559,8 @@ const SetupWizard = () => {
                 <div className="space-y-2 max-h-60 overflow-y-auto">
                   {(() => {
                     const models = (((onboarding as any).models || {})[prov.id] || {});
-                    const list: string[] = models.list || [];
-                    const recommended: string = models.recommended || '';
+                    const list: string[] = Array.isArray(models) ? models : (models.list || []);
+                    const recommended: string = Array.isArray(models) ? '' : (models.recommended || '');
                     return list.map((m: string) => (
                       <div key={m} onClick={async () => {
                         await apiClient.post(`/setup/${token}/set-provider`, { provider: prov.id, model: m });
