@@ -290,7 +290,7 @@ class Plugin:
                 content = f.read()
             import re as _re
             # First try model.provider
-            m = _re.search(r"provider:\s*['\"](\w[\w./-]*)", content)
+            m = _re.search(r"provider:\s*['\"]?(\w[\w./-]*)", content)
             if m:
                 provider = m.group(1)
             else:
