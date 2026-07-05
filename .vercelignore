@@ -1,2 +1,5 @@
 frontend/
+apps/backend/final_check.py
+apps/backend/test_final.py
+apps/backend/test_onboarding.py
 
