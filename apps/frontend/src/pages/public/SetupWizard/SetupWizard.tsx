@@ -556,17 +556,32 @@ const SetupWizard = () => {
               <div className="space-y-4">
                 <p className="text-sm font-medium text-gray-700 mb-2">Selecciona un modelo:</p>
                 <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {(((onboarding as any).models || {})[prov.id] || []).map((m: string) => (
-                    <div key={m} onClick={async () => {
-                      await apiClient.post(`/setup/${token}/set-provider`, { provider: prov.id, model: m });
-                      setModeloSeleccionado(null);
-                      setProveedorSeleccionado(null);
-                    }}
-                      className="cursor-pointer px-4 py-2.5 rounded-lg border border-gray-200 hover:border-primary-400 hover:bg-primary-50 text-sm text-gray-700 transition-colors"
-                    >
-                      {m}
-                    </div>
-                  ))}
+                  {(() => {
+                    const models = (((onboarding as any).models || {})[prov.id] || {});
+                    const list: string[] = models.list || [];
+                    const recommended: string = models.recommended || '';
+                    const sorted = [...list].sort((a, b) => (a === recommended ? -1 : b === recommended ? 1 : 0));
+                    return sorted.map((m: string) => (
+                      <div key={m} onClick={async () => {
+                        await apiClient.post(`/setup/${token}/set-provider`, { provider: prov.id, model: m });
+                        setModeloSeleccionado(null);
+                        setProveedorSeleccionado(null);
+                      }}
+                        className={`cursor-pointer px-4 py-2.5 rounded-lg border text-sm transition-colors ${
+                          m === recommended
+                            ? 'bg-primary-50 border-primary-300 text-primary-800 font-medium hover:bg-primary-100'
+                            : 'border-gray-200 text-gray-700 hover:border-primary-400 hover:bg-primary-50'
+                        }`}
+                      >
+                        {m === recommended ? (
+                          <span className="flex items-center gap-2">
+                            {m}
+                            <span className="text-xs bg-primary-200 text-primary-700 px-1.5 py-0.5 rounded-full">Recomendado</span>
+                          </span>
+                        ) : m}
+                      </div>
+                    ));
+                  })()}
                 </div>
               </div>
             ) : auth.type === 'api_key' ? (

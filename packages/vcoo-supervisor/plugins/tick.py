@@ -218,6 +218,17 @@ class Plugin:
             pass
         return auth_map
 
+    RECOMMENDED_MODELS: dict[str, str] = {
+        "opencode-go": "opencode-go/gpt-5.5",
+        "opencode-zen": "opencode-zen/claude-sonnet-4",
+        "anthropic": "anthropic/claude-sonnet-4",
+        "openai-api": "openai/gpt-5.5",
+        "openai-codex": "openai/gpt-5.5",
+        "openrouter": "openrouter/anthropic/claude-sonnet-4",
+        "gemini": "gemini/gemini-3.1-pro",
+        "copilot": "copilot/gpt-5.5",
+    }
+
     def _discover_models(self, provider_id: str) -> list[str]:
         """Read available models for a provider from Hermes' OPENROUTER_MODELS and OpenCode lists."""
         import re as _re
@@ -353,8 +364,10 @@ class Plugin:
         version, current_provider = self._detect_hermes_config()
         providers = self._discover_providers()
         caps = {"providers": providers, "checks": self._checks}
-        if current_provider:
-            caps["models"] = {current_provider: self._discover_models(current_provider)}
+    if current_provider:
+        models = self._discover_models(current_provider)
+        recommended = self.RECOMMENDED_MODELS.get(current_provider, "")
+        caps["models"] = {current_provider: {"list": models, "recommended": recommended}}
         self._last_reported_checks = dict(self._checks)
         if version:
             caps["hermes_version"] = version
