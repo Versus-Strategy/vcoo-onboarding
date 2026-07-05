@@ -289,13 +289,19 @@ class Plugin:
             with open(config_path) as f:
                 content = f.read()
             import re as _re
-            m = _re.search(r"default:\s*['\"](\w[\w./-]*)", content)
+            # First try model.provider
+            m = _re.search(r"provider:\s*['\"](\w[\w./-]*)", content)
             if m:
-                full = m.group(1)
-                if "/" in full:
-                    provider, _ = full.split("/", 1)
-                else:
-                    provider = full
+                provider = m.group(1)
+            else:
+                # Fallback: parse from default model
+                m = _re.search(r"default:\s*['\"](\w[\w./-]*)", content)
+                if m:
+                    full = m.group(1)
+                    if "/" in full:
+                        provider, _ = full.split("/", 1)
+                    else:
+                        provider = full
         except Exception:
             pass
         return version, provider
