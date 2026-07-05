@@ -76,10 +76,6 @@ class Plugin:
                 )
                 if r.returncode != 0:
                     return {"status": "error", "output": r.stderr.strip() or f"hermes auth add exit={r.returncode}"}
-                subprocess.run(
-                    [hermes_bin, "config", "set", "model.provider", provider],
-                    capture_output=True, text=True, timeout=15
-                )
             if model:
                 subprocess.run(
                     [hermes_bin, "config", "set", "model.default", model],
