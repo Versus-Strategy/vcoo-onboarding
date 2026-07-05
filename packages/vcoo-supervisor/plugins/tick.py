@@ -22,9 +22,10 @@ class Plugin:
         self.control_plane = os.environ.get("CONTROL_PLANE", config.get("control_plane", "http://localhost:8000"))
         self.last_command_id = None
         self.tick_interval = self.interval
-        self._tick_count = 0
+        self._tick_count = 1
         self._checks: dict[str, str] = {}
         if self.agent_id:
+            self._run_health_checks()
             self.tick()
 
     def stop(self):
