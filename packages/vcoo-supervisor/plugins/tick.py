@@ -219,14 +219,18 @@ class Plugin:
         return auth_map
 
     RECOMMENDED_MODELS: dict[str, str] = {
-        "opencode-go": "opencode-go/gpt-5.5",
-        "opencode-zen": "opencode-zen/claude-sonnet-4",
-        "anthropic": "anthropic/claude-sonnet-4",
-        "openai-api": "openai/gpt-5.5",
-        "openai-codex": "openai/gpt-5.5",
-        "openrouter": "openrouter/anthropic/claude-sonnet-4",
-        "gemini": "gemini/gemini-3.1-pro",
-        "copilot": "copilot/gpt-5.5",
+        "opencode-go": "opencode-go/gpt-5.4-mini",
+        "opencode-zen": "opencode-zen/claude-haiku-4.5",
+        "anthropic": "anthropic/claude-haiku-4.5",
+        "openai-api": "openai/gpt-5.4-mini",
+        "openai-codex": "openai/gpt-5.4-mini",
+        "openrouter": "openrouter/anthropic/claude-haiku-4.5",
+        "gemini": "gemini/gemini-3.5-flash",
+        "copilot": "copilot/gpt-5.4-mini",
+        "xai": "x-ai/grok-4.3-mini",
+        "deepseek": "deepseek/deepseek-v4-flash",
+        "google": "gemini/gemini-3.5-flash",
+        "mistral": "mistral/mistral-small-3.1",
     }
 
     def _discover_models(self, provider_id: str) -> list[str]:

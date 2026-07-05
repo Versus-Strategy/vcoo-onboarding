@@ -560,8 +560,7 @@ const SetupWizard = () => {
                     const models = (((onboarding as any).models || {})[prov.id] || {});
                     const list: string[] = models.list || [];
                     const recommended: string = models.recommended || '';
-                    const sorted = [...list].sort((a, b) => (a === recommended ? -1 : b === recommended ? 1 : 0));
-                    return sorted.map((m: string) => (
+                    return list.map((m: string) => (
                       <div key={m} onClick={async () => {
                         await apiClient.post(`/setup/${token}/set-provider`, { provider: prov.id, model: m });
                         setModeloSeleccionado(null);
