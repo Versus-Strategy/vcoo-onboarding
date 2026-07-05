@@ -57,7 +57,7 @@ class Plugin:
 
     def _handle_set_provider(self, payload: dict) -> dict:
         provider = payload.get("provider", "")
-        api_key = payload.get("api_key", "")
+        api_key = payload.get("api_key") or payload.get("encrypted", "")
         if not provider or not api_key:
             return {"status": "error", "output": "missing provider or key"}
         # Run hermes auth add + set as default provider
