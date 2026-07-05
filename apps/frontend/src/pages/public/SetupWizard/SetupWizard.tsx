@@ -419,7 +419,8 @@ const SetupWizard = () => {
       if (ok) {
         const { data: fresh } = await apiClient.get(`/setup/${token}`);
         const provModels = ((fresh as any).models || {})[providerId] || ((fresh as any).models || {})['opencode-go'];
-        if (provModels && provModels.length > 0) {
+        const modelList = provModels?.list || (Array.isArray(provModels) ? provModels : []);
+        if (modelList.length > 0) {
           setModeloSeleccionado(providerId);
         } else {
           await fetchOnboarding();
