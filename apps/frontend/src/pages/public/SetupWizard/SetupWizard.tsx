@@ -531,22 +531,16 @@ const SetupWizard = () => {
       const recommended: string = Array.isArray(models) ? '' : (models.recommended || '');
       const rest = list.filter(m => m !== recommended);
       const configurar = async (modelo: string) => {
-        setEnviando(true);
         setModeloSeleccionado(modelo);
         try {
           await apiClient.post(`/setup/${token}/set-provider`, { provider: prov!.id, model: modelo });
-          for (let i = 0; i < 12; i++) {
-            await new Promise(r => setTimeout(r, 5000));
-            const { data: fresh } = await apiClient.get(`/setup/${token}`);
-            if (((fresh as any).models || {})[prov!.id]) break;
-          }
-          await apiClient.post(`/setup/${token}/advance`).catch(() => {});
+          await new Promise(r => setTimeout(r, 2000));
+          await apiClient.post(`/setup/${token}/advance`);
+          setVistaActual(null);
           await fetchOnboarding();
           setProveedorSeleccionado(null);
           setApiKeyValue('');
-          setModeloSeleccionado(null);
         } catch { setError('Error al configurar el modelo'); }
-        finally { setEnviando(false); }
       };
       return (
         <div className="space-y-6 max-w-2xl">
@@ -573,11 +567,16 @@ const SetupWizard = () => {
                       </p>
                       <p className="text-xs text-primary-600 mt-1">Rápido y económico — ideal para empezar</p>
                     </div>
-                    <Button variant="primary" size="sm" loading={enviando && modeloSeleccionado === recommended} disabled={enviando}
-                      onClick={() => configurar(recommended)}
-                    >
-                      {modeloSeleccionado === recommended && !enviando ? 'Configurado' : enviando ? 'Configurando...' : 'Seleccionar'}
-                    </Button>
+                    {modeloSeleccionado === recommended ? (
+                      <div className="flex items-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600" />
+                        <span className="text-sm text-primary-600">Configurando...</span>
+                      </div>
+                    ) : (
+                      <Button variant="primary" size="sm" disabled={!!modeloSeleccionado}
+                        onClick={() => configurar(recommended)}
+                      >Seleccionar</Button>
+                    )}
                   </div>
                 </div>
               )}
@@ -586,14 +585,12 @@ const SetupWizard = () => {
                   <p className="text-xs text-gray-400 font-medium">OTROS MODELOS</p>
                   <div className="space-y-1 max-h-48 overflow-y-auto">
                     {rest.map((m: string) => (
-                      <div key={m} className={`px-3 py-2 text-sm border rounded-lg cursor-pointer flex items-center justify-between ${modeloSeleccionado === m && !enviando ? 'bg-green-50 border-green-300 text-green-800' : 'border-gray-100 text-gray-600 hover:bg-gray-50'}`}
-                        onClick={() => !enviando && configurar(m)}
+                      <div key={m} className={`px-3 py-2 text-sm border rounded-lg flex items-center justify-between ${modeloSeleccionado === m ? 'bg-primary-50 border-primary-200' : 'border-gray-100 hover:bg-gray-50 cursor-pointer'}`}
+                        onClick={() => !modeloSeleccionado && configurar(m)}
                       >
-                        <span>{m}</span>
-                        {modeloSeleccionado === m && !enviando && (
-                          <svg className="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                          </svg>
+                        <span className={modeloSeleccionado === m ? 'text-primary-800' : 'text-gray-600'}>{m}</span>
+                        {modeloSeleccionado === m && (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600" />
                         )}
                       </div>
                     ))}
