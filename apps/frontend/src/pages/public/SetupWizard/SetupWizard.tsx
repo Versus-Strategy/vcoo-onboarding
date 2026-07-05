@@ -417,12 +417,12 @@ const SetupWizard = () => {
         if (chk.provider === 'ok') { ok = true; break; }
       }
       if (ok) {
-        await fetchOnboarding();
-        // Show model selector if models available
-        const provModels = ((onboarding as any).models || {})[providerId];
+        const { data: fresh } = await apiClient.get(`/setup/${token}`);
+        const provModels = ((fresh as any).models || {})[providerId] || ((fresh as any).models || {})['opencode-go'];
         if (provModels && provModels.length > 0) {
           setModeloSeleccionado(providerId);
         } else {
+          await fetchOnboarding();
           setProveedorSeleccionado(null);
           setApiKeyValue('');
         }
