@@ -342,6 +342,10 @@ class Plugin:
                 has_provider = True
                 break
         result["provider"] = "ok" if has_provider else "missing"
+        # Check model.default is configured
+        import re as _re2
+        dm = _re2.search(r"'default':\s*'([^']+)'", config_text)
+        result["model"] = "ok" if (dm and dm.group(1) and "/" in dm.group(1)) else "missing"
         # Check Google OAuth (office/mail modules)
         result["google"] = "ok" if ("google" in auth_text or "google.client_id" in config_text) else "missing"
         # Check Trello (planner module)

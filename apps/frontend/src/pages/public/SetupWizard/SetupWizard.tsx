@@ -539,7 +539,7 @@ const SetupWizard = () => {
             await new Promise(r => setTimeout(r, 5000));
             const { data: fresh } = await apiClient.get(`/setup/${token}`);
             const cfg = (fresh as any).checks || {};
-            if (cfg.provider === 'ok') break;
+            if (cfg.model === 'ok') break;
           }
           await apiClient.post(`/setup/${token}/advance`);
           setVistaActual(null);
