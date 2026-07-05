@@ -524,6 +524,70 @@ const SetupWizard = () => {
     const destacados = raw.filter(p => p.id !== 'opencode-go' && destacadosIds.has(p.id));
     const resto = raw.filter(p => p.id !== 'opencode-go' && !destacadosIds.has(p.id));
 
+    if (modeloSeleccionado && modeloSeleccionado === proveedorSeleccionado) {
+      const prov = raw.find(p => p.id === proveedorSeleccionado);
+      const models = (((onboarding as any).models || {})[prov?.id || ''] || {});
+      const list: string[] = Array.isArray(models) ? models : (models.list || []);
+      const recommended: string = Array.isArray(models) ? '' : (models.recommended || '');
+      const rest = list.filter(m => m !== recommended);
+      const configurar = async (modelo: string) => {
+        setEnviando(true);
+        try {
+          await apiClient.post(`/setup/${token}/set-provider`, { provider: prov!.id, model: modelo });
+          for (let i = 0; i < 18; i++) {
+            await new Promise(r => setTimeout(r, 5000));
+            const { data: fresh } = await apiClient.get(`/setup/${token}`);
+            if (((fresh as any).models || {})[prov!.id]) break;
+          }
+          await apiClient.post(`/setup/${token}/verify`).catch(() => {});
+          await fetchOnboarding();
+          setProveedorSeleccionado(null);
+          setApiKeyValue('');
+        } catch { setError('Error al configurar el modelo'); }
+        finally { setEnviando(false); }
+      };
+      return (
+        <div className="space-y-6 max-w-2xl">
+          <button onClick={() => setProveedorSeleccionado(null)} className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+            Volver a proveedores
+          </button>
+          <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">{prov?.nombre}</h3>
+            <p className="text-sm text-gray-500 mb-4">{prov?.descripcion}</p>
+            <div className="space-y-4">
+              {recommended && (
+                <div className="bg-primary-50 border border-primary-300 rounded-xl p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs text-primary-600 font-medium mb-1">RECOMENDADO</p>
+                      <p className="text-sm font-semibold text-primary-900">{recommended}</p>
+                      <p className="text-xs text-primary-600 mt-1">Rápido y económico — ideal para empezar</p>
+                    </div>
+                    <Button variant="primary" size="sm" loading={enviando} disabled={enviando}
+                      onClick={() => configurar(recommended)}
+                    >{enviando ? 'Configurando...' : 'Seleccionar'}</Button>
+                  </div>
+                </div>
+              )}
+              {rest.length > 0 && (
+                <>
+                  <p className="text-xs text-gray-400 font-medium">OTROS MODELOS</p>
+                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                    {rest.map((m: string) => (
+                      <div key={m} className="px-3 py-2 text-sm text-gray-600 border border-gray-100 rounded-lg hover:bg-gray-50 cursor-pointer" onClick={() => configurar(m)}>
+                        {m}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     if (proveedorSeleccionado) {
       const prov = raw.find(p => p.id === proveedorSeleccionado);
       const auth = prov?.auth as { type?: string; credential?: string; hint?: string } | undefined;
@@ -553,85 +617,8 @@ const SetupWizard = () => {
                   </code>
                 )}
               </div>
-            ) : modeloSeleccionado === prov?.id ? (
-              {(() => {
-                const models = (((onboarding as any).models || {})[prov.id] || {});
-                const list: string[] = Array.isArray(models) ? models : (models.list || []);
-                const recommended: string = Array.isArray(models) ? '' : (models.recommended || '');
-                const rest = list.filter(m => m !== recommended);
-                return (
-                <div className="space-y-4">
-                  {recommended && (
-                    <div className="bg-primary-50 border border-primary-300 rounded-xl p-5">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <p className="text-xs text-primary-600 font-medium mb-1">RECOMENDADO</p>
-                          <p className="text-sm font-semibold text-primary-900">{recommended}</p>
-                          <p className="text-xs text-primary-600 mt-1">Rápido y económico — ideal para empezar</p>
-                        </div>
-                        <Button variant="primary" size="sm"
-                          loading={enviando}
-                          disabled={enviando}
-                          onClick={async () => {
-                            setEnviando(true);
-                            try {
-                              await apiClient.post(`/setup/${token}/set-provider`, { provider: prov.id, model: recommended });
-                              for (let i = 0; i < 18; i++) {
-                                await new Promise(r => setTimeout(r, 5000));
-                                const { data: fresh } = await apiClient.get(`/setup/${token}`);
-                                if (((fresh as any).models || {})[prov.id]) break;
-                              }
-                              await apiClient.post(`/setup/${token}/verify`).catch(() => {});
-                              await fetchOnboarding();
-                              setProveedorSeleccionado(null);
-                              setApiKeyValue('');
-                            } catch {
-                              setError('Error al configurar el modelo');
-                            } finally {
-                              setEnviando(false);
-                            }
-                          }}
-                        >
-                          {enviando ? 'Configurando...' : 'Seleccionar'}
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                  {rest.length > 0 && (
-                    <>
-                      <p className="text-xs text-gray-400 font-medium">OTROS MODELOS</p>
-                      <div className="space-y-1 max-h-48 overflow-y-auto">
-                        {rest.map((m: string) => (
-                          <div key={m} className="px-3 py-2 text-sm text-gray-600 border border-gray-100 rounded-lg hover:bg-gray-50 cursor-pointer"
-                            onClick={async () => {
-                              setEnviando(true);
-                              try {
-                                await apiClient.post(`/setup/${token}/set-provider`, { provider: prov.id, model: m });
-                                for (let i = 0; i < 18; i++) {
-                                  await new Promise(r => setTimeout(r, 5000));
-                                  const { data: fresh } = await apiClient.get(`/setup/${token}`);
-                                  if (((fresh as any).models || {})[prov.id]) break;
-                                }
-                                await apiClient.post(`/setup/${token}/verify`).catch(() => {});
-                                await fetchOnboarding();
-                                setProveedorSeleccionado(null);
-                                setApiKeyValue('');
-                              } catch {
-                                setError('Error al configurar el modelo');
-                              } finally {
-                                setEnviando(false);
-                              }
-                            }}
-                          >
-                            {m}
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-                );
-              })()}
+            ) : modeloSeleccionado === prov?.id ? null
+            : auth.type === 'api_key' ? (
             ) : auth.type === 'api_key' ? (
               <div className="space-y-4">
                 <p className="text-sm text-gray-600">{auth.hint}</p>
