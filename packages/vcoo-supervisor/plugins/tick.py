@@ -62,32 +62,24 @@ class Plugin:
         provider = payload.get("provider", "")
         api_key = payload.get("api_key") or payload.get("encrypted", "")
         model = payload.get("model", "")
-        if not provider or not api_key:
-            return {"status": "error", "output": "missing provider or key"}
-        # Check if already configured for this provider
-        try:
-            existing = subprocess.run([hermes_bin, "auth", "list"], capture_output=True, text=True, timeout=15)
-            if provider in existing.stdout:
-                self._run_health_checks()
-                self._report_capabilities()
-                return {"status": "ok", "output": f"Provider {provider} ya configurado"}
-        except Exception:
-            pass
-        # Run hermes auth add + set as default provider
+        if not provider:
+            return {"status": "error", "output": "missing provider"}
         hermes_bin = os.path.expanduser("~/.local/bin/hermes")
         if not os.path.isfile(hermes_bin):
             hermes_bin = "hermes"
         try:
-            r = subprocess.run(
-                [hermes_bin, "auth", "add", provider, "--type", "api-key", "--api-key", api_key],
-                capture_output=True, text=True, timeout=30
-            )
-            if r.returncode != 0:
-                return {"status": "error", "output": r.stderr.strip() or f"hermes auth add exit={r.returncode}"}
-            subprocess.run(
-                [hermes_bin, "config", "set", "model.provider", provider],
-                capture_output=True, text=True, timeout=15
-            )
+            # Only run auth add if api_key provided (model-only calls skip this)
+            if api_key:
+                r = subprocess.run(
+                    [hermes_bin, "auth", "add", provider, "--type", "api-key", "--api-key", api_key],
+                    capture_output=True, text=True, timeout=30
+                )
+                if r.returncode != 0:
+                    return {"status": "error", "output": r.stderr.strip() or f"hermes auth add exit={r.returncode}"}
+                subprocess.run(
+                    [hermes_bin, "config", "set", "model.provider", provider],
+                    capture_output=True, text=True, timeout=15
+                )
             if model:
                 subprocess.run(
                     [hermes_bin, "config", "set", "model.default", model],

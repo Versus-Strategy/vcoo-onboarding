@@ -1029,8 +1029,10 @@ def setup_set_provider(identifier: str, payload: dict, authorization: str = Head
     provider = payload.get("provider", "").strip()
     api_key = payload.get("api_key", "").strip()
     model = payload.get("model", "").strip()
-    if not provider or not api_key:
-        raise HTTPException(status_code=400, detail="provider and api_key required")
+    if not provider:
+        raise HTTPException(status_code=400, detail="provider required")
+    if not api_key and not model:
+        raise HTTPException(status_code=400, detail="api_key or model required")
 
     agent = crud.get_agent_by_vcoo(db, vcoo_id)
     if not agent:
