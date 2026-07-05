@@ -216,8 +216,6 @@ def get_pending_commands(db: Session, agent_id: str, last_command_id: str | None
         models.Command.agent_id == agent_id,
         models.Command.status == 'pending'
     )
-    if last_command_id:
-        query = query.filter(models.Command.id > last_command_id)
     return query.order_by(models.Command.created_at).limit(10).all()
 
 
