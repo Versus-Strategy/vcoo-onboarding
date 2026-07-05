@@ -61,6 +61,7 @@ class Plugin:
     def _handle_set_provider(self, payload: dict) -> dict:
         provider = payload.get("provider", "")
         api_key = payload.get("api_key") or payload.get("encrypted", "")
+        model = payload.get("model", "")
         if not provider or not api_key:
             return {"status": "error", "output": "missing provider or key"}
         # Check if already configured for this provider
@@ -87,9 +88,14 @@ class Plugin:
                 [hermes_bin, "config", "set", "model.provider", provider],
                 capture_output=True, text=True, timeout=15
             )
+            if model:
+                subprocess.run(
+                    [hermes_bin, "config", "set", "model.default", model],
+                    capture_output=True, text=True, timeout=15
+                )
             self._run_health_checks()
             self._report_capabilities()
-            return {"status": "ok", "output": f"Provider {provider} configurado como predeterminado"}
+            return {"status": "ok", "output": f"Provider {provider} configurado"}
         except FileNotFoundError:
             return {"status": "error", "output": "hermes command not found"}
         except Exception as e:
@@ -212,6 +218,30 @@ class Plugin:
             pass
         return auth_map
 
+    def _discover_models(self, provider_id: str) -> list[str]:
+        """Read available models for a provider from Hermes' OPENROUTER_MODELS and OpenCode lists."""
+        import re as _re
+        hermes_dir = os.path.expanduser("~/.hermes/hermes-agent")
+        models_path = os.path.join(hermes_dir, "hermes_cli", "models.py")
+        if not os.path.isfile(models_path):
+            return []
+        text = open(models_path).read()
+        models: list[str] = []
+        # Check OpenCode model lists
+        for pid in (provider_id,):
+            m = _re.search(r'"' + pid + r'"\s*:\s*\[(.*?)\]', text, _re.DOTALL)
+            if m:
+                models = [v.strip().strip('"\'') for v in m.group(1).split(",") if v.strip()]
+                break
+        if models:
+            return [f"{provider_id}/{m}" for m in models]
+        # Check OPENROUTER_MODELS for provider prefix
+        for m in _re.finditer(r'\("(\w[\w./-]+)"', text):
+            full = m.group(1)
+            if full.startswith(provider_id + "/") or full.startswith(provider_id.replace("-", "-") + "/"):
+                models.append(full)
+        return models
+
     def _discover_providers(self):
         """Read providers dynamically from Hermes' CANONICAL_PROVIDERS."""
         hermes_dir = os.path.expanduser("~/.hermes/hermes-agent")
@@ -317,6 +347,8 @@ class Plugin:
         version, current_provider = self._detect_hermes_config()
         providers = self._discover_providers()
         caps = {"providers": providers, "checks": self._checks}
+        if current_provider:
+            caps["models"] = {current_provider: self._discover_models(current_provider)}
         self._last_reported_checks = dict(self._checks)
         if version:
             caps["hermes_version"] = version
