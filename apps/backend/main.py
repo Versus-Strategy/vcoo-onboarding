@@ -19,9 +19,9 @@ import os as _os
 
 
 
-app = FastAPI(title="VCOO Onboarding API v2")
+application = FastAPI(title="VCOO Onboarding API v2")
 
-app.add_middleware(
+application.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=False,
@@ -37,7 +37,7 @@ def get_db():
     finally:
         db.close()
 
-@app.on_event("startup")
+@application.on_event("startup")
 async def startup():
     # ── Ensure database exists ──
     try:
@@ -113,12 +113,12 @@ async def startup():
         import sys as _sys
         print(f"[migration] Skipped (non-critical): {e}", file=_sys.stderr)
     if _os.getenv("VERCEL_ENV") is None:
-        register_ws_routes(app)
+        register_ws_routes(application)
 
 
 # ── Health / Debug ────────────────────────────────────────────
 
-@app.get('/healthz')
+@application.get('/healthz')
 def healthz():
     return {"status": "ok", "version": "v2", "python": sys.version.split()[0]}
 
@@ -126,7 +126,7 @@ def healthz():
 # ── OAuth callback ────────────────────────────────────────────
 
 
-@app.post("/auth/verify")
+@application.post("/auth/verify")
 def verify_auth(payload: dict):
     password = payload.get("password", "")
     if auth.verify_dashboard_password(password):
@@ -134,7 +134,7 @@ def verify_auth(payload: dict):
     raise HTTPException(status_code=401, detail="Contraseña incorrecta")
 
 
-@app.post("/auth/login")
+@application.post("/auth/login")
 def operator_login(payload: schemas.LoginRequest):
     """Operator login endpoint. Validates against DASHBOARD_PASSWORD and returns a JWT."""
     if not auth.verify_dashboard_password(payload.password):
@@ -150,7 +150,7 @@ def operator_login(payload: schemas.LoginRequest):
 
 # ── Client auth ──────────────────────────────────────────────
 
-@app.post("/auth/client/register")
+@application.post("/auth/client/register")
 def client_register(payload: schemas.ClientRegisterRequest, db: Session = Depends(get_db)):
     """Register a new client linked to a VCOO via a provision token."""
     # 1. Validate the provision token (read-only, don't consume)
@@ -181,7 +181,7 @@ def client_register(payload: schemas.ClientRegisterRequest, db: Session = Depend
     }
 
 
-@app.post("/auth/client/login")
+@application.post("/auth/client/login")
 def client_login(payload: schemas.ClientLoginRequest, db: Session = Depends(get_db)):
     """Login for existing clients."""
     # 1. Find client by email
@@ -207,7 +207,7 @@ def client_login(payload: schemas.ClientLoginRequest, db: Session = Depends(get_
     }
 
 
-@app.get("/auth/client/me")
+@application.get("/auth/client/me")
 def client_me(client: dict = Depends(auth.get_client_from_token), db: Session = Depends(get_db)):
     """Get current client info plus linked VCOO state."""
     client_obj = crud.get_client_by_email(db, client.get("email", ""))
@@ -247,7 +247,7 @@ def client_me(client: dict = Depends(auth.get_client_from_token), db: Session = 
 
 
 # ── VCOO ──────────────────────────────────────────────────
-@app.post("/vcoo")
+@application.post("/vcoo")
 def create_vcoo(payload: dict = {}, db: Session = Depends(get_db)):
     name = payload.get("name") if payload else None
     modules = payload.get("modules", ["core"]) if payload else ["core"]
@@ -267,7 +267,7 @@ def create_vcoo(payload: dict = {}, db: Session = Depends(get_db)):
         "onboarding_url": onboarding_url,
     }
 
-@app.get("/vcoos")
+@application.get("/vcoos")
 def list_vcoos(db: Session = Depends(get_db)):
     """List all VCOOs with agent status and active token."""
     vcoos = crud.list_vcoos(db)
@@ -298,7 +298,7 @@ def list_vcoos(db: Session = Depends(get_db)):
 
 # ── Setup wizard (SPEC v2 §4.2) ───────────────────────────
 
-@app.get("/setup/{identifier}")
+@application.get("/setup/{identifier}")
 def get_setup_info(identifier: str, authorization: str = Header(None), db: Session = Depends(get_db)):
     """Returns onboarding state for the wizard frontend.
     Accepts VCOO UUID (preferred) or legacy JWT provision token as {identifier}.
@@ -405,7 +405,7 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
     }
 
 
-@app.post("/setup/{identifier}/verify")
+@application.post("/setup/{identifier}/verify")
 def trigger_step_verification(identifier: str, db: Session = Depends(get_db)):
     """Client clicks 'Verificar' in the wizard — enqueues the verification command.
     Waits up to 10s for the agent to register (race condition fix).
@@ -484,7 +484,7 @@ _GOOGLE_SCOPES_MAP: dict[str, str] = {
 
 # ── Auth URL generation (dynamic OAuth tabs) ────────────
 
-@ app.get("/setup/{identifier}/auth-url")
+@ application.get("/setup/{identifier}/auth-url")
 def get_auth_url(identifier: str, service: str = "", db: Session = Depends(get_db)):
     """Generates an OAuth authorization URL for the given service."""
     v = crud.get_vcoo(db, identifier)
@@ -531,7 +531,7 @@ def get_auth_url(identifier: str, service: str = "", db: Session = Depends(get_d
 
 # ── OAuth callback ─────────────────────────────────────
 
-@app.get("/auth/callback")
+@application.get("/auth/callback")
 def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session = Depends(get_db)):
     """Receives OAuth callback from Google. Exchanges code for tokens, queues save-creds."""
     # Handle user denial / errors
@@ -649,7 +649,7 @@ def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session
 
 # ── Hermes CLI commands (dynamic) ──────────────────────
 
-@ app.get("/setup/{identifier}/hermes-commands")
+@ application.get("/setup/{identifier}/hermes-commands")
 def get_hermes_commands_endpoint(identifier: str, service: str = "", db: Session = Depends(get_db)):
     """Returns Hermes CLI config commands for a service."""
     v = crud.get_vcoo(db, identifier)
@@ -677,7 +677,7 @@ def get_hermes_commands_endpoint(identifier: str, service: str = "", db: Session
     return {"commands": commands_map.get(service, []), "service": service}
 
 
-@app.get("/vcoo/{vcoo_id}/provision-token")
+@application.get("/vcoo/{vcoo_id}/provision-token")
 def get_provision_token(vcoo_id: str, db: Session = Depends(get_db)):
     """Return existing active token for this VCOO, or create one if none exists."""
     v = crud.get_vcoo(db, vcoo_id)
@@ -694,7 +694,7 @@ def get_provision_token(vcoo_id: str, db: Session = Depends(get_db)):
     onboarding_url = f"{dashboard_url}/setup/{vcoo_id}"
     return {"token": token, "install_command": install_cmd, "onboarding_url": onboarding_url}
 
-@app.post("/vcoo/{vcoo_id}/regenerate-token")
+@application.post("/vcoo/{vcoo_id}/regenerate-token")
 def regenerate_token(vcoo_id: str, db: Session = Depends(get_db)):
     """Revoke current token and generate a new one."""
     v = crud.get_vcoo(db, vcoo_id)
@@ -708,7 +708,7 @@ def regenerate_token(vcoo_id: str, db: Session = Depends(get_db)):
     crud.create_audit_log(db, action="token.regenerated", vcoo_id=vcoo_id)
     return {"token": token, "install_command": install_cmd, "onboarding_url": onboarding_url}
 
-@app.post("/vcoo/{vcoo_id}/complete")
+@application.post("/vcoo/{vcoo_id}/complete")
 def complete_vcoo(vcoo_id: str, db: Session = Depends(get_db)):
     """Mark VCOO as completed (setup finished). Logs are preserved."""
     v = crud.complete_vcoo(db, vcoo_id)
@@ -716,7 +716,7 @@ def complete_vcoo(vcoo_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="VCOO not found")
     return {"status": "completed"}
 
-@app.post("/vcoo/{vcoo_id}/reactivate")
+@application.post("/vcoo/{vcoo_id}/reactivate")
 def reactivate_vcoo(vcoo_id: str, db: Session = Depends(get_db)):
     """Reactivate a completed VCOO and generate a new token."""
     token = crud.reactivate_vcoo(db, vcoo_id)
@@ -726,7 +726,7 @@ def reactivate_vcoo(vcoo_id: str, db: Session = Depends(get_db)):
     install_cmd = f"curl -sSL {control_plane}/install.sh | PROVISION_TOKEN={token} bash -"
     return {"status": "active", "token": token, "install_command": install_cmd}
 
-@app.delete("/vcoo/{vcoo_id}")
+@application.delete("/vcoo/{vcoo_id}")
 def delete_vcoo(vcoo_id: str, db: Session = Depends(get_db)):
     """Permanently delete a VCOO and all associated data."""
     v = crud.get_vcoo(db, vcoo_id)
@@ -741,7 +741,7 @@ def delete_vcoo(vcoo_id: str, db: Session = Depends(get_db)):
 
 # ── Agent registration & auth ─────────────────────────────
 
-@app.post("/register")
+@application.post("/register")
 def register_agent(payload: dict, db: Session = Depends(get_db)):
     token = payload.get("token")
     info = payload.get("info", {})
@@ -783,7 +783,7 @@ def register_agent(payload: dict, db: Session = Depends(get_db)):
 
 # ── Agent polling & logs ──────────────────────────────────
 
-@app.get("/agent/{agent_id}/poll")
+@application.get("/agent/{agent_id}/poll")
 def agent_poll(agent_id: str, authorization: str = Header(None), db: Session = Depends(get_db)):
     if not authorization or not authorization.lower().startswith('bearer '):
         raise HTTPException(status_code=401, detail="missing auth")
@@ -836,7 +836,7 @@ def agent_poll(agent_id: str, authorization: str = Header(None), db: Session = D
         "onboarding_status": st.status if st else "unknown",
     }
 
-@app.post("/agent/{agent_id}/complete")
+@application.post("/agent/{agent_id}/complete")
 def agent_setup_complete(agent_id: str, db: Session = Depends(get_db)):
     """Agent calls this when onboarding setup finishes.
     Marks the VCOO as completed and revokes its token."""
@@ -846,7 +846,7 @@ def agent_setup_complete(agent_id: str, db: Session = Depends(get_db)):
     crud.complete_vcoo(db, str(agent.vcoo_id))
     return {"status": "ok", "vcoo_completed": True}
 
-@app.post('/agent/{agent_id}/logs')
+@application.post('/agent/{agent_id}/logs')
 def agent_logs(agent_id: str, payload: dict, db: Session = Depends(get_db)):
     cmd_id = payload.get('cmd_id')
     chunk = payload.get('chunk', '')
@@ -856,7 +856,7 @@ def agent_logs(agent_id: str, payload: dict, db: Session = Depends(get_db)):
     crud.append_command_log(db, cmd_id, chunk, stream)
     return {'status': 'ok'}
 
-@app.get('/agent/{agent_id}/logs')
+@application.get('/agent/{agent_id}/logs')
 def get_command_logs(agent_id: str, cmd_id: str = "", db: Session = Depends(get_db)):
     """Retrieve command logs for a specific cmd_id (or all recent)."""
     if cmd_id:
@@ -880,7 +880,7 @@ def get_command_logs(agent_id: str, cmd_id: str = "", db: Session = Depends(get_
 
 # ── Set Provider (remote config) ────────────────────────
 
-@app.post("/vcoo/{vcoo_id}/set-provider")
+@application.post("/vcoo/{vcoo_id}/set-provider")
 def set_provider(vcoo_id: str, payload: dict, db: Session = Depends(get_db),
                  operator: dict = Depends(auth.verify_operator_jwt)):
     """Operator encrypts an AI provider API key and sends it to the agent.
@@ -920,7 +920,7 @@ def set_provider(vcoo_id: str, payload: dict, db: Session = Depends(get_db),
 
 # ── Commands ──────────────────────────────────────────────
 
-@app.post("/vcoo/{vcoo_id}/commands")
+@application.post("/vcoo/{vcoo_id}/commands")
 def enqueue_command(vcoo_id: str, payload: dict, db: Session = Depends(get_db)):
     command_text = payload.get("command")
     if not command_text:
@@ -932,7 +932,7 @@ def enqueue_command(vcoo_id: str, payload: dict, db: Session = Depends(get_db)):
     cmd = crud.create_command(db, agent_id=agent.id, command=command_text, step=step)
     return {"cmd_id": str(cmd.id)}
 
-@app.post("/vcoo/{vcoo_id}/commands/{cmd_id}/result")
+@application.post("/vcoo/{vcoo_id}/commands/{cmd_id}/result")
 def command_result(vcoo_id: str, cmd_id: str, payload: dict, db: Session = Depends(get_db)):
     result = payload.get('result', '')
     crud.mark_command_done(db, cmd_id, result=result)
@@ -941,7 +941,7 @@ def command_result(vcoo_id: str, cmd_id: str, payload: dict, db: Session = Depen
 
 # ── State ─────────────────────────────────────────────────
 
-@app.get("/vcoo/{vcoo_id}/state")
+@application.get("/vcoo/{vcoo_id}/state")
 def get_state(vcoo_id: str, db: Session = Depends(get_db)):
     v = crud.get_vcoo(db, vcoo_id)
     if not v:
@@ -985,7 +985,7 @@ def get_state(vcoo_id: str, db: Session = Depends(get_db)):
 
 # ── Agent result (SPEC v2 §4.4) ──────────────────────────
 
-@app.post("/agent/{agent_id}/result")
+@application.post("/agent/{agent_id}/result")
 def agent_report_result(agent_id: str, payload: dict, authorization: str = Header(None), db: Session = Depends(get_db)):
     """Agent reports command result. ACK semantics with backoff support."""
     if not authorization or not authorization.lower().startswith('bearer '):
@@ -1019,7 +1019,7 @@ def agent_report_result(agent_id: str, payload: dict, authorization: str = Heade
     return JSONResponse(content=result, status_code=status_code)
 
 
-@app.post("/setup/{identifier}/set-provider")
+@application.post("/setup/{identifier}/set-provider")
 def setup_set_provider(identifier: str, payload: dict, authorization: str = Header(None), db: Session = Depends(get_db)):
     """Client sets provider credentials from onboarding wizard.
     Payload: {provider, api_key}
@@ -1066,7 +1066,7 @@ def setup_set_provider(identifier: str, payload: dict, authorization: str = Head
     return {"status": "command_sent", "cmd_id": str(cmd.id), "provider": provider}
 
 
-@app.post("/setup/{identifier}/advance")
+@application.post("/setup/{identifier}/advance")
 def setup_advance_step(identifier: str, authorization: str = Header(None), db: Session = Depends(get_db)):
     """Advance onboarding step to next phase (after provider+model configured)."""
     if not authorization or not authorization.lower().startswith('bearer '):
@@ -1097,7 +1097,7 @@ def setup_advance_step(identifier: str, authorization: str = Header(None), db: S
 
 # ── VCOO Logs ────────────────────────────────────────────
 
-@app.get("/vcoo/{vcoo_id}/audit")
+@application.get("/vcoo/{vcoo_id}/audit")
 def get_vcoo_audit(vcoo_id: str, db: Session = Depends(get_db)):
     """Return audit log entries for a VCOO."""
     logs = crud.get_audit_log_for_vcoo(db, vcoo_id)
@@ -1115,7 +1115,7 @@ def get_vcoo_audit(vcoo_id: str, db: Session = Depends(get_db)):
     }
 
 
-@app.get("/vcoo/{vcoo_id}/logs")
+@application.get("/vcoo/{vcoo_id}/logs")
 def get_vcoo_logs(vcoo_id: str, db: Session = Depends(get_db)):
     """Retrieve all command logs for a VCOO (across all its agents)."""
     agent = crud.get_agent_by_vcoo(db, vcoo_id)
@@ -1138,7 +1138,7 @@ def get_vcoo_logs(vcoo_id: str, db: Session = Depends(get_db)):
 
 # ── Agent heartbeat (SPEC v2 §4.6) ───────────────────────
 
-@app.post("/agent/heartbeat")
+@application.post("/agent/heartbeat")
 def agent_heartbeat_endpoint(payload: dict, db: Session = Depends(get_db)):
     agent_id = payload.get("agent_id")
     if not agent_id:
@@ -1149,7 +1149,7 @@ def agent_heartbeat_endpoint(payload: dict, db: Session = Depends(get_db)):
 
 # ── Agent health report ────────────────────────────────────
 
-@app.post("/agent/{agent_id}/health")
+@application.post("/agent/{agent_id}/health")
 def agent_health_report(agent_id: str, payload: dict = {}, db: Session = Depends(get_db)):
     """Receive health ping from agent's health reporter.
     Stores health data (hostname, uptime, disk, hermes_running).
@@ -1174,7 +1174,7 @@ def agent_health_report(agent_id: str, payload: dict = {}, db: Session = Depends
 
 # ── Agent capabilities ────────────────────────────────────
 
-@app.post("/agent/{agent_id}/capabilities")
+@application.post("/agent/{agent_id}/capabilities")
 def agent_capabilities_endpoint(agent_id: str, payload: dict, authorization: str = Header(None), db: Session = Depends(get_db)):
     """Receive agent's reported capabilities (hermes_version, providers, etc.)."""
     if not authorization or not authorization.lower().startswith('bearer '):
@@ -1193,7 +1193,7 @@ def agent_capabilities_endpoint(agent_id: str, payload: dict, authorization: str
 
 # ── Agent tick (unified health + command poll) ─────────────
 
-@app.post("/agent/{agent_id}/tick")
+@application.post("/agent/{agent_id}/tick")
 def agent_tick(agent_id: str, body: schemas.TickRequest, authorization: str = Header(None), db: Session = Depends(get_db)):
     """Unified tick: agent sends health + last_command_id, receives commands + tick_interval."""
     if not authorization or not authorization.lower().startswith("bearer "):
@@ -1256,7 +1256,7 @@ def agent_tick(agent_id: str, body: schemas.TickRequest, authorization: str = He
 
 # ── VCOO Secrets (for installer) ───────────────────────────
 
-@app.get("/vcoo/{vcoo_id}/secrets")
+@application.get("/vcoo/{vcoo_id}/secrets")
 def get_vcoo_secrets_endpoint(vcoo_id: str, db: Session = Depends(get_db)):
     """Return stored secrets for installer to configure .env.
     Used by the unified one-liner install.sh after agent registration.
@@ -1277,7 +1277,7 @@ def get_vcoo_secrets_endpoint(vcoo_id: str, db: Session = Depends(get_db)):
 
 # ── Onboarding management (operator actions) ─────────────
 
-@app.post("/vcoo/{vcoo_id}/onboarding/retry")
+@application.post("/vcoo/{vcoo_id}/onboarding/retry")
 def retry_onboarding_step(vcoo_id: str, payload: dict, db: Session = Depends(get_db)):
     """Operator manually retries a blocked/failed step."""
     step = payload.get("step")
@@ -1295,7 +1295,7 @@ def retry_onboarding_step(vcoo_id: str, payload: dict, db: Session = Depends(get
     return {"status": "ok", "step": step, "onboarding_status": st.status}
 
 
-@app.post("/vcoo/{vcoo_id}/onboarding/skip")
+@application.post("/vcoo/{vcoo_id}/onboarding/skip")
 def skip_onboarding_step(vcoo_id: str, payload: dict, db: Session = Depends(get_db)):
     """Operator skips a blocked/impossible step."""
     step = payload.get("step")
@@ -1311,7 +1311,7 @@ def skip_onboarding_step(vcoo_id: str, payload: dict, db: Session = Depends(get_
 
 _PLAYBOOKS_DIR = _os.path.join(_os.path.dirname(__file__), 'playbooks')
 
-@app.get('/playbooks')
+@application.get('/playbooks')
 def list_playbooks():
     if not _os.path.isdir(_PLAYBOOKS_DIR):
         return {'playbooks': []}
@@ -1321,7 +1321,7 @@ def list_playbooks():
     )
     return {'playbooks': names}
 
-@app.get('/playbooks/{name}')
+@application.get('/playbooks/{name}')
 def get_playbook(name: str):
     path = _os.path.join(_PLAYBOOKS_DIR, name)
     if not _os.path.isfile(path):
@@ -1329,7 +1329,7 @@ def get_playbook(name: str):
     content = open(path).read()
     return {'name': name, 'script': content}
 
-@app.get('/playbooks/{name}/raw')
+@application.get('/playbooks/{name}/raw')
 def get_playbook_raw(name: str):
     """Returns raw script content (for curl downloads from install.sh).
     Accepts optional Authorization header (provision token) to gate access."""
@@ -1340,7 +1340,7 @@ def get_playbook_raw(name: str):
     return PlainTextResponse(content, media_type='text/x-python')
 
 
-@app.get('/setup/{identifier}/playbooks/{name}')
+@application.get('/setup/{identifier}/playbooks/{name}')
 def get_vcoo_playbook(identifier: str, name: str, authorization: str = Header(None), db: Session = Depends(get_db)):
     """Returns a playbook for a VCOO, authenticated via provision token."""
     if not authorization:
@@ -1360,7 +1360,7 @@ def get_vcoo_playbook(identifier: str, name: str, authorization: str = Header(No
 
 _STATIC_DIR = _os.path.join(_os.path.dirname(__file__))
 
-@app.get('/install.sh')
+@application.get('/install.sh')
 def get_install_script():
     path = _os.path.join(_STATIC_DIR, 'install.sh')
     if not _os.path.isfile(path):
@@ -1381,7 +1381,7 @@ def get_install_script():
     from fastapi.responses import PlainTextResponse
     return PlainTextResponse(content, media_type='text/x-sh')
 
-@app.get('/agent_http.py')
+@application.get('/agent_http.py')
 def get_agent_script():
     path = _os.path.join(_STATIC_DIR, 'agent_http.py')
     if not _os.path.isfile(path):
@@ -1389,7 +1389,7 @@ def get_agent_script():
     from fastapi.responses import PlainTextResponse
     return PlainTextResponse(open(path).read(), media_type='text/x-python')
 
-@app.get('/template.tar.gz')
+@application.get('/template.tar.gz')
 def get_template_tar():
     path = _os.path.join(_STATIC_DIR, 'template.tar.gz')
     if not _os.path.isfile(path):
@@ -1397,7 +1397,7 @@ def get_template_tar():
     from fastapi.responses import FileResponse
     return FileResponse(path, media_type='application/gzip')
 
-@app.get('/crypto.py')
+@application.get('/crypto.py')
 def get_crypto_module():
     path = _os.path.join(_STATIC_DIR, 'crypto.py')
     if not _os.path.isfile(path):

@@ -8,5 +8,5 @@ import os
 # Ensure apps/ is on the path so backend.* imports resolve
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'apps'))
 
-from backend.main import app
-handler = app
+from backend.main import application
+handler = application
