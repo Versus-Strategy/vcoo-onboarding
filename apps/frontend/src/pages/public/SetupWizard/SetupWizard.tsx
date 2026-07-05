@@ -388,6 +388,9 @@ const SetupWizard = () => {
         provider: providerId,
         api_key: apiKeyValue.trim(),
       });
+      // Advance step after setting provider
+      await apiClient.post(`/setup/${token}/verify`).catch(() => {});
+      await fetchOnboarding();
       setProveedorSeleccionado(null);
       setApiKeyValue('');
       setError(null);
