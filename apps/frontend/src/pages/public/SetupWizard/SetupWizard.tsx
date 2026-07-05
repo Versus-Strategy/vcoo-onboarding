@@ -834,8 +834,10 @@ const SetupWizard = () => {
         <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6 shadow-sm">
           <StepIndicator
             pasoActual={pasoActual}
+            pasoCompletado={pasoBackendEfectivo}
             pasosTotales={4}
             pasos={PASOS}
+            pasosDegradados={pasosDegradados}
             maxUnlocked={pasoBackendEfectivo + 1}
             onStepClick={(idx) => {
               if (idx <= pasoBackendEfectivo + 1 && idx !== pasoActual) {
