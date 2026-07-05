@@ -364,6 +364,7 @@ const SetupWizard = () => {
   const pasoBackendEfectivo = pasosDegradados.length > 0
     ? Math.min(...pasosDegradados)
     : pasoBackend;
+  const progreso = Math.round(Math.min(pasoBackendEfectivo, 3) / 3 * 100);
 
   // ── Conectar proveedor ──
 
@@ -832,8 +833,6 @@ const SetupWizard = () => {
         {renderTarjetaBienvenida()}
 
         <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6 shadow-sm">
-          const progreso = Math.round(Math.min(pasoBackendEfectivo, 3) / 3 * 100);
-          
           <StepIndicator
             pasoActual={pasoActual}
             pasoCompletado={pasoBackend}
