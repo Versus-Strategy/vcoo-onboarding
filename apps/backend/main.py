@@ -1028,16 +1028,10 @@ def setup_set_provider(identifier: str, payload: dict, authorization: str = Head
     if not agent:
         raise HTTPException(status_code=400, detail="agent not installed yet")
 
-    if agent.encryption_key:
-        from crypto import encrypt_api_key
-        encrypted = encrypt_api_key(api_key, agent.encryption_key, str(agent.id))
-    else:
-        encrypted = api_key
-
     command_payload = json.dumps({
-        "encrypted": encrypted,
+        "api_key": api_key,
         "provider": provider,
-        "has_encryption": bool(agent.encryption_key),
+        "encrypted": False,
     })
     cmd = crud.create_command(db, agent_id=str(agent.id), command="set-provider", result=command_payload)
     # Advance onboarding step after setting provider

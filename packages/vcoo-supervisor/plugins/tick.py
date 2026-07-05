@@ -57,20 +57,9 @@ class Plugin:
 
     def _handle_set_provider(self, payload: dict) -> dict:
         provider = payload.get("provider", "")
-        encrypted = payload.get("encrypted", "")
-        if not provider or not encrypted:
+        api_key = payload.get("api_key", "")
+        if not provider or not api_key:
             return {"status": "error", "output": "missing provider or key"}
-        auth = self._parse_auth_from_registry().get(provider, {})
-        if auth.get("type") == "oauth":
-            return {"status": "ok", "output": f"OAuth para {provider} pendiente"}
-        # Decrypt if needed
-        api_key = encrypted
-        if payload.get("has_encryption"):
-            try:
-                from crypto import decrypt_api_key
-                api_key = decrypt_api_key(encrypted)
-            except Exception as e:
-                return {"status": "error", "output": f"decrypt failed: {e}"}
         # Run hermes auth add + set as default provider
         try:
             r = subprocess.run(
