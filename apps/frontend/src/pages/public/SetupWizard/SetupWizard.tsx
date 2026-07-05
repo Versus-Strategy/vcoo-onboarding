@@ -554,61 +554,84 @@ const SetupWizard = () => {
                 )}
               </div>
             ) : modeloSeleccionado === prov?.id ? (
-              <div className="space-y-4">
-                <p className="text-sm font-medium text-gray-700 mb-2">Selecciona un modelo:</p>
-                <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {(() => {
-                    const models = (((onboarding as any).models || {})[prov.id] || {});
-                    const list: string[] = Array.isArray(models) ? models : (models.list || []);
-                    const recommended: string = Array.isArray(models) ? '' : (models.recommended || '');
-                    return list.map((m: string) => (
-                      <div key={m}
-                        className={`rounded-lg border text-sm transition-colors ${
-                          m === recommended
-                            ? 'bg-primary-50 border-primary-300'
-                            : 'border-gray-200'
-                        }`}
-                      >
-                        <div className="px-4 py-2.5 flex items-center justify-between">
-                          <span className={m === recommended ? 'text-primary-800 font-medium' : 'text-gray-700'}>
-                            {m}
-                          </span>
-                          <Button size="sm" variant={m === recommended ? 'primary' : 'ghost'}
-                            loading={enviando && m === modeloSeleccionado}
-                            disabled={enviando}
+              {(() => {
+                const models = (((onboarding as any).models || {})[prov.id] || {});
+                const list: string[] = Array.isArray(models) ? models : (models.list || []);
+                const recommended: string = Array.isArray(models) ? '' : (models.recommended || '');
+                const rest = list.filter(m => m !== recommended);
+                return (
+                <div className="space-y-4">
+                  {recommended && (
+                    <div className="bg-primary-50 border border-primary-300 rounded-xl p-5">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-xs text-primary-600 font-medium mb-1">RECOMENDADO</p>
+                          <p className="text-sm font-semibold text-primary-900">{recommended}</p>
+                          <p className="text-xs text-primary-600 mt-1">Rápido y económico — ideal para empezar</p>
+                        </div>
+                        <Button variant="primary" size="sm"
+                          loading={enviando}
+                          disabled={enviando}
+                          onClick={async () => {
+                            setEnviando(true);
+                            try {
+                              await apiClient.post(`/setup/${token}/set-provider`, { provider: prov.id, model: recommended });
+                              for (let i = 0; i < 18; i++) {
+                                await new Promise(r => setTimeout(r, 5000));
+                                const { data: fresh } = await apiClient.get(`/setup/${token}`);
+                                if (((fresh as any).models || {})[prov.id]) break;
+                              }
+                              await apiClient.post(`/setup/${token}/verify`).catch(() => {});
+                              await fetchOnboarding();
+                              setProveedorSeleccionado(null);
+                              setApiKeyValue('');
+                            } catch {
+                              setError('Error al configurar el modelo');
+                            } finally {
+                              setEnviando(false);
+                            }
+                          }}
+                        >
+                          {enviando ? 'Configurando...' : 'Seleccionar'}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  {rest.length > 0 && (
+                    <>
+                      <p className="text-xs text-gray-400 font-medium">OTROS MODELOS</p>
+                      <div className="space-y-1 max-h-48 overflow-y-auto">
+                        {rest.map((m: string) => (
+                          <div key={m} className="px-3 py-2 text-sm text-gray-600 border border-gray-100 rounded-lg hover:bg-gray-50 cursor-pointer"
                             onClick={async () => {
                               setEnviando(true);
-                              setModeloSeleccionado(m);
                               try {
                                 await apiClient.post(`/setup/${token}/set-provider`, { provider: prov.id, model: m });
-                                // Poll for confirmation
                                 for (let i = 0; i < 18; i++) {
                                   await new Promise(r => setTimeout(r, 5000));
                                   const { data: fresh } = await apiClient.get(`/setup/${token}`);
-                                  const modelOk = ((fresh as any).models || {})[prov.id];
-                                  if (modelOk) break;
+                                  if (((fresh as any).models || {})[prov.id]) break;
                                 }
                                 await apiClient.post(`/setup/${token}/verify`).catch(() => {});
                                 await fetchOnboarding();
-                                setModeloSeleccionado(null);
                                 setProveedorSeleccionado(null);
                                 setApiKeyValue('');
                               } catch {
-                                setModeloSeleccionado(null);
                                 setError('Error al configurar el modelo');
                               } finally {
                                 setEnviando(false);
                               }
                             }}
                           >
-                            {enviando && m === modeloSeleccionado ? 'Configurando...' : 'Seleccionar'}
-                          </Button>
-                        </div>
+                            {m}
+                          </div>
+                        ))}
                       </div>
-                    ));
-                  })()}
+                    </>
+                  )}
                 </div>
-              </div>
+                );
+              })()}
             ) : auth.type === 'api_key' ? (
               <div className="space-y-4">
                 <p className="text-sm text-gray-600">{auth.hint}</p>
