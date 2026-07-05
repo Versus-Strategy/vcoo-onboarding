@@ -842,7 +842,7 @@ const SetupWizard = () => {
         </div>
 
         <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-          {completado || pasoActual >= 4
+          {pasoActual === 3 || pasoActual >= 4
             ? renderPasoFinalizacion()
             : pasoActual === 0
             ? renderPasoInstalacion()
@@ -850,8 +850,6 @@ const SetupWizard = () => {
             ? renderPasoProveedor()
             : pasoActual === 2
             ? renderPasoModulos()
-            : pasoActual === 3
-            ? renderPasoFinalizacion()
             : renderPasoInstalacion()}
         </div>
 

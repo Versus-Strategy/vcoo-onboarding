@@ -189,12 +189,29 @@ else
     info "Hermes Agent ya configurado. Saltando..."
 fi
 
-# ── 5. Copiar skills VCOO ──────────────────────────────────────
+# ── 5. Instalar skills VCOO (solo módulos contratados) ──────────
+# Skill → módulo que la requiere
+skill_requires_module() {
+    case "$1" in
+        vcoo-core)              echo "core" ;;
+        vcoo-google-workspace)  echo "office" ;;
+        vcoo-email)             echo "mail" ;;
+        vcoo-trello)            echo "planner" ;;
+        vcoo-pdf|vcoo-testing|vcoo-behavioral-testing) echo "" ;;  # siempre
+        *) echo "" ;;
+    esac
+}
+
 if [ -d "${VCOO_DIR}/skills" ]; then
     info "Instalando skills VCOO..."
     mkdir -p "${HERMES_SKILLS}/versus-multiagent-orchestration"
     for skill_dir in "${VCOO_DIR}/skills/"*/; do
         skill_name="$(basename "$skill_dir")"
+        req_mod=$(skill_requires_module "$skill_name")
+        if [ -n "$req_mod" ]; then
+            # Solo instalar si el módulo está contratado
+            echo "$MODULES" | grep -qw "$req_mod" || continue
+        fi
         target="${HERMES_SKILLS}/versus-multiagent-orchestration/${skill_name}"
         if [ -d "$skill_dir" ]; then
             mkdir -p "$target"
@@ -219,23 +236,14 @@ fetch_script() {
         ok "$name (ya existe)"
         return 0
     fi
-    if [ -n "$VCOO_ID" ] && [ -n "$PROV_TOKEN" ]; then
-        if curl -sSf -o "$dest" "${CONTROL}/setup/${VCOO_ID}/playbooks/${name}" \
-            -H "Authorization: Bearer ${PROV_TOKEN}" 2>/dev/null; then
-            sed -i "1s|^#!/usr/bin/env python3|#!${HERMES_SCRIPTS}/.venv/bin/python3|" "$dest" 2>/dev/null || true
-            chmod +x "$dest"
-            ok "$name descargado"
-            return 0
-        fi
-    fi
-    # Fallback: copiar del template local
-    if [ -f "${VCOO_DIR}/scripts/${name}" ]; then
-        cp "${VCOO_DIR}/scripts/${name}" "$dest"
+    if curl -sSf -o "$dest" "${CONTROL}/setup/${VCOO_ID}/playbooks/${name}" \
+        -H "Authorization: Bearer ${PROV_TOKEN}" 2>/dev/null; then
+        sed -i "1s|^#!/usr/bin/env python3|#!${HERMES_SCRIPTS}/.venv/bin/python3|" "$dest" 2>/dev/null || true
         chmod +x "$dest"
-        warn "$name (desde template local)"
+        ok "$name descargado"
         return 0
     fi
-    warn "$name no encontrado"
+    warn "$name no disponible — módulo no contratado"
 }
 
 # Scripts base (siempre necesarios)
