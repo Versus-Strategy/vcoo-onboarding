@@ -10,7 +10,8 @@ interface StepIndicatorProps {
 
 const StepIndicator: React.FC<StepIndicatorProps> = ({ pasoActual, pasosTotales, pasos, onStepClick, maxUnlocked }) => {
   const unlockedLimit = maxUnlocked ?? pasoActual;
-  const porcentaje = pasoActual >= pasosTotales - 1 ? 100 : Math.round((pasoActual / pasosTotales) * 100);
+  const pasosReales = pasosTotales - 1;
+  const porcentaje = Math.round(Math.min(pasoActual, pasosReales) / pasosReales * 100);
 
   return (
     <div className="space-y-4">
