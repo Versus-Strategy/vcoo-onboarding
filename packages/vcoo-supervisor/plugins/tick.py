@@ -22,6 +22,8 @@ class Plugin:
         self.control_plane = os.environ.get("CONTROL_PLANE", config.get("control_plane", "http://localhost:8000"))
         self.last_command_id = None
         self.tick_interval = self.interval
+        self._tick_count = 0
+        self._checks: dict[str, str] = {}
         if self.agent_id:
             self.tick()
 
@@ -256,13 +258,38 @@ class Plugin:
             pass
         return version, provider
 
+    def _run_health_checks(self):
+        """Every 10 ticks, verify provider and modules are still configured."""
+        result: dict[str, str] = {}
+        hermes_bin = os.path.expanduser("~/.local/bin/hermes")
+        if not os.path.isfile(hermes_bin):
+            hermes_bin = "hermes"
+        # Check provider auth
+        try:
+            r = subprocess.run([hermes_bin, "auth", "list"], capture_output=True, text=True, timeout=15)
+            output = r.stdout + r.stderr
+            # If we have a configured provider, check it exists in auth list
+            config_r = subprocess.run([hermes_bin, "config", "show"], capture_output=True, text=True, timeout=15)
+            for line in config_r.stdout.split("\n"):
+                if "provider" in line and ":" in line:
+                    prov = line.split(":")[-1].strip().strip("'\"")
+                    if prov and prov != "auto":
+                        result["provider"] = "ok" if prov in output else "missing"
+                        break
+        except Exception:
+            result["provider"] = "unknown"
+        self._checks = result
+
     def _report_capabilities(self):
         last = getattr(self, "_caps_reported_at", 0)
-        if last and time.time() - last < 21600:  # re-report every 6h
+        # Re-report if 6h passed OR checks changed
+        checks_changed = getattr(self, "_last_reported_checks", None) != self._checks
+        if last and time.time() - last < 21600 and not checks_changed:
             return
         version, current_provider = self._detect_hermes_config()
         providers = self._discover_providers()
-        caps = {"providers": providers}
+        caps = {"providers": providers, "checks": self._checks}
+        self._last_reported_checks = dict(self._checks)
         if version:
             caps["hermes_version"] = version
         if current_provider:
@@ -287,6 +314,9 @@ class Plugin:
     def tick(self):
         if not self.agent_id:
             return
+        self._tick_count += 1
+        if self._tick_count % 10 == 0:
+            self._run_health_checks()
         self._report_capabilities()
         payload = self._get_health_payload()
         body = json.dumps({"health": payload, "last_command_id": self.last_command_id}).encode()
