@@ -60,7 +60,7 @@ class Plugin:
         encrypted = payload.get("encrypted", "")
         if not provider or not encrypted:
             return {"status": "error", "output": "missing provider or key"}
-        auth = self._parse_auth_from_config().get(provider, {})
+        auth = self._parse_auth_from_registry().get(provider, {})
         if auth.get("type") == "oauth":
             return {"status": "ok", "output": f"OAuth para {provider} pendiente"}
         # Decrypt if needed
