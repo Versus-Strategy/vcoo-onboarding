@@ -1028,6 +1028,7 @@ def setup_set_provider(identifier: str, payload: dict, authorization: str = Head
 
     provider = payload.get("provider", "").strip()
     api_key = payload.get("api_key", "").strip()
+    model = payload.get("model", "").strip()
     if not provider or not api_key:
         raise HTTPException(status_code=400, detail="provider and api_key required")
 
@@ -1038,6 +1039,7 @@ def setup_set_provider(identifier: str, payload: dict, authorization: str = Head
     command_payload = json.dumps({
         "api_key": api_key,
         "provider": provider,
+        "model": model,
         "encrypted": False,
     })
     cmd = crud.create_command(db, agent_id=str(agent.id), command="set-provider", result=command_payload)
