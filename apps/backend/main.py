@@ -369,6 +369,7 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
     agent = crud.get_agent_by_vcoo(db, vcoo_id)
     agent_online = False
     providers: list = []
+    checks: dict = {}
     if agent and agent.last_seen:
         import datetime as dt
         ago = (dt.datetime.utcnow() - agent.last_seen.replace(tzinfo=None)).total_seconds()
@@ -377,6 +378,7 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
             try:
                 caps = json.loads(agent.capabilities)
                 providers = caps.get("providers") or []
+                checks = caps.get("checks", {})
             except Exception:
                 pass
     return {
@@ -386,6 +388,7 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
         "modules": modules,
         "module_labels": module_labels,
         "providers": providers,
+        "checks": checks,
         "step": current_step,
         "wizard_step": get_wizard_step(current_step),
         "status": st.status,
