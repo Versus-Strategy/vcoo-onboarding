@@ -218,17 +218,20 @@ class Plugin:
             pass
         return auth_map
 
-    _FLASH_KEYWORDS = ("flash", "haiku", "mini", "nano", "small", "fast", "light", "turbo")
-
     @staticmethod
     def _pick_fastest_model(models: list[str]) -> str:
-        """Pick the first model with a flash keyword, or the very first model."""
+        """Score models: flash keywords +1, premium keywords -1, pick highest score, first in list wins ties."""
+        flash_kw = ("flash", "haiku", "mini", "nano", "small", "fast", "light", "turbo")
+        premium_kw = ("max", "plus", "pro", "ultra", "premium", "advanced", "super")
+        best = models[0] if models else ""
+        best_score = -999
         for m in models:
             name = m.split("/")[-1].lower()
-            for kw in Plugin._FLASH_KEYWORDS:
-                if kw in name:
-                    return m
-        return models[0] if models else ""
+            score = sum(1 for kw in flash_kw if kw in name) - sum(1 for kw in premium_kw if kw in name)
+            if score > best_score:
+                best = m
+                best_score = score
+        return best
 
     def _discover_models(self, provider_id: str) -> list[str]:
         """Read available models for a provider from Hermes' OPENROUTER_MODELS and OpenCode lists."""
