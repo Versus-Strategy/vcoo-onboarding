@@ -405,9 +405,9 @@ const SetupWizard = () => {
         provider: providerId,
         api_key: apiKeyValue.trim(),
       });
-      // Poll for agent confirmation (max 60s)
+      // Poll for agent confirmation (max 90s)
       let ok = false;
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < 18; i++) {
         await new Promise(r => setTimeout(r, 5000));
         const { data } = await apiClient.get(`/setup/${token}`);
         const chk: Record<string, string> = ((data as any).checks as Record<string, string>) || {};
