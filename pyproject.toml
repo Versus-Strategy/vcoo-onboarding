@@ -1,2 +1,2 @@
 [tool.vercel]
-entrypoint = "api/[...slug].py"
+entrypoint = "api/[...slug]:app"

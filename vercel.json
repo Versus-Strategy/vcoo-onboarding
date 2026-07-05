@@ -2,6 +2,11 @@
   "rewrites": [
     { "source": "/(.*)", "destination": "/api/[...slug]" }
   ],
+  "functions": {
+    "api/[...slug].py": {
+      "includeFiles": "apps/backend/**"
+    }
+  },
   "github": {
     "silent": true
   }
