@@ -406,12 +406,15 @@ const SetupWizard = () => {
         api_key: apiKeyValue.trim(),
       });
       // Poll for agent confirmation (max 60s)
+      let ok = false;
       for (let i = 0; i < 12; i++) {
         await new Promise(r => setTimeout(r, 5000));
-        await fetchOnboarding();
-        if ((checks as Record<string, string>).provider === 'ok') break;
+        const { data } = await apiClient.get(`/setup/${token}`);
+        const chk: Record<string, string> = ((data as any).checks as Record<string, string>) || {};
+        if (chk.provider === 'ok') { ok = true; break; }
       }
-      if ((checks as Record<string, string>).provider === 'ok') {
+      if (ok) {
+        await fetchOnboarding();
         setProveedorSeleccionado(null);
         setApiKeyValue('');
       } else {
