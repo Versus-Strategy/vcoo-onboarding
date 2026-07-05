@@ -39,6 +39,23 @@ def get_db():
 
 @app.on_event("startup")
 async def startup():
+    # ── Ensure database exists ──
+    try:
+        db_url = _os.environ.get('POSTGRES_URL', 'postgresql://postgres:postgres@db:5432/postgres')
+        base_url = db_url.rsplit('/', 1)[0] + '/postgres'
+        from sqlalchemy import create_engine as _ce
+        admin_engine = _ce(base_url)
+        with admin_engine.connect() as conn:
+            conn.execute(_sql_text("COMMIT"))
+            result = conn.execute(_sql_text("SELECT 1 FROM pg_database WHERE datname='vcoo'")).fetchone()
+            if not result:
+                conn.execute(_sql_text("CREATE DATABASE vcoo"))
+                print("[startup] Created database 'vcoo'")
+        admin_engine.dispose()
+    except Exception as e:
+        import sys as _sys
+        print(f"[startup] Cannot ensure database: {e}", file=_sys.stderr)
+    # ── Create tables ──
     try:
         Base.metadata.create_all(bind=engine)
     except Exception as e:
