@@ -476,8 +476,8 @@ def trigger_step_verification(identifier: str, db: Session = Depends(get_db)):
 # ── Google OAuth scopes per service ─────────────────────
 
 _GOOGLE_SCOPES_MAP: dict[str, str] = {
-    "google-drive": "https://www.googleapis.com/auth/drive.file+https://www.googleapis.com/auth/documents+https://www.googleapis.com/auth/spreadsheets+https://www.googleapis.com/auth/presentations",
-    "google": "https://www.googleapis.com/auth/drive.file+https://www.googleapis.com/auth/documents+https://www.googleapis.com/auth/spreadsheets+https://www.googleapis.com/auth/presentations",
+    "google-drive": "https://www.googleapis.com/auth/drive+https://www.googleapis.com/auth/documents+https://www.googleapis.com/auth/spreadsheets+https://www.googleapis.com/auth/presentations",
+    "google": "https://www.googleapis.com/auth/drive+https://www.googleapis.com/auth/documents+https://www.googleapis.com/auth/spreadsheets+https://www.googleapis.com/auth/presentations",
     "gmail": "https://www.googleapis.com/auth/gmail.readonly",
 }
 
