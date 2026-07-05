@@ -81,6 +81,13 @@ class Plugin:
                     [hermes_bin, "config", "set", "model.default", model],
                     capture_output=True, text=True, timeout=15
                 )
+                # Extract provider from model name (e.g. opencode-go/gpt-5.4-mini)
+                if "/" in model:
+                    prov_from_model = model.split("/")[0]
+                    subprocess.run(
+                        [hermes_bin, "config", "set", "model.provider", prov_from_model],
+                        capture_output=True, text=True, timeout=15
+                    )
             self._run_health_checks()
             self._report_capabilities()
             return {"status": "ok", "output": f"Provider {provider} configurado"}
