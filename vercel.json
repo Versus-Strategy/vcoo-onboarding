@@ -2,12 +2,6 @@
   "rewrites": [
     { "source": "/(.*)", "destination": "/api/[...slug]" }
   ],
-  "functions": {
-    "api/[...slug].py": {
-      "runtime": "python3.12@1.0.0",
-      "includeFiles": "apps/backend/**"
-    }
-  },
   "github": {
     "silent": true
   }
