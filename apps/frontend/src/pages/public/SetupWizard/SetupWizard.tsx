@@ -780,33 +780,45 @@ const SetupWizard = () => {
     );
   };
 
-  const renderPasoFinalizacion = () => (
+  const renderPasoFinalizacion = () => {
+    const items: { label: string; ok: boolean }[] = [
+      { label: 'Agente instalado y activo', ok: true },
+      { label: 'Proveedor de IA configurado', ok: checks.provider === 'ok' },
+      { label: 'Módulos conectados', ok: modules.every(m => m === 'core' || checks[m === 'office' ? 'google' : m === 'planner' ? 'trello' : m === 'developer' ? 'github' : ''] === 'ok') },
+    ];
+    const allOk = items.every(i => i.ok);
+    return (
     <div className="text-center py-8">
-      <div className="w-16 h-16 rounded-full bg-green-100 mx-auto mb-6 flex items-center justify-center">
-        <svg className="h-8 w-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-        </svg>
+      <div className={`w-16 h-16 rounded-full mx-auto mb-6 flex items-center justify-center ${allOk ? 'bg-green-100' : 'bg-yellow-100'}`}>
+        {allOk ? (
+          <svg className="h-8 w-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+        ) : (
+          <svg className="h-8 w-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+          </svg>
+        )}
       </div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Todo listo</h1>
+      <h1 className={`text-2xl font-bold mb-2 ${allOk ? 'text-gray-900' : 'text-yellow-800'}`}>
+        {allOk ? 'Todo listo' : 'Algo necesita atención'}
+      </h1>
       <p className="text-gray-500 mb-8 max-w-md mx-auto">
-        Tu VCOO está configurado y funcionando. El agente está activo en tu servidor.
+        {allOk ? 'Tu VCOO está configurado y funcionando.' : 'Algunos componentes requieren configuración.'}
       </p>
       <div className="max-w-sm mx-auto space-y-3">
-        <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-4 py-3">
-          <div className="w-2 h-2 rounded-full bg-green-500" />
-          <span className="text-sm text-gray-700">Agente instalado y activo</span>
-        </div>
-        <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-4 py-3">
-          <div className={`w-2 h-2 rounded-full ${completado ? 'bg-green-500' : 'bg-gray-300'}`} />
-          <span className="text-sm text-gray-700">Proveedor de IA configurado</span>
-        </div>
-        <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-4 py-3">
-          <div className={`w-2 h-2 rounded-full ${completado ? 'bg-green-500' : 'bg-gray-300'}`} />
-          <span className="text-sm text-gray-700">Módulos conectados</span>
-        </div>
+        {items.map((item, i) => (
+          <div key={i} className={`flex items-center gap-3 rounded-lg px-4 py-3 ${item.ok ? 'bg-gray-50' : 'bg-yellow-50 border border-yellow-200'}`}>
+            <div className={`w-2 h-2 rounded-full ${item.ok ? 'bg-green-500' : 'bg-yellow-500'}`} />
+            <span className={`text-sm ${item.ok ? 'text-gray-700' : 'text-yellow-800'}`}>
+              {item.label} {!item.ok && '— pendiente'}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
-  );
+    );
+  };
 
   const renderTarjetaBienvenida = () => (
     <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6 shadow-sm">
