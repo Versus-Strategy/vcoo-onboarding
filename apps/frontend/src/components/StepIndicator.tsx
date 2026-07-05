@@ -21,9 +21,9 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({
 
   const status = (idx: number): 'done' | 'degraded' | 'current' | 'next' | 'locked' => {
     if (pasosDegradados.includes(idx)) return 'degraded';
-    if (idx < pasoCompletado) return 'done';
     if (idx === pasoActual) return 'current';
-    if (idx <= unlockedLimit) return idx === unlockedLimit ? 'current' : 'done';
+    if (idx < pasoCompletado) return 'done';
+    if (idx <= unlockedLimit) return 'done';
     if (idx === unlockedLimit + 1) return 'next';
     return 'locked';
   };
