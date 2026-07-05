@@ -71,15 +71,19 @@ class Plugin:
                 api_key = decrypt_api_key(encrypted)
             except Exception as e:
                 return {"status": "error", "output": f"decrypt failed: {e}"}
-        # Run hermes auth add (API key via stdin to avoid ps aux exposure)
+        # Run hermes auth add + set as default provider
         try:
             r = subprocess.run(
                 ["hermes", "auth", "add", provider, "--type", "api-key", "--api-key", api_key],
                 capture_output=True, text=True, timeout=30
             )
-            if r.returncode == 0:
-                return {"status": "ok", "output": r.stdout.strip() or f"Provider {provider} configurado"}
-            return {"status": "error", "output": r.stderr.strip() or f"hermes auth add exit={r.returncode}"}
+            if r.returncode != 0:
+                return {"status": "error", "output": r.stderr.strip() or f"hermes auth add exit={r.returncode}"}
+            subprocess.run(
+                ["hermes", "config", "set", "model.provider", provider],
+                capture_output=True, text=True, timeout=15
+            )
+            return {"status": "ok", "output": f"Provider {provider} configurado como predeterminado"}
         except FileNotFoundError:
             return {"status": "error", "output": "hermes command not found"}
         except Exception as e:
