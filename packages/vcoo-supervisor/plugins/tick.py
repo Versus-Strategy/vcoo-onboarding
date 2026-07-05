@@ -63,6 +63,18 @@ class Plugin:
         api_key = payload.get("api_key") or payload.get("encrypted", "")
         if not provider or not api_key:
             return {"status": "error", "output": "missing provider or key"}
+        # Remove duplicate key from other providers
+        try:
+            existing = subprocess.run([hermes_bin, "auth", "list"], capture_output=True, text=True, timeout=15)
+            if api_key in existing.stdout:
+                for old_prov in existing.stdout.split("\n"):
+                    if "(" in old_prov and api_key in existing.stdout:
+                        old_id = old_prov.split("(")[0].strip()
+                        if old_id and old_id != provider:
+                            subprocess.run([hermes_bin, "auth", "remove", "--provider", old_id],
+                                capture_output=True, timeout=10)
+        except Exception:
+            pass
         # Run hermes auth add + set as default provider
         hermes_bin = os.path.expanduser("~/.local/bin/hermes")
         if not os.path.isfile(hermes_bin):
@@ -279,15 +291,14 @@ class Plugin:
             auth_text = ar.stdout + ar.stderr
         except Exception:
             pass
-        # Check provider
-        prov_ok = False
-        for line in config_text.split("\n"):
-            if "provider" in line and ":" in line:
-                p = line.split(":")[-1].strip().strip("'\"")
-                if p and p != "auto":
-                    prov_ok = p in auth_text
-                    break
-        result["provider"] = "ok" if prov_ok else "missing"
+        # Check provider: look for any provider name in auth list output
+        has_provider = False
+        for line in auth_text.split("\n"):
+            line = line.strip()
+            if line and not line.startswith("#") and not line.startswith("(") and " " not in line:
+                has_provider = True
+                break
+        result["provider"] = "ok" if has_provider else "missing"
         # Check Google OAuth (office/mail modules)
         result["google"] = "ok" if ("google" in auth_text or "google.client_id" in config_text) else "missing"
         # Check Trello (planner module)
