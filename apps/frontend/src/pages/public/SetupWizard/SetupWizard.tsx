@@ -275,12 +275,15 @@ const SetupWizard = () => {
     }
   }, [mostrarWizard, fetchOnboarding]);
 
-  // ── Polling: auto-refresh every 15s to detect backend advances ──
+  // ── Polling: auto-refresh every 15s + auto-verify when agent online ──
   useEffect(() => {
     if (!mostrarWizard) return;
+    if (onboarding?.agent_online && onboarding.wizard_step === 0) {
+      apiClient.post(`/setup/${token}/verify`).catch(() => {});
+    }
     const interval = setInterval(fetchOnboarding, 15000);
     return () => clearInterval(interval);
-  }, [mostrarWizard, fetchOnboarding]);
+  }, [mostrarWizard, fetchOnboarding, onboarding?.agent_online, onboarding?.wizard_step]);
 
   // ── Timeout for provider loading ──
   const [providersTimeout, setProvidersTimeout] = useState(false);
