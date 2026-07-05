@@ -761,113 +761,29 @@ const SetupWizard = () => {
   };
 
   const renderPasoFinalizacion = () => (
-    <div className="space-y-6">
-      <div className="text-center">
-        <div className="flex items-center justify-center mb-6">
-          <div className="bg-green-100 border border-green-300 rounded-full p-4">
-            <svg
-              className="h-12 w-12 text-green-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M5 13l4 4L19 7"
-              />
-            </svg>
-          </div>
-        </div>
-
-        <h1 className="text-2xl font-bold text-gray-900 mb-4">
-          ¡Configuración Completada!
-        </h1>
-        <p className="text-gray-500 mb-6 max-w-md mx-auto">
-          Tu instancia de VCOO ha sido configurada exitosamente y está lista
-          para usar.
-        </p>
+    <div className="text-center py-8">
+      <div className="w-16 h-16 rounded-full bg-green-100 mx-auto mb-6 flex items-center justify-center">
+        <svg className="h-8 w-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+        </svg>
       </div>
-
-      <div className="bg-white border border-gray-200 rounded-xl p-6 max-w-lg mx-auto shadow-sm">
-        <h3 className="font-semibold text-gray-900 mb-4">
-          Resumen de Configuración
-        </h3>
-
-        <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <StatusBadge
-              estado={
-                onboarding.agent_online ? 'en-linea' : 'fuera-de-linea'
-              }
-            />
-            <div>
-              <h4 className="font-medium text-gray-900">Agente VCOO</h4>
-              <p className="text-sm text-gray-500">
-                {onboarding.agent_online
-                  ? 'Instalado y activo'
-                  : 'Pendiente de activación'}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <StatusBadge
-              estado={
-                pasoActual >= 2 ? 'en-linea' : 'fuera-de-linea'
-              }
-            />
-            <div>
-              <h4 className="font-medium text-gray-900">Proveedor de IA</h4>
-              <p className="text-sm text-gray-500">
-                {pasoActual >= 2 ? 'Conectado' : 'No conectado'}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <StatusBadge
-              estado={
-                completado && onboarding.modules?.length === 0
-                  ? 'en-linea'
-                  : pasoActual >= 3
-                  ? 'en-linea'
-                  : 'fuera-de-linea'
-              }
-            />
-            <div>
-              <h4 className="font-medium text-gray-900">Módulos Configurados</h4>
-              <p className="text-sm text-gray-500">
-                {completado
-                  ? 'Todos los módulos conectados'
-                  : `${onboarding.modules?.length || 0} módulo(s) pendiente(s)`}
-              </p>
-            </div>
-          </div>
+      <h1 className="text-2xl font-bold text-gray-900 mb-2">Todo listo</h1>
+      <p className="text-gray-500 mb-8 max-w-md mx-auto">
+        Tu VCOO está configurado y funcionando. El agente está activo en tu servidor.
+      </p>
+      <div className="max-w-sm mx-auto space-y-3">
+        <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-4 py-3">
+          <div className="w-2 h-2 rounded-full bg-green-500" />
+          <span className="text-sm text-gray-700">Agente instalado y activo</span>
         </div>
-      </div>
-
-      <div className="max-w-lg mx-auto">
-        <h3 className="font-semibold text-gray-900 mb-3">Próximos Pasos</h3>
-        <ol className="space-y-2 text-gray-500">
-          <li className="flex items-start gap-2">
-            <span className="text-primary-600 font-bold">1.</span>
-            <span>Explora el panel de control para ver tus servicios activos</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="text-primary-600 font-bold">2.</span>
-            <span>Configura notificaciones y alertas según tus preferencias</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="text-primary-600 font-bold">3.</span>
-            <span>Invita a miembros de tu equipo para colaborar</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="text-primary-600 font-bold">4.</span>
-            <span>Programa tu primera tarea de automatización</span>
-          </li>
-        </ol>
+        <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-4 py-3">
+          <div className={`w-2 h-2 rounded-full ${completado ? 'bg-green-500' : 'bg-gray-300'}`} />
+          <span className="text-sm text-gray-700">Proveedor de IA configurado</span>
+        </div>
+        <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-4 py-3">
+          <div className={`w-2 h-2 rounded-full ${completado ? 'bg-green-500' : 'bg-gray-300'}`} />
+          <span className="text-sm text-gray-700">Módulos conectados</span>
+        </div>
       </div>
     </div>
   );
