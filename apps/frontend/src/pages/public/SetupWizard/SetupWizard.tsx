@@ -619,7 +619,6 @@ const SetupWizard = () => {
               </div>
             ) : modeloSeleccionado === prov?.id ? null
             : auth.type === 'api_key' ? (
-            ) : auth.type === 'api_key' ? (
               <div className="space-y-4">
                 <p className="text-sm text-gray-600">{auth.hint}</p>
                 <input type="password"
