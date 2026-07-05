@@ -276,6 +276,16 @@ const SetupWizard = () => {
     }
   }, [mostrarWizard, fetchOnboarding]);
 
+  // ── Timeout for provider loading ──
+  const [providersTimeout, setProvidersTimeout] = useState(false);
+  useEffect(() => {
+    if ((onboarding?.providers || []).length === 0 && onboarding) {
+      const t = setTimeout(() => setProvidersTimeout(true), 30000);
+      return () => clearTimeout(t);
+    }
+    setProvidersTimeout(false);
+  }, [onboarding?.providers, onboarding]);
+
   // ── Auth form (not yet authenticated) ──
 
   if (!mostrarWizard) {
@@ -388,9 +398,16 @@ const SetupWizard = () => {
       });
       setProveedorSeleccionado(null);
       setApiKeyValue('');
+      setError(null);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Error al conectar';
-      setError(msg);
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 403) {
+        setError('No tienes acceso a este VCOO. Asegúrate de usar el enlace correcto o vuelve a registrarte.');
+      } else if (status === 400) {
+        setError('El agente aún no está instalado. Completa primero el paso 1.');
+      } else {
+        setError(err instanceof Error ? err.message : 'Error al conectar');
+      }
     } finally {
       setEnviando(false);
     }
@@ -430,9 +447,7 @@ const SetupWizard = () => {
   // ── Renderizado de cada paso ──
 
   const renderPasoInstalacion = () => {
-    const cmdText =
-      onboarding.install_command ||
-      `curl -sSL ${API_URL}/install.sh | PROVISION_TOKEN=${token} bash -`;
+    const cmdText = onboarding.install_command;
 
     return (
       <div className="space-y-6">
@@ -473,8 +488,8 @@ const SetupWizard = () => {
 
   const renderPasoProveedor = () => {
     const raw = onboarding.providers || [];
-    const recomendado = raw.find(p => p.id === 'opencode-go' || p.id === 'opencode-go');
-    const destacadosIds = new Set(['opencode-go', 'opencode-zen', 'anthropic', 'openai', 'openai-api', 'openai-codex', 'google', 'gemini', 'copilot', 'openrouter']);
+    const recomendado = raw.find(p => p.id === 'opencode-go');
+    const destacadosIds = new Set(['opencode-go', 'anthropic', 'openai', 'openai-api', 'openai-codex', 'google', 'gemini', 'copilot', 'openrouter']);
     const destacados = raw.filter(p => p.id !== 'opencode-go' && destacadosIds.has(p.id));
     const resto = raw.filter(p => p.id !== 'opencode-go' && !destacadosIds.has(p.id));
 
@@ -591,9 +606,24 @@ const SetupWizard = () => {
 
       {(onboarding.providers || []).length === 0 ? (
         <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-500 mx-auto mb-4" />
-          <p className="text-gray-500">Esperando a que el agente reporte los proveedores disponibles...</p>
-          <p className="text-gray-400 text-sm mt-2">Completa el paso 1 (Instalar Agente) para continuar.</p>
+          {providersTimeout ? (
+            <>
+              <div className="text-yellow-500 text-5xl mb-4">⏱</div>
+              <p className="text-gray-700 font-medium">El agente no reportó proveedores</p>
+              <p className="text-gray-500 text-sm mt-2">Asegúrate de que el agente esté instalado y funcionando, luego haz clic en <strong>Refrescar</strong>.</p>
+              <div className="mt-4">
+                <Button variant="primary" size="sm" onClick={() => { fetchOnboarding(); setProvidersTimeout(false); }}>
+                  Reintentar
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-500 mx-auto mb-4" />
+              <p className="text-gray-500">Esperando a que el agente reporte los proveedores disponibles...</p>
+              <p className="text-gray-400 text-sm mt-2">Completa el paso 1 (Instalar Agente) para continuar.</p>
+            </>
+          )}
         </div>
       ) : (
       <div className="space-y-1 max-w-2xl">

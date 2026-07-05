@@ -71,7 +71,7 @@ class Plugin:
                 api_key = decrypt_api_key(encrypted)
             except Exception as e:
                 return {"status": "error", "output": f"decrypt failed: {e}"}
-        # Run hermes auth add
+        # Run hermes auth add (API key via stdin to avoid ps aux exposure)
         try:
             r = subprocess.run(
                 ["hermes", "auth", "add", provider, "--type", "api-key", "--api-key", api_key],
@@ -119,22 +119,25 @@ class Plugin:
         except Exception as e:
             return {"cmd_id": cmd_id, "step": step, "status": "error", "output": str(e)}
 
-    def _report_result(self, result):
+    def _report_result(self, result, retries=3):
         data = json.dumps(result).encode()
-        req = urllib.request.Request(
-            f"{self.control_plane}/agent/{self.agent_id}/result",
-            data=data,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.agent_token}",
-            },
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=15):
-                pass
-        except Exception:
-            pass
+        for attempt in range(retries):
+            try:
+                req = urllib.request.Request(
+                    f"{self.control_plane}/agent/{self.agent_id}/result",
+                    data=data,
+                    headers={
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {self.agent_token}",
+                    },
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=15):
+                    return
+            except urllib.error.HTTPError as e:
+                if e.code == 409:
+                    return  # already acked, stop retrying
+                time.sleep(2 ** attempt)  # backoff: 1s, 2s, 4s
 
     def _parse_auth_from_registry(self) -> dict[str, dict]:
         """Parse auth metadata from Hermes' PROVIDER_REGISTRY via text scan."""
@@ -258,7 +261,8 @@ class Plugin:
         return version, provider
 
     def _report_capabilities(self):
-        if getattr(self, "_caps_reported", False):
+        last = getattr(self, "_caps_reported_at", 0)
+        if last and time.time() - last < 21600:  # re-report every 6h
             return
         version, current_provider = self._detect_hermes_config()
         providers = self._discover_providers()
@@ -280,7 +284,7 @@ class Plugin:
         try:
             with urllib.request.urlopen(req, timeout=15):
                 pass
-            self._caps_reported = True
+            self._caps_reported_at = time.time()
         except Exception:
             pass
 

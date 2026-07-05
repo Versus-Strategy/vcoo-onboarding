@@ -24,7 +24,7 @@ app = FastAPI(title="VCOO Onboarding API v2")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -440,6 +440,15 @@ def trigger_step_verification(identifier: str, db: Session = Depends(get_db)):
         agent = crud.get_agent_by_vcoo(db, vcoo_id)
 
     if agent and agent_alive:
+        # Check for existing pending command for this step (idempotency)
+        existing = db.query(models.Command).filter(
+            models.Command.agent_id == str(agent.id),
+            models.Command.command == cmd_name,
+            models.Command.step == step,
+            models.Command.status == 'pending',
+        ).first()
+        if existing:
+            return {"status": "enqueued", "cmd_id": str(existing.id), "step": step, "command": cmd_name, "duplicate": True}
         cmd = crud.create_command(db, agent_id=str(agent.id), command=cmd_name, step=step)
         return {
             "status": "enqueued",
@@ -952,8 +961,14 @@ def get_state(vcoo_id: str, db: Session = Depends(get_db)):
 # ── Agent result (SPEC v2 §4.4) ──────────────────────────
 
 @app.post("/agent/{agent_id}/result")
-def agent_report_result(agent_id: str, payload: dict, db: Session = Depends(get_db)):
+def agent_report_result(agent_id: str, payload: dict, authorization: str = Header(None), db: Session = Depends(get_db)):
     """Agent reports command result. ACK semantics with backoff support."""
+    if not authorization or not authorization.lower().startswith('bearer '):
+        raise HTTPException(status_code=401, detail="missing auth")
+    token = authorization.split(None, 1)[1]
+    payload2 = auth.decode_agent_token(token)
+    if not payload2 or payload2.get('agent_id') != agent_id:
+        raise HTTPException(status_code=401, detail="invalid agent token")
     from fastapi.responses import JSONResponse
     cmd_id = payload.get("cmd_id")
     step = payload.get("step", "")
