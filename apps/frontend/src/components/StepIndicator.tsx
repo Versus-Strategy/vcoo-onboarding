@@ -5,9 +5,11 @@ interface StepIndicatorProps {
   pasosTotales: number;
   pasos: string[];
   onStepClick?: (idx: number) => void;
+  maxUnlocked?: number;
 }
 
-const StepIndicator: React.FC<StepIndicatorProps> = ({ pasoActual, pasosTotales, pasos, onStepClick }) => {
+const StepIndicator: React.FC<StepIndicatorProps> = ({ pasoActual, pasosTotales, pasos, onStepClick, maxUnlocked }) => {
+  const unlockedLimit = maxUnlocked ?? pasoActual;
   const porcentaje = Math.round((pasoActual / pasosTotales) * 100);
 
   return (
@@ -26,18 +28,21 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({ pasoActual, pasosTotales,
 
       <div className="flex justify-between">
         {pasos.map((paso, idx) => {
-          const unlocked = idx <= pasoActual;
+          const unlocked = idx <= unlockedLimit;
+          const isNext = idx === unlockedLimit + 1;
           return (
           <div key={idx}
             onClick={() => unlocked && onStepClick?.(idx)}
             className={`flex flex-col items-center ${unlocked && onStepClick ? 'cursor-pointer' : ''}`}
           >
             <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
                 idx < pasoActual
                   ? 'bg-primary-600 text-white'
                   : idx === pasoActual
                   ? 'bg-primary-100 text-primary-600 border-2 border-primary-600'
+                  : isNext
+                  ? 'bg-gray-100 text-gray-600 border-2 border-dashed border-gray-300'
                   : 'bg-gray-200 text-gray-500'
               }`}
             >
@@ -45,17 +50,13 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({ pasoActual, pasosTotales,
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                 </svg>
-              ) : idx === pasoActual ? (
-                idx + 1
               ) : (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
+                idx + 1
               )}
             </div>
             <span
               className={`mt-1 text-xs ${
-                idx <= pasoActual ? 'text-primary-600 font-medium' : 'text-gray-400'
+                idx <= unlockedLimit ? 'text-primary-600 font-medium' : 'text-gray-400'
               }`}
             >
               {paso}

@@ -831,8 +831,9 @@ const SetupWizard = () => {
             pasoActual={pasoActual}
             pasosTotales={4}
             pasos={PASOS}
+            maxUnlocked={pasoBackend + 1}
             onStepClick={(idx) => {
-              if (idx <= pasoBackend && idx !== pasoActual) {
+              if (idx <= pasoBackend + 1 && idx !== pasoActual) {
                 setVistaActual(idx);
                 setProveedorSeleccionado(null);
                 setModuloSeleccionado(null);
@@ -856,25 +857,16 @@ const SetupWizard = () => {
             : renderPasoInstalacion()}
         </div>
 
-        {onboarding && (
-          <div className="flex items-center mt-6 pt-4 border-t border-gray-100">
-            {pasoActual > 0 && (
-              <Button variant="ghost" size="sm" onClick={() => {
-                setVistaActual(pasoActual - 1);
-                setProveedorSeleccionado(null);
-                setModuloSeleccionado(null);
-                setError(null);
-              }}>
-                ← Anterior
-              </Button>
-            )}
-            {pasoActual < pasoBackend ? (
-              <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setVistaActual(pasoActual + 1)}>
-                Siguiente →
-              </Button>
-            ) : (
-              <span className="ml-auto text-xs text-gray-400">El sistema avanza automáticamente</span>
-            )}
+        {onboarding && pasoActual > 0 && (
+          <div className="flex mt-6 pt-4 border-t border-gray-100">
+            <Button variant="ghost" size="sm" onClick={() => {
+              setVistaActual(pasoActual - 1);
+              setProveedorSeleccionado(null);
+              setModuloSeleccionado(null);
+              setError(null);
+            }}>
+              ← Anterior
+            </Button>
           </div>
         )}
       </div>
