@@ -61,15 +61,18 @@ class Plugin:
         if not provider or not api_key:
             return {"status": "error", "output": "missing provider or key"}
         # Run hermes auth add + set as default provider
+        hermes_bin = os.path.expanduser("~/.local/bin/hermes")
+        if not os.path.isfile(hermes_bin):
+            hermes_bin = "hermes"
         try:
             r = subprocess.run(
-                ["hermes", "auth", "add", provider, "--type", "api-key", "--api-key", api_key],
+                [hermes_bin, "auth", "add", provider, "--type", "api-key", "--api-key", api_key],
                 capture_output=True, text=True, timeout=30
             )
             if r.returncode != 0:
                 return {"status": "error", "output": r.stderr.strip() or f"hermes auth add exit={r.returncode}"}
             subprocess.run(
-                ["hermes", "config", "set", "model.provider", provider],
+                [hermes_bin, "config", "set", "model.provider", provider],
                 capture_output=True, text=True, timeout=15
             )
             return {"status": "ok", "output": f"Provider {provider} configurado como predeterminado"}
