@@ -65,6 +65,10 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({
                   <circle cx="12" cy="12" r="9.5" strokeWidth={1.5} />
                 </svg>
               ) : showCheckmark ? (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
                 idx + 1
               )}
             </div>
