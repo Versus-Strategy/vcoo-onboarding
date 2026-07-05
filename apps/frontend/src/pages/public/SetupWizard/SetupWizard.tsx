@@ -535,8 +535,8 @@ const SetupWizard = () => {
         setModeloEnCurso(modelo);
         try {
           await apiClient.post(`/setup/${token}/set-provider`, { provider: prov!.id, model: modelo });
-          for (let i = 0; i < 18; i++) {
-            await new Promise(r => setTimeout(r, 5000));
+          for (let i = 0; i < 30; i++) {
+            await new Promise(r => setTimeout(r, 3000));
             const { data: fresh } = await apiClient.get(`/setup/${token}`);
             const cfg = (fresh as any).checks || {};
             if (cfg.model === 'ok') break;

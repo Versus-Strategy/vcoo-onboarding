@@ -341,6 +341,7 @@ class Plugin:
             if line and not line.startswith("#") and not line.startswith("(") and not line.startswith("Credential"):
                 has_provider = True
                 break
+        result["bootstrap"] = "ok" if os.path.isdir(os.path.expanduser("~/.hermes/scripts/vcoo")) else "missing"
         result["provider"] = "ok" if has_provider else "missing"
         # Check model.default is configured
         import re as _re2
