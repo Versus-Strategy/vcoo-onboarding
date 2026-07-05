@@ -117,6 +117,7 @@ WIZARD_STEP_MAP: dict[str, int] = {
     "vercel-setup":   2,
     "supabase-setup": 2,
     "finalize":       3,
+    "done":           3,
 }
 
 

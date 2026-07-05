@@ -1071,6 +1071,8 @@ def setup_advance_step(identifier: str, authorization: str = Header(None), db: S
     st = crud.get_onboarding_state(db, vcoo_id)
     if not st:
         raise HTTPException(status_code=404, detail="no onboarding state")
+    if st.step in ("finalize", "done"):
+        return {"status": "already_done", "step": st.step}
     crud.advance_onboarding_step(db, vcoo_id, st.step)
     return {"status": "advanced", "step": st.step}
 
