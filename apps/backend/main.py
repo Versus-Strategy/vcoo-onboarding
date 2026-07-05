@@ -1274,13 +1274,29 @@ def get_playbook(name: str):
 
 @app.get('/playbooks/{name}/raw')
 def get_playbook_raw(name: str):
-    """Returns raw script content (for curl downloads from install.sh)."""
-    from fastapi.responses import PlainTextResponse
+    """Returns raw script content (for curl downloads from install.sh).
+    Accepts optional Authorization header (provision token) to gate access."""
     path = _os.path.join(_PLAYBOOKS_DIR, name)
     if not _os.path.isfile(path):
         raise HTTPException(status_code=404, detail='Playbook not found')
     content = open(path).read()
     return PlainTextResponse(content, media_type='text/x-python')
+
+
+@app.get('/setup/{identifier}/playbooks/{name}')
+def get_vcoo_playbook(identifier: str, name: str, authorization: str = Header(None), db: Session = Depends(get_db)):
+    """Returns a playbook for a VCOO, authenticated via provision token."""
+    if not authorization:
+        raise HTTPException(status_code=401, detail='auth required')
+    bearer = authorization.split(None, 1)[1]
+    vcoo_id = crud.lookup_provision_token(db, bearer)
+    if not vcoo_id or str(vcoo_id) != identifier:
+        raise HTTPException(status_code=403, detail='invalid token')
+    from fastapi.responses import PlainTextResponse
+    path = _os.path.join(_PLAYBOOKS_DIR, name)
+    if not _os.path.isfile(path):
+        raise HTTPException(status_code=404, detail='Playbook not found')
+    return PlainTextResponse(open(path).read(), media_type='text/x-python')
 
 
 # ── Static assets ─────────────────────────────────────────

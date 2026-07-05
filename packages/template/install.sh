@@ -204,41 +204,73 @@ if [ -d "${VCOO_DIR}/skills" ]; then
     done
 fi
 
-# ─── 6. Copiar scripts VCOO ─────────────────────────────────────
-if [ -d "${VCOO_DIR}/scripts" ]; then
-    info "Instalando scripts de integración..."
-    mkdir -p "${HERMES_SCRIPTS}"
-    for script in "${VCOO_DIR}/scripts/"*.py; do
-        if [ -f "$script" ]; then
-            # Skip vcoo-tester.py (it already has a portable shebang)
-            if [[ "$(basename "$script")" == "vcoo-tester.py" ]]; then
-                cp "$script" "${HERMES_SCRIPTS}/"
-            else
-                # Rewrite shebang to point to VCOO venv
-                sed "1s|^#!/usr/bin/env python3|#!${HERMES_SCRIPTS}/.venv/bin/python3|" "$script" > "${HERMES_SCRIPTS}/$(basename "$script")"
-            fi
-            chmod +x "${HERMES_SCRIPTS}/$(basename "$script")"
-        fi
-    done
-    for script in "${VCOO_DIR}/scripts/"*.sh; do
-        if [ -f "$script" ]; then
-            cp "$script" "${HERMES_SCRIPTS}/"
-            chmod +x "${HERMES_SCRIPTS}/$(basename "$script")"
-        fi
-    done
-    
-    # Crear VCOO venv si no existe
-    if [ ! -d "${HERMES_SCRIPTS}/.venv" ]; then
-        info "Creando entorno virtual VCOO..."
-        uv venv "${HERMES_SCRIPTS}/.venv"
-        uv pip install --python "${HERMES_SCRIPTS}/.venv/bin/python" \
-            google-api-python-client google-auth-httplib2 google-auth-oauthlib \
-            reportlab weasyprint httpx pyyaml 2>&1 | tail -1
-        ok "Entorno virtual VCOO creado"
+# ─── 6. Descargar scripts VCOO (autenticado con PROVISION_TOKEN) ──
+info "Descargando scripts de integración..."
+mkdir -p "${HERMES_SCRIPTS}"
+VCOO_ID="${VCOO_ID:-$(grep -oP 'VCOO_ID=\K.*' "${HERMES_HOME}/.env" 2>/dev/null || echo '')}"
+PROV_TOKEN="${PROVISION_TOKEN:-$(grep -oP 'PROVISION_TOKEN=\K.*' "${HERMES_HOME}/.env" 2>/dev/null || echo '')}"
+CONTROL="${CONTROL_PLANE:-${CONTROL_PLANE_URL:-}}"
+
+# Módulo → scripts que necesita
+fetch_script() {
+    local name="$1"
+    local dest="${HERMES_SCRIPTS}/${name}"
+    if [ -f "$dest" ]; then
+        ok "$name (ya existe)"
+        return 0
     fi
-    
-    ok "Scripts de integración instalados"
+    if [ -n "$VCOO_ID" ] && [ -n "$PROV_TOKEN" ]; then
+        if curl -sSf -o "$dest" "${CONTROL}/setup/${VCOO_ID}/playbooks/${name}" \
+            -H "Authorization: Bearer ${PROV_TOKEN}" 2>/dev/null; then
+            sed -i "1s|^#!/usr/bin/env python3|#!${HERMES_SCRIPTS}/.venv/bin/python3|" "$dest" 2>/dev/null || true
+            chmod +x "$dest"
+            ok "$name descargado"
+            return 0
+        fi
+    fi
+    # Fallback: copiar del template local
+    if [ -f "${VCOO_DIR}/scripts/${name}" ]; then
+        cp "${VCOO_DIR}/scripts/${name}" "$dest"
+        chmod +x "$dest"
+        warn "$name (desde template local)"
+        return 0
+    fi
+    warn "$name no encontrado"
+}
+
+# Scripts base (siempre necesarios)
+fetch_script "vcoo-bootstrap.py"
+fetch_script "venv-setup.sh"
+
+# Scripts por módulo (según VCOO_ID, o descargar todos si no hay módulos)
+if [ -n "$VCOO_ID" ] && [ -n "$CONTROL" ]; then
+    # Intentar obtener módulos del VCOO
+    MODULES=$(curl -s "http://10.0.0.1:8000/setup/${VCOO_ID}" -H "Authorization: Bearer ${PROV_TOKEN}" 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(' '.join(d.get('modules',[])))" 2>/dev/null || echo "")
 fi
+if [ -z "$MODULES" ]; then
+    MODULES="core office mail planner developer"
+fi
+
+for mod in $MODULES; do
+    case "$mod" in
+        core)     fetch_script "vcoo-bootstrap.py" ;;
+        office)   fetch_script "vcoo-google.py" ;;
+        mail)     fetch_script "vcoo-email.py" ;;
+        planner)  fetch_script "vcoo-trello.py" ;;
+    esac
+done
+
+# Crear VCOO venv si no existe
+if [ ! -d "${HERMES_SCRIPTS}/.venv" ]; then
+    info "Creando entorno virtual VCOO..."
+    uv venv "${HERMES_SCRIPTS}/.venv"
+    uv pip install --python "${HERMES_SCRIPTS}/.venv/bin/python" \
+        google-api-python-client google-auth-httplib2 google-auth-oauthlib \
+        reportlab weasyprint httpx pyyaml 2>&1 | tail -1
+    ok "Entorno virtual VCOO creado"
+fi
+
+ok "Scripts de integración instalados"
 
 # ── 7. Ejecutar provisionamiento del servidor ──────────────────
 if [ -f "${VCOO_DIR}/provision/setup-server.sh" ]; then
