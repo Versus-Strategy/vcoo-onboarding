@@ -368,10 +368,10 @@ class Plugin:
         version, current_provider = self._detect_hermes_config()
         providers = self._discover_providers()
         caps = {"providers": providers, "checks": self._checks}
-    if current_provider:
-        models = self._discover_models(current_provider)
-        recommended = self.RECOMMENDED_MODELS.get(current_provider, "")
-        caps["models"] = {current_provider: {"list": models, "recommended": recommended}}
+        if current_provider:
+            models = self._discover_models(current_provider)
+            recommended = self.RECOMMENDED_MODELS.get(current_provider, "")
+            caps["models"] = {current_provider: {"list": models, "recommended": recommended}}
         self._last_reported_checks = dict(self._checks)
         if version:
             caps["hermes_version"] = version
