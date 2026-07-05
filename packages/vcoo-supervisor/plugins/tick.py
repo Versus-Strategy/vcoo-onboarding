@@ -222,20 +222,13 @@ class Plugin:
 
     @staticmethod
     def _pick_fastest_model(models: list[str]) -> str:
-        """Pick the cheapest/fastest model from a list."""
-        best = models[0] if models else ""
-        best_score = -1
+        """Pick the first model with a flash keyword, or the very first model."""
         for m in models:
             name = m.split("/")[-1].lower()
-            score = 0
             for kw in Plugin._FLASH_KEYWORDS:
                 if kw in name:
-                    score += 1
-            # Prefer shorter names (fewer capabilities = cheaper)
-            if score > best_score or (score == best_score and len(name) < len(best.split("/")[-1])):
-                best = m
-                best_score = score
-        return best
+                    return m
+        return models[0] if models else ""
 
     def _discover_models(self, provider_id: str) -> list[str]:
         """Read available models for a provider from Hermes' OPENROUTER_MODELS and OpenCode lists."""
