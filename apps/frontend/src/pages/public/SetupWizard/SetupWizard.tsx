@@ -535,30 +535,18 @@ const SetupWizard = () => {
         setModeloSeleccionado(modelo);
         try {
           await apiClient.post(`/setup/${token}/set-provider`, { provider: prov!.id, model: modelo });
-          for (let i = 0; i < 18; i++) {
+          for (let i = 0; i < 12; i++) {
             await new Promise(r => setTimeout(r, 5000));
             const { data: fresh } = await apiClient.get(`/setup/${token}`);
             if (((fresh as any).models || {})[prov!.id]) break;
           }
           await apiClient.post(`/setup/${token}/verify`).catch(() => {});
-          // Poll until step advances to modules
-          for (let i = 0; i < 18; i++) {
-            await new Promise(r => setTimeout(r, 5000));
-            const { data: fresh } = await apiClient.get(`/setup/${token}`);
-            if ((fresh as any).wizard_step >= 2) {
-              await fetchOnboarding();
-              setProveedorSeleccionado(null);
-              setApiKeyValue('');
-              setModeloSeleccionado(null);
-              return;
-            }
-          }
-          // Timeout — just go back, step might advance later
           await fetchOnboarding();
           setProveedorSeleccionado(null);
           setApiKeyValue('');
           setModeloSeleccionado(null);
-        } catch { setError('Error al configurar el modelo'); setEnviando(false); setModeloSeleccionado(null); }
+        } catch { setError('Error al configurar el modelo'); }
+        finally { setEnviando(false); }
       };
       return (
         <div className="space-y-6 max-w-2xl">
