@@ -228,40 +228,32 @@ VCOO_ID="${VCOO_ID:-$(grep -oP 'VCOO_ID=\K.*' "${HERMES_HOME}/.env" 2>/dev/null 
 PROV_TOKEN="${PROVISION_TOKEN:-$(grep -oP 'PROVISION_TOKEN=\K.*' "${HERMES_HOME}/.env" 2>/dev/null || echo '')}"
 CONTROL="${CONTROL_PLANE:-${CONTROL_PLANE_URL:-}}"
 
-# Módulo → scripts que necesita
+# Obtener módulos del VCOO desde el control plane
+MODULES=""
+if [ -n "$VCOO_ID" ] && [ -n "$PROV_TOKEN" ] && [ -n "$CONTROL" ]; then
+    MODULES=$(curl -sSf "${CONTROL}/setup/${VCOO_ID}" -H "Authorization: Bearer ${PROV_TOKEN}" 2>/dev/null | \
+        python3 -c "import sys,json; d=json.load(sys.stdin); print(' '.join(d.get('modules',[])))" 2>/dev/null || echo "")
+fi
+
 fetch_script() {
     local name="$1"
     local dest="${HERMES_SCRIPTS}/${name}"
     if [ -f "$dest" ]; then
-        ok "$name (ya existe)"
         return 0
     fi
     if curl -sSf -o "$dest" "${CONTROL}/setup/${VCOO_ID}/playbooks/${name}" \
         -H "Authorization: Bearer ${PROV_TOKEN}" 2>/dev/null; then
         sed -i "1s|^#!/usr/bin/env python3|#!${HERMES_SCRIPTS}/.venv/bin/python3|" "$dest" 2>/dev/null || true
         chmod +x "$dest"
-        ok "$name descargado"
+        ok "$name"
         return 0
     fi
-    warn "$name no disponible — módulo no contratado"
 }
 
-# Scripts base (siempre necesarios)
-fetch_script "vcoo-bootstrap.py"
-fetch_script "venv-setup.sh"
-
-# Scripts por módulo (según VCOO_ID, o descargar todos si no hay módulos)
-if [ -n "$VCOO_ID" ] && [ -n "$CONTROL" ]; then
-    # Intentar obtener módulos del VCOO
-    MODULES=$(curl -s "http://10.0.0.1:8000/setup/${VCOO_ID}" -H "Authorization: Bearer ${PROV_TOKEN}" 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(' '.join(d.get('modules',[])))" 2>/dev/null || echo "")
-fi
-if [ -z "$MODULES" ]; then
-    MODULES="core office mail planner developer"
-fi
-
+# Solo descargar scripts de los módulos contratados
 for mod in $MODULES; do
     case "$mod" in
-        core)     fetch_script "vcoo-bootstrap.py" ;;
+        core)     fetch_script "vcoo-bootstrap.py" && fetch_script "venv-setup.sh" ;;
         office)   fetch_script "vcoo-google.py" ;;
         mail)     fetch_script "vcoo-email.py" ;;
         planner)  fetch_script "vcoo-trello.py" ;;

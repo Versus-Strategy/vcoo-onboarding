@@ -156,7 +156,7 @@ export const useClientesOperador = () => {
         ultimoContacto: ((v.agent as Record<string, unknown>)?.last_seen as string) || (v.created_at as string) || '',
       }));
     }),
-    { staleTime: 5 * 60 * 1000 }
+    { staleTime: 5 * 60 * 1000, refetchInterval: 15000 }
   );
 };
 

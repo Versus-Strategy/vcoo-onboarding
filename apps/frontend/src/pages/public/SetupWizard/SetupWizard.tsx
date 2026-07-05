@@ -853,18 +853,7 @@ const SetupWizard = () => {
             : renderPasoInstalacion()}
         </div>
 
-        {onboarding && pasoActual > 0 && (
-          <div className="flex mt-6 pt-4 border-t border-gray-100">
-            <Button variant="ghost" size="sm" onClick={() => {
-              setVistaActual(pasoActual - 1);
-              setProveedorSeleccionado(null);
-              setModuloSeleccionado(null);
-              setError(null);
-            }}>
-              ← Anterior
-            </Button>
-          </div>
-        )}
+
       </div>
     </div>
   );
