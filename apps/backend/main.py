@@ -1002,8 +1002,8 @@ def setup_set_provider(identifier: str, payload: dict, authorization: str = Head
     if not authorization or not authorization.lower().startswith('bearer '):
         raise HTTPException(status_code=401, detail="auth required")
     bearer = authorization.split(None, 1)[1]
-    payload = auth.verify_client_token(bearer)
-    if not payload:
+    token_payload = auth.verify_client_token(bearer)
+    if not token_payload:
         raise HTTPException(status_code=401, detail="invalid token")
 
     v = crud.get_vcoo(db, identifier)
@@ -1011,9 +1011,9 @@ def setup_set_provider(identifier: str, payload: dict, authorization: str = Head
         raise HTTPException(status_code=400, detail="invalid identifier")
     vcoo_id = str(v.id)
 
-    is_operator = payload.get('role') == 'operador'
+    is_operator = token_payload.get('role') == 'operador'
     if not is_operator:
-        client_email = payload.get("email", "")
+        client_email = token_payload.get("email", "")
         client_obj = crud.get_client_by_email(db, client_email)
         owns = client_obj and client_obj.vcoo_id and str(client_obj.vcoo_id) == vcoo_id
         if not owns:
