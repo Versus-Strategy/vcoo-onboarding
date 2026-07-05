@@ -562,23 +562,48 @@ const SetupWizard = () => {
                     const list: string[] = Array.isArray(models) ? models : (models.list || []);
                     const recommended: string = Array.isArray(models) ? '' : (models.recommended || '');
                     return list.map((m: string) => (
-                      <div key={m} onClick={async () => {
-                        await apiClient.post(`/setup/${token}/set-provider`, { provider: prov.id, model: m });
-                        setModeloSeleccionado(null);
-                        setProveedorSeleccionado(null);
-                      }}
-                        className={`cursor-pointer px-4 py-2.5 rounded-lg border text-sm transition-colors ${
+                      <div key={m}
+                        className={`rounded-lg border text-sm transition-colors ${
                           m === recommended
-                            ? 'bg-primary-50 border-primary-300 text-primary-800 font-medium hover:bg-primary-100'
-                            : 'border-gray-200 text-gray-700 hover:border-primary-400 hover:bg-primary-50'
+                            ? 'bg-primary-50 border-primary-300'
+                            : 'border-gray-200'
                         }`}
                       >
-                        {m === recommended ? (
-                          <span className="flex items-center gap-2">
+                        <div className="px-4 py-2.5 flex items-center justify-between">
+                          <span className={m === recommended ? 'text-primary-800 font-medium' : 'text-gray-700'}>
                             {m}
-                            <span className="text-xs bg-primary-200 text-primary-700 px-1.5 py-0.5 rounded-full">Recomendado</span>
                           </span>
-                        ) : m}
+                          <Button size="sm" variant={m === recommended ? 'primary' : 'ghost'}
+                            loading={enviando && m === modeloSeleccionado}
+                            disabled={enviando}
+                            onClick={async () => {
+                              setEnviando(true);
+                              setModeloSeleccionado(m);
+                              try {
+                                await apiClient.post(`/setup/${token}/set-provider`, { provider: prov.id, model: m });
+                                // Poll for confirmation
+                                for (let i = 0; i < 18; i++) {
+                                  await new Promise(r => setTimeout(r, 5000));
+                                  const { data: fresh } = await apiClient.get(`/setup/${token}`);
+                                  const modelOk = ((fresh as any).models || {})[prov.id];
+                                  if (modelOk) break;
+                                }
+                                await apiClient.post(`/setup/${token}/verify`).catch(() => {});
+                                await fetchOnboarding();
+                                setModeloSeleccionado(null);
+                                setProveedorSeleccionado(null);
+                                setApiKeyValue('');
+                              } catch {
+                                setModeloSeleccionado(null);
+                                setError('Error al configurar el modelo');
+                              } finally {
+                                setEnviando(false);
+                              }
+                            }}
+                          >
+                            {enviando && m === modeloSeleccionado ? 'Configurando...' : 'Seleccionar'}
+                          </Button>
+                        </div>
                       </div>
                     ));
                   })()}
