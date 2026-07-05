@@ -55,7 +55,7 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({
             <div
               className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
                 st === 'done' ? 'bg-primary-600 text-white'
-                : st === 'degraded' ? 'bg-yellow-200 text-yellow-700 border-2 border-yellow-500 animate-pulse'
+                : st === 'degraded' ? 'bg-yellow-100 text-yellow-600 border-2 border-yellow-400 ring-4 ring-yellow-200'
                 : st === 'current' ? 'bg-primary-600 text-white ring-4 ring-primary-200'
                 : st === 'next' ? 'bg-gray-100 text-gray-600 border-2 border-dashed border-gray-300'
                 : 'bg-gray-200 text-gray-500'
