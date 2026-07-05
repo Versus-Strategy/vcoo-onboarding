@@ -357,6 +357,13 @@ const SetupWizard = () => {
   const pasoActual = vistaActual ?? onboarding.wizard_step ?? 0;
   const completado = onboarding.all_done ?? false;
   const pasoBackend = onboarding.wizard_step ?? 0;
+  // Pasos degradados según checks del agente (ej: proveedor borrado del VPS)
+  const checks: Record<string, string> = (onboarding as any).checks || {};
+  const pasosDegradados: number[] = [];
+  if (checks.provider === "missing") pasosDegradados.push(1);
+  const pasoBackendEfectivo = pasosDegradados.length > 0
+    ? Math.min(...pasosDegradados, pasoBackend)
+    : pasoBackend;
 
   // ── Conectar proveedor ──
 
@@ -829,9 +836,9 @@ const SetupWizard = () => {
             pasoActual={pasoActual}
             pasosTotales={4}
             pasos={PASOS}
-            maxUnlocked={pasoBackend + 1}
+            maxUnlocked={pasoBackendEfectivo + 1}
             onStepClick={(idx) => {
-              if (idx <= pasoBackend + 1 && idx !== pasoActual) {
+              if (idx <= pasoBackendEfectivo + 1 && idx !== pasoActual) {
                 setVistaActual(idx);
                 setProveedorSeleccionado(null);
                 setModuloSeleccionado(null);
