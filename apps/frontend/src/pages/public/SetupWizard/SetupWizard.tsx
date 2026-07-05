@@ -447,18 +447,12 @@ const SetupWizard = () => {
 
   // ── Conectar módulo ──
 
+  const MODULE_OAUTH: Record<string, { service: string; scopes: string }> = {
+    office: { service: 'google-drive', scopes: 'Drive, Docs, Sheets y Slides' },
+    mail: { service: 'gmail', scopes: 'Gmail' },
+  };
+
   const MODULE_INSTRUCTIONS: Record<string, { pasos: string[] }> = {
-    office: { pasos: [
-      '1. Ve a https://console.cloud.google.com y crea un proyecto',
-      '2. Activa Google Drive API y obtén client_id + client_secret',
-      '3. Ejecuta en tu VPS: hermes config set google.client_id TU_CLIENT_ID',
-      '4. Ejecuta: hermes config set google.client_secret TU_CLIENT_SECRET',
-    ]},
-    mail: { pasos: [
-      '1. Ve a https://console.cloud.google.com y activa Gmail API',
-      '2. Obtén credenciales OAuth 2.0',
-      '3. Configura las credenciales en tu VPS con hermes',
-    ]},
     planner: { pasos: [
       '1. Obtén tu API key de Trello en https://trello.com/power-ups/admin',
       '2. Ejecuta: hermes config set trello.api_key TU_API_KEY',
@@ -470,6 +464,37 @@ const SetupWizard = () => {
       '3. Vercel: vercel login && hermes config set vercel.token TU_TOKEN',
       '4. Supabase: supabase login && hermes config set supabase.access_token TU_ACCESS_TOKEN',
     ]},
+  };
+
+  const conectarOAuth = async (service: string) => {
+    if (!token) return;
+    try {
+      const { data } = await apiClient.get(`/setup/${token}/auth-url?service=${service}`);
+      const width = 600;
+      const height = 700;
+      const left = window.screenX + (window.outerWidth - width) / 2;
+      const top = window.screenY + (window.outerHeight - height) / 2;
+      const popup = window.open(
+        data.url,
+        'google-oauth',
+        `width=${width},height=${height},left=${left},top=${top}`
+      );
+      if (!popup) {
+        setError('El navegador bloqueó la ventana emergente. Permite popups para este sitio.');
+        return;
+      }
+      setConectando(service);
+      const checkClosed = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(checkClosed);
+          setConectando(null);
+          fetchOnboarding();
+        }
+      }, 500);
+    } catch {
+      setError('Error al iniciar la conexión con Google');
+      setConectando(null);
+    }
   };
 
   const manejarConectarModulo = async (service: string) => {
@@ -803,6 +828,10 @@ const SetupWizard = () => {
     if (moduloSeleccionado) {
       const info = modulosInfo[moduloSeleccionado];
       const instr = MODULE_INSTRUCTIONS[moduloSeleccionado];
+      const oauthConfig = MODULE_OAUTH[moduloSeleccionado];
+      const googleCheck = (checks as Record<string, string>).google;
+      const googleOk = googleCheck === 'ok';
+      const googleError = googleCheck === 'error';
       return (
         <div className="space-y-6 max-w-2xl">
           <button onClick={() => setModuloSeleccionado(null)}
@@ -815,7 +844,47 @@ const SetupWizard = () => {
           <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
             <h3 className="text-lg font-bold text-gray-900 mb-2">{info?.nombre || moduloSeleccionado}</h3>
             <p className="text-sm text-gray-500 mb-4">{info?.descripcion}</p>
-            {instr ? (
+            {oauthConfig ? (
+              <div className="text-center py-6">
+                {googleOk ? (
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center">
+                      <svg className="w-7 h-7 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <p className="text-green-700 font-medium">Conectado a {info?.nombre}</p>
+                    <p className="text-xs text-gray-400">Acceso a {oauthConfig.scopes}</p>
+                  </div>
+                ) : googleError ? (
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center">
+                      <svg className="w-7 h-7 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01" />
+                      </svg>
+                    </div>
+                    <p className="text-red-700 font-medium">Conexión expirada o inválida</p>
+                    <Button variant="primary" size="lg" onClick={() => conectarOAuth(oauthConfig.service)}
+                      loading={conectando === oauthConfig.service}>
+                      Reconectar con Google
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-3">
+                    <p className="text-sm text-gray-600 mb-2">
+                      Autoriza a VCOO a acceder a tus documentos de Google:
+                    </p>
+                    <p className="text-xs text-gray-400 mb-4">
+                      {oauthConfig.scopes}
+                    </p>
+                    <Button variant="primary" size="lg" onClick={() => conectarOAuth(oauthConfig.service)}
+                      loading={conectando === oauthConfig.service}>
+                      {conectando === oauthConfig.service ? 'Conectando...' : 'Conectar con Google'}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ) : instr ? (
               <div className="space-y-3">
                 <p className="text-sm font-medium text-gray-700">Pasos para conectar:</p>
                 {instr.pasos.map((paso, i) => (
@@ -871,14 +940,21 @@ const SetupWizard = () => {
                   className="group cursor-pointer bg-white border border-gray-200 rounded-xl p-5 transition-all duration-200 hover:border-primary-500 hover:shadow-lg hover:shadow-primary-100/50"
                 >
                   <div className="flex flex-col items-center text-center">
-                    <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mb-3 text-2xl">
-                      {info.icono}
+                    <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-3 text-2xl ${
+                      modulo === 'office' && (checks as Record<string, string>).google === 'ok' ? 'bg-green-100' :
+                      modulo === 'mail' && (checks as Record<string, string>).google === 'ok' ? 'bg-green-100' :
+                      'bg-gray-100'
+                    }`}>
+                      {modulo === 'office' && (checks as Record<string, string>).google === 'ok' ? '✅' :
+                       modulo === 'mail' && (checks as Record<string, string>).google === 'ok' ? '✅' :
+                       info.icono}
                     </div>
                     <h3 className="font-semibold text-gray-900 mb-1">
                       {info.nombre}
                     </h3>
                     <p className="text-sm text-gray-500">
-                      {info.descripcion}
+                      {(checks as Record<string, string>).google === 'ok' && (modulo === 'office' || modulo === 'mail') ? 'Conectado' :
+                       info.descripcion}
                     </p>
                   </div>
                 </div>

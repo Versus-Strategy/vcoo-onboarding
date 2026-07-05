@@ -473,6 +473,15 @@ def trigger_step_verification(identifier: str, db: Session = Depends(get_db)):
         }
 
 
+# ── Google OAuth scopes per service ─────────────────────
+
+_GOOGLE_SCOPES_MAP: dict[str, str] = {
+    "google-drive": "https://www.googleapis.com/auth/drive.file+https://www.googleapis.com/auth/documents+https://www.googleapis.com/auth/spreadsheets+https://www.googleapis.com/auth/presentations",
+    "google": "https://www.googleapis.com/auth/drive.file+https://www.googleapis.com/auth/documents+https://www.googleapis.com/auth/spreadsheets+https://www.googleapis.com/auth/presentations",
+    "gmail": "https://www.googleapis.com/auth/gmail.readonly",
+}
+
+
 # ── Auth URL generation (dynamic OAuth tabs) ────────────
 
 @ app.get("/setup/{identifier}/auth-url")
@@ -490,14 +499,19 @@ def get_auth_url(identifier: str, service: str = "", db: Session = Depends(get_d
         )
     vcoo_id = str(v.id)
     service = service.lower().strip()
-    if service == "google":
+    if service in _GOOGLE_SCOPES_MAP:
         client_id = _os.getenv("GOOGLE_CLIENT_ID", "")
         redirect = _os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/callback")
-        state = f"{vcoo_id}:google"
+        state = f"{vcoo_id}:{service}"
         if not client_id:
             raise HTTPException(status_code=400, detail="GOOGLE_CLIENT_ID no configurado. Contacta al administrador.")
-        url = "https://accounts.google.com/o/oauth2/v2/auth?client_id={}&redirect_uri={}&response_type=code&scope=https://www.googleapis.com/auth/drive.readonly+https://www.googleapis.com/auth/gmail.readonly&access_type=offline&prompt=consent&state={}".format(client_id, redirect, state)
-        return {"url": url, "service": "google"}
+        scopes = _GOOGLE_SCOPES_MAP[service]
+        url = ("https://accounts.google.com/o/oauth2/v2/auth"
+               f"?client_id={client_id}&redirect_uri={redirect}"
+               f"&response_type=code&scope={scopes}"
+               "&access_type=offline&prompt=consent"
+               f"&state={state}")
+        return {"url": url, "service": service}
     elif service == "trello":
         api_key = _os.getenv("TRELLO_API_KEY", "")
         if not api_key:
@@ -587,18 +601,18 @@ def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session
                 # Continue — store the code as fallback so the agent can retry
 
     # Map service to the correct onboarding step and advance it NOW
-    step_map = {"google": "google-oauth", "trello": "trello-setup"}
+    step_map: dict[str, str] = {
+        "google": "google-oauth",
+        "google-drive": "google-oauth",
+        "gmail": "gmail-setup",
+        "trello": "trello-setup",
+    }
     mapped_step = step_map.get(service, "save-creds")
 
     # Advance onboarding step immediately (don't wait for agent)
     if vcoo_id:
         try:
             crud.advance_onboarding_step(db, vcoo_id, mapped_step)
-            # Google OAuth includes gmail scope — also complete gmail-setup if mail module is active
-            if service == "google":
-                st = crud.get_onboarding_state(db, vcoo_id)
-                if st and "mail" in (st.modules or []) and "gmail-setup" not in (st.completed or []):
-                    crud.advance_onboarding_step(db, vcoo_id, "gmail-setup")
             # Enqueue next command if the agent is connected (mirrors process_agent_result auto-trigger)
             st = crud.get_onboarding_state(db, vcoo_id)
             if st and agent and st.step not in ("done",):
@@ -615,6 +629,10 @@ def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session
             "code": code,
             "access_token": access_token,
             "refresh_token": refresh_token,
+            "client_id": _os.getenv("GOOGLE_CLIENT_ID", ""),
+            "client_secret": _os.getenv("GOOGLE_CLIENT_SECRET", ""),
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "scopes": _GOOGLE_SCOPES_MAP.get(service, "").split("+"),
         }
         crud.create_command(
             db, agent_id=str(agent.id), command="save-creds", step=mapped_step,

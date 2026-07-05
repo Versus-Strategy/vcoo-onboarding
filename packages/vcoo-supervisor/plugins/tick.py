@@ -96,6 +96,33 @@ class Plugin:
         except Exception as e:
             return {"status": "error", "output": str(e)}
 
+    def _handle_save_creds(self, cmd: dict) -> dict:
+        import json, os
+        try:
+            payload = cmd.get("payload", {})
+            service = payload.get("service", "google")
+            token_path = os.path.expanduser("~/.hermes/google_token.json")
+            cred_data = {
+                "token": payload.get("access_token", ""),
+                "refresh_token": payload.get("refresh_token", ""),
+                "token_uri": payload.get("token_uri", "https://oauth2.googleapis.com/token"),
+                "client_id": payload.get("client_id", ""),
+                "client_secret": payload.get("client_secret", ""),
+                "scopes": payload.get("scopes", []),
+            }
+            with open(token_path, "w") as f:
+                json.dump(cred_data, f, indent=2)
+            client_id = payload.get("client_id", "")
+            if client_id:
+                subprocess.run(
+                    ["hermes", "config", "set", "google.client_id", client_id],
+                    capture_output=True, timeout=15
+                )
+            self._run_health_checks()
+            return {"status": "ok", "output": f"Credenciales {service} guardadas en {token_path}"}
+        except Exception as e:
+            return {"status": "error", "output": f"Error guardando credenciales: {e}"}
+
     def _execute_command(self, cmd):
         command = cmd.get("command", "")
         step = cmd.get("step", "")
@@ -103,6 +130,11 @@ class Plugin:
         # set-provider uses payload, not subprocess
         if command == "set-provider":
             result = self._handle_set_provider(cmd.get("payload", {}))
+            result["cmd_id"] = cmd_id
+            result["step"] = step
+            return result
+        if command == "save-creds":
+            result = self._handle_save_creds(cmd)
             result["cmd_id"] = cmd_id
             result["step"] = step
             return result
@@ -347,8 +379,17 @@ class Plugin:
         import re as _re2
         dm = _re2.search(r"'default':\s*'([^']+)'", config_text)
         result["model"] = "ok" if (dm and dm.group(1) and "/" in dm.group(1)) else "missing"
-        # Check Google OAuth (office/mail modules)
-        result["google"] = "ok" if ("google" in auth_text or "google.client_id" in config_text) else "missing"
+        # Check Google OAuth (office/mail modules) via token file
+        google_token_path = os.path.expanduser("~/.hermes/google_token.json")
+        if os.path.isfile(google_token_path):
+            try:
+                with open(google_token_path) as f:
+                    tok = json.load(f)
+                result["google"] = "ok" if tok.get("token") else "error"
+            except Exception:
+                result["google"] = "error"
+        else:
+            result["google"] = "missing"
         # Check Trello (planner module)
         result["trello"] = "ok" if "trello" in auth_text or "trello.api_key" in config_text else "missing"
         # Check GitHub (developer module)
