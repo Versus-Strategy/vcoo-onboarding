@@ -51,19 +51,20 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({
           >
             <div
               className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
-                isCurrent && !degraded ? 'bg-primary-600 text-white ring-4 ring-primary-200'
-                : isCurrent && degraded ? 'bg-yellow-500 text-white ring-4 ring-yellow-200'
+                isCurrent && !degraded ? 'bg-primary-100 text-primary-600 border-2 border-primary-600 ring-4 ring-primary-200'
+                : isCurrent && degraded ? 'bg-yellow-100 text-yellow-600 border-2 border-yellow-600 ring-4 ring-yellow-200'
                 : degraded ? 'bg-yellow-100 text-yellow-600 border-2 border-yellow-400'
-                : showCheckmark ? 'bg-primary-600 text-white'
-                : isNext ? 'bg-gray-100 text-gray-600 border-2 border-dashed border-gray-300'
-                : 'bg-gray-200 text-gray-500'
+                : showCheckmark ? 'bg-primary-100 text-primary-600 border-2 border-primary-400'
+                : isNext ? 'bg-gray-100 text-gray-400 border-2 border-dashed border-gray-300'
+                : 'bg-gray-100 text-gray-400 border-2 border-gray-200'
               }`}
             >
-              {showCheckmark ? (
+              {degraded ? (
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01" />
+                  <circle cx="12" cy="12" r="9.5" strokeWidth={1.5} />
                 </svg>
-              ) : (
+              ) : showCheckmark ? (
                 idx + 1
               )}
             </div>
