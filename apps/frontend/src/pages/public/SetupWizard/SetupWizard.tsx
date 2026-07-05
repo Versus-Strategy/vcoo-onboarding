@@ -227,7 +227,8 @@ const SetupWizard = () => {
   const [verMas, setVerMas] = useState(false);
   const [apiKeyValue, setApiKeyValue] = useState('');
   const [enviando, setEnviando] = useState(false);
-  const [modeloSeleccionado, setModeloSeleccionado] = useState<string | null>(null);
+  const [modeloEnCurso, setModeloEnCurso] = useState<string | null>(null);
+  const [modoSelectorModelo, setModoSelectorModelo] = useState(false);
   const [moduloSeleccionado, setModuloSeleccionado] = useState<string | null>(null);
   const [fetchCargando, setFetchCargando] = useState(false);
   const [vistaActual, setVistaActual] = useState<number | null>(null);
@@ -421,7 +422,7 @@ const SetupWizard = () => {
         const provModels = ((fresh as any).models || {})[providerId] || ((fresh as any).models || {})['opencode-go'];
         const modelList = provModels?.list || (Array.isArray(provModels) ? provModels : []);
         if (modelList.length > 0) {
-          setModeloSeleccionado(providerId);
+          setModoSelectorModelo(true);
         } else {
           await fetchOnboarding();
           setProveedorSeleccionado(null);
@@ -524,17 +525,16 @@ const SetupWizard = () => {
     const destacados = raw.filter(p => p.id !== 'opencode-go' && destacadosIds.has(p.id));
     const resto = raw.filter(p => p.id !== 'opencode-go' && !destacadosIds.has(p.id));
 
-    if (modeloSeleccionado && modeloSeleccionado === proveedorSeleccionado) {
+    if (modoSelectorModelo) {
       const prov = raw.find(p => p.id === proveedorSeleccionado);
       const models = (((onboarding as any).models || {})[prov?.id || ''] || {});
       const list: string[] = Array.isArray(models) ? models : (models.list || []);
       const recommended: string = Array.isArray(models) ? '' : (models.recommended || '');
       const rest = list.filter(m => m !== recommended);
       const configurar = async (modelo: string) => {
-        setModeloSeleccionado(modelo);
+        setModeloEnCurso(modelo);
         try {
           await apiClient.post(`/setup/${token}/set-provider`, { provider: prov!.id, model: modelo });
-          // Wait for VPS confirmation (up to 90s)
           for (let i = 0; i < 18; i++) {
             await new Promise(r => setTimeout(r, 5000));
             const { data: fresh } = await apiClient.get(`/setup/${token}`);
@@ -543,11 +543,12 @@ const SetupWizard = () => {
           }
           await apiClient.post(`/setup/${token}/advance`);
           setVistaActual(null);
+          setModoSelectorModelo(false);
           await fetchOnboarding();
           setProveedorSeleccionado(null);
           setApiKeyValue('');
-          setModeloSeleccionado(null);
-        } catch { setError('Error al configurar el modelo'); setModeloSeleccionado(null); }
+          setModeloEnCurso(null);
+        } catch { setError('Error al configurar el modelo'); setModeloEnCurso(null); }
       };
       return (
         <div className="space-y-6 max-w-2xl">
@@ -566,7 +567,7 @@ const SetupWizard = () => {
                       <p className="text-xs text-primary-600 font-medium mb-1">RECOMENDADO</p>
                       <p className="text-sm font-semibold text-primary-900 flex items-center gap-2">
                         {recommended}
-                        {modeloSeleccionado === recommended && !enviando && (
+                        {modeloEnCurso === recommended && (
                           <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                           </svg>
@@ -574,13 +575,13 @@ const SetupWizard = () => {
                       </p>
                       <p className="text-xs text-primary-600 mt-1">Rápido y económico — ideal para empezar</p>
                     </div>
-                    {modeloSeleccionado === recommended ? (
+                    {modeloEnCurso === recommended ? (
                       <div className="flex items-center gap-2">
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600" />
                         <span className="text-sm text-primary-600">Configurando...</span>
                       </div>
                     ) : (
-                      <Button variant="primary" size="sm" disabled={!!modeloSeleccionado}
+                      <Button variant="primary" size="sm" disabled={!!modeloEnCurso}
                         onClick={() => configurar(recommended)}
                       >Seleccionar</Button>
                     )}
@@ -592,11 +593,11 @@ const SetupWizard = () => {
                   <p className="text-xs text-gray-400 font-medium">OTROS MODELOS</p>
                   <div className="space-y-1 max-h-48 overflow-y-auto">
                     {rest.map((m: string) => (
-                      <div key={m} className={`px-3 py-2 text-sm border rounded-lg flex items-center justify-between ${modeloSeleccionado === m ? 'bg-primary-50 border-primary-200' : 'border-gray-100 hover:bg-gray-50 cursor-pointer'}`}
-                        onClick={() => !modeloSeleccionado && configurar(m)}
+                      <div key={m} className={`px-3 py-2 text-sm border rounded-lg flex items-center justify-between ${modeloEnCurso === m ? 'bg-primary-50 border-primary-200' : 'border-gray-100 hover:bg-gray-50 cursor-pointer'}`}
+                        onClick={() => !modeloEnCurso && configurar(m)}
                       >
-                        <span className={modeloSeleccionado === m ? 'text-primary-800' : 'text-gray-600'}>{m}</span>
-                        {modeloSeleccionado === m && (
+                        <span className={modeloEnCurso === m ? 'text-primary-800' : 'text-gray-600'}>{m}</span>
+                        {modeloEnCurso === m && (
                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600" />
                         )}
                       </div>
@@ -639,7 +640,7 @@ const SetupWizard = () => {
                   </code>
                 )}
               </div>
-            ) : modeloSeleccionado === prov?.id ? null
+            ) : modoSelectorModelo ? null
             : auth.type === 'api_key' ? (
               <div className="space-y-4">
                 <p className="text-sm text-gray-600">{auth.hint}</p>
