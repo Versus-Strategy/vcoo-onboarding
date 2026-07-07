@@ -67,9 +67,11 @@ def delete_vcoo(db: Session, vcoo_id: str) -> bool:
     if not v:
         return False
     try:
-        from uuid import UUID
-        vcoo_uuid = UUID(vcoo_id)
-        
+        # Bind the id as a string: los modelos usan String(36) (compatible con
+        # SQLite) y Postgres castea el texto a uuid automáticamente. Pasar un
+        # objeto UUID rompe en SQLite ("type 'UUID' is not supported").
+        vcoo_uuid = str(vcoo_id)
+
         # Use raw SQL to bypass ORM complexity
         db.execute(text("DELETE FROM command_logs WHERE command_id IN (SELECT id FROM commands WHERE agent_id IN (SELECT id FROM agents WHERE vcoo_id = :vid))"), {"vid": vcoo_uuid})
         db.execute(text("DELETE FROM commands WHERE agent_id IN (SELECT id FROM agents WHERE vcoo_id = :vid)"), {"vid": vcoo_uuid})
