@@ -39,6 +39,14 @@ module.exports = {
         '@typescript-eslint/no-non-null-assertion': 'off',
       },
     },
+    {
+      // Entry point y providers de contexto exportan a propósito un componente
+      // junto a hooks/setup; el aviso de Fast Refresh no aplica aquí.
+      files: ['src/main.tsx', 'src/**/*Context.tsx', 'src/auth/authContext.tsx'],
+      rules: {
+        'react-refresh/only-export-components': 'off',
+      },
+    },
   ],
   ignorePatterns: ['dist', 'node_modules', '*.config.js', '*.config.ts', 'vite-env.d.ts'],
 };

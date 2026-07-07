@@ -5,7 +5,7 @@ import type { AppStoreState } from './tipos';
 export const usarAlmacen = create<AppStoreState>()(
   devtools(
     persist(
-      (set) => ({
+      (_set) => ({
         auth: {
           usuario: null,
           token: null as string | null,

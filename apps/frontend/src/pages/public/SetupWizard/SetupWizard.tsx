@@ -1,10 +1,9 @@
 import { useParams } from 'react-router-dom';
 import { useState, useEffect, useCallback } from 'react';
-import apiClient, { API_URL } from '@/api/apiClient';
+import apiClient from '@/api/apiClient';
 import { useAuth } from '@/auth/authContext';
 import StepIndicator from '@/components/StepIndicator';
 import Button from '@/components/Button';
-import StatusBadge from '@/components/StatusBadge';
 
 // ── Tipos ──
 
@@ -230,7 +229,6 @@ const SetupWizard = () => {
   const [modeloEnCurso, setModeloEnCurso] = useState<string | null>(null);
   const [modoSelectorModelo, setModoSelectorModelo] = useState(false);
   const [moduloSeleccionado, setModuloSeleccionado] = useState<string | null>(null);
-  const [fetchCargando, setFetchCargando] = useState(false);
   const [vistaActual, setVistaActual] = useState<number | null>(null);
 
   // Check localStorage directly on mount for existing auth
@@ -287,7 +285,7 @@ const SetupWizard = () => {
     }
     const interval = setInterval(fetchOnboarding, 15000);
     return () => clearInterval(interval);
-  }, [mostrarWizard, fetchOnboarding, onboarding?.agent_online, onboarding?.wizard_step]);
+  }, [mostrarWizard, fetchOnboarding, onboarding?.agent_online, onboarding?.wizard_step, token]);
 
   // ── Timeout for provider loading ──
   const [providersTimeout, setProvidersTimeout] = useState(false);
@@ -359,7 +357,6 @@ const SetupWizard = () => {
   // ── Wizard steps ──
 
   const pasoActual = vistaActual ?? onboarding.wizard_step ?? 0;
-  const completado = onboarding.all_done ?? false;
   const pasoBackend = onboarding.wizard_step ?? 0;
   // Pasos degradados según checks del agente
   const checks: Record<string, string> = (onboarding as any).checks || {};

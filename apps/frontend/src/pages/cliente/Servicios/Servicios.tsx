@@ -7,7 +7,7 @@ import Button from '../../../components/Button';
 import type { Servicio } from '../../../store/tipos';
 
 const ServiciosPage = () => {
-  const { data: servicios, isLoading, isError } = useServiciosCliente();
+  const { data: servicios, isLoading } = useServiciosCliente();
   const { establecerServicios } = usarAccionesCliente();
   const [serviciosData, setServiciosData] = useState<Record<string, unknown>[]>([]);
 
