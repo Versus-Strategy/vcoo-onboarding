@@ -70,8 +70,10 @@ export const ProveedorDeAuth = ({ children }: { children: ReactNode }) => {
           localStorage.removeItem('vcoo-auth');
         }
       }
+      setAuth(prev => ({ ...prev, cargando: false }));
     } catch {
       localStorage.removeItem('vcoo-auth');
+      setAuth(prev => ({ ...prev, cargando: false }));
     }
   }, []);
 
