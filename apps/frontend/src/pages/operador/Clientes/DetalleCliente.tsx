@@ -63,6 +63,14 @@ const DetalleClientePage = () => {
   const [configResult, setConfigResult] = useState<string | null>(null);
   const [regenerando, setRegenerando] = useState(false);
   const [auditLog, setAuditLog] = useState<Array<{action: string; actor_email: string | null; metadata: Record<string, unknown> | null; created_at: string}>>([]);
+  const [accionMsg, setAccionMsg] = useState<{tipo: 'ok' | 'error'; texto: string} | null>(null);
+  const [completando, setCompletando] = useState(false);
+  const [reactivando, setReactivando] = useState(false);
+
+  const mostrarMsg = (tipo: 'ok' | 'error', texto: string) => {
+    setAccionMsg({ tipo, texto });
+    setTimeout(() => setAccionMsg(null), 5000);
+  };
 
   const handleRegenerateToken = async () => {
     if (!id) return;
@@ -70,8 +78,72 @@ const DetalleClientePage = () => {
     try {
       const { data } = await apiClient.post(`/vcoo/${id}/regenerate-token`);
       setTokenData(data as { token?: string; install_command?: string; onboarding_url?: string });
-    } catch {}
+      mostrarMsg('ok', 'Token regenerado correctamente');
+    } catch (err: unknown) {
+      mostrarMsg('error', 'Error al regenerar el token: ' + ((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Error desconocido'));
+    }
     setRegenerando(false);
+  };
+
+  const handleComplete = async () => {
+    if (!id) return;
+    setCompletando(true);
+    try {
+      await apiClient.post(`/vcoo/${id}/complete`);
+      mostrarMsg('ok', 'VCOO marcado como completado');
+      cargarDatos();
+    } catch (err: unknown) {
+      mostrarMsg('error', 'Error al completar: ' + ((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Error desconocido'));
+    }
+    setCompletando(false);
+  };
+
+  const handleReactivate = async () => {
+    if (!id) return;
+    setReactivando(true);
+    try {
+      const { data } = await apiClient.post(`/vcoo/${id}/reactivate`);
+      setTokenData(data as { token?: string; install_command?: string; onboarding_url?: string });
+      mostrarMsg('ok', 'VCOO reactivado correctamente');
+      cargarDatos();
+    } catch (err: unknown) {
+      mostrarMsg('error', 'Error al reactivar: ' + ((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Error desconocido'));
+    }
+    setReactivando(false);
+  };
+
+  const handleDelete = async () => {
+    if (!id) return;
+    if (!window.confirm(`¿Estás seguro de eliminar el cliente "${nombre}"? Esta acción eliminará todos los datos asociados de forma permanente.`)) return;
+    try {
+      await apiClient.delete(`/vcoo/${id}`);
+      navigate('/operador/clientes');
+    } catch (err: unknown) {
+      mostrarMsg('error', 'Error al eliminar: ' + ((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Error desconocido'));
+    }
+  };
+
+  const handleRetryOnboarding = async (step: string) => {
+    if (!id) return;
+    try {
+      await apiClient.post(`/vcoo/${id}/onboarding/retry`, { step });
+      mostrarMsg('ok', `Reintentando paso: ${step}`);
+      cargarDatos();
+    } catch (err: unknown) {
+      mostrarMsg('error', 'Error al reintentar: ' + ((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Error desconocido'));
+    }
+  };
+
+  const handleSkipOnboarding = async (step: string) => {
+    if (!id) return;
+    if (!window.confirm(`¿Saltar el paso "${step}"? El agente no verificará este paso y se marcará como completado por el operador.`)) return;
+    try {
+      await apiClient.post(`/vcoo/${id}/onboarding/skip`, { step });
+      mostrarMsg('ok', `Paso "${step}" omitido`);
+      cargarDatos();
+    } catch (err: unknown) {
+      mostrarMsg('error', 'Error al omitir paso: ' + ((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Error desconocido'));
+    }
   };
 
   const copiarAlPortapapeles = (texto: string, label: string) => {
@@ -217,6 +289,37 @@ const DetalleClientePage = () => {
           </p>
         )}
       </div>
+
+      {/* Estado del VCOO y acciones */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Estado del VCOO</h2>
+            <p className="text-sm text-gray-500 mt-1">
+              Actualmente: <StatusBadge estado={statusMap[(estado?.status as string) || ''] || (estado?.status as string) || 'desconocido'} />
+            </p>
+          </div>
+          <div className="flex gap-2">
+            {(estado?.status as string) === 'active' && (
+              <Button variant="secondary" size="sm" onClick={handleComplete} disabled={completando}>
+                {completando ? 'Completando...' : 'Marcar como completado'}
+              </Button>
+            )}
+            {(estado?.status as string) === 'completed' && (
+              <Button variant="secondary" size="sm" onClick={handleReactivate} disabled={reactivando}>
+                {reactivando ? 'Reactivando...' : 'Reactivar VCOO'}
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Mensaje de acción */}
+      {accionMsg && (
+        <div className={`rounded-lg p-3 text-sm ${accionMsg.tipo === 'ok' ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+          {accionMsg.texto}
+        </div>
+      )}
 
       {/* Agent status */}
       <div className="bg-white rounded-lg shadow p-6">
@@ -531,6 +634,22 @@ const DetalleClientePage = () => {
               </ul>
             </div>
           )}
+          {/* Acciones para onboarding bloqueado */}
+          {onboardingStatus === 'blocked' && (
+            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-sm font-medium text-yellow-800 mb-2">
+                ⚠ El onboarding está bloqueado
+              </p>
+              <div className="flex gap-2">
+                <Button variant="primary" size="sm" onClick={() => handleRetryOnboarding((estado?.step as string) || '')}>
+                  Reintentar paso
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => handleSkipOnboarding((estado?.step as string) || '')}>
+                  Omitir paso
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -583,14 +702,7 @@ const DetalleClientePage = () => {
         <Button
           variant="secondary"
           className="text-red-600 hover:bg-red-50 border-red-200"
-          onClick={async () => {
-            if (window.confirm(`¿Estás seguro de eliminar el cliente "${nombre}"? Esta acción eliminará todos los datos asociados de forma permanente.`)) {
-              try {
-                await apiClient.delete(`/vcoo/${id}`);
-                navigate('/operador/clientes');
-              } catch {}
-            }
-          }}
+          onClick={handleDelete}
         >
           Eliminar Cliente
         </Button>

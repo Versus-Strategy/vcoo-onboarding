@@ -17,7 +17,7 @@ def get_db():
 async def agent_ws(websocket: WebSocket, session_id: str, token: str, db: Session = Depends(get_db)):
     # token is provision token
     await websocket.accept()
-    # validate token server-side and mark used atomically
+    # validate token server-side
     vcoo_id = crud.validate_provision_token(db, token)
     if not vcoo_id:
         await websocket.close(code=4001)

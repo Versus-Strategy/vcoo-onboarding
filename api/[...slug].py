@@ -1,12 +1,12 @@
 # VCOO Control Plane — Serverless Entry Point (Vercel)
-# This file wraps the FastAPI app for Vercel's Python runtime.
-# All requests hit here via vercel.json rewrites.
+import sys, os
 
-import sys
-import os
+_sys_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'apps')
+if _sys_path not in sys.path:
+    sys.path.insert(0, _sys_path)
 
-# Ensure apps/ is on the path so backend.* imports resolve
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'apps'))
-
+from fastapi import Request
+from fastapi.responses import JSONResponse
 from backend.main import application
+
 app = application

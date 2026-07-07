@@ -20,8 +20,9 @@ const Login = () => {
     try {
       await iniciarSesion(email, password);
       navigate('/', { replace: true });
-    } catch (err) {
-      setError('Correo electrónico o contraseña inválidos');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Correo electrónico o contraseña inválidos';
+      setError(msg);
     } finally {
       setCargando(false);
     }

@@ -105,6 +105,30 @@ class ClientLoginRequest(BaseModel):
     password: str
 
 
+class RefreshRequest(BaseModel):
+    refreshToken: str
+
+
+# ── Operator auth ──
+
+class OperatorRegisterRequest(BaseModel):
+    email: str
+    password: str
+    name: str
+
+
+class OperatorLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class OperatorResponse(BaseModel):
+    id: str
+    email: str
+    name: str | None = None
+    created_at: str | None = None
+
+
 class ClientResponse(BaseModel):
     id: str
     email: str

@@ -1,5 +1,3 @@
-# Vercel serverless dependencies (api/[...slug].py)
-# Backend deps: see apps/backend/requirements.txt
 fastapi
 uvicorn[standard]
 SQLAlchemy
@@ -10,3 +8,4 @@ PyJWT
 python-multipart
 itsdangerous
 httpx
+bcrypt

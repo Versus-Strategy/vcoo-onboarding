@@ -4,13 +4,13 @@ if _sys_path not in sys.path:
     sys.path.insert(0, _sys_path)
 
 from datetime import datetime
-from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi import FastAPI, HTTPException, Depends, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 import db
 from db import engine, Base, SessionLocal
-import models, crud, auth, schemas
+import models, crud, auth, schemas, ratelimit
 from ws_routes import register_ws_routes
 import asyncio
 import json
@@ -20,6 +20,15 @@ import os as _os
 
 
 application = FastAPI(title="VCOO Onboarding API v2")
+
+# Global exception handler to return details in production
+@application.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    import traceback
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc), "traceback": traceback.format_exc()},
+    )
 
 application.add_middleware(
     CORSMiddleware,
@@ -114,6 +123,20 @@ async def startup():
         print(f"[migration] Skipped (non-critical): {e}", file=_sys.stderr)
     if _os.getenv("VERCEL_ENV") is None:
         register_ws_routes(application)
+    # ── Seed first operator ──
+    try:
+        db = SessionLocal()
+        if crud.count_operators(db) == 0:
+            admin_email = _os.getenv('FIRST_OPERATOR_EMAIL', 'admin@vcoo.io')
+            admin_password = _os.getenv('FIRST_OPERATOR_PASSWORD', 'admin')
+            admin_name = _os.getenv('FIRST_OPERATOR_NAME', 'Admin')
+            pw_hash = auth.hash_password(admin_password)
+            crud.create_operator(db, email=admin_email, password_hash=pw_hash, name=admin_name)
+            print(f"[seed] Created first operator: {admin_email}")
+        db.close()
+    except Exception as e:
+        import sys as _sys
+        print(f"[seed] Skipped: {e}", file=_sys.stderr)
 
 
 # ── Health / Debug ────────────────────────────────────────────
@@ -135,26 +158,125 @@ def verify_auth(payload: dict):
 
 
 @application.post("/auth/login")
-def operator_login(payload: schemas.LoginRequest):
-    """Operator login endpoint. Validates against DASHBOARD_PASSWORD and returns a JWT."""
-    if not auth.verify_dashboard_password(payload.password):
-        raise HTTPException(status_code=401, detail="Credenciales inválidas")
-    # Derive a display name from the email (part before @)
-    name = payload.email.split('@')[0]
-    token = auth.create_operator_token(payload.email, name)
-    return schemas.LoginResponse(
-        token=token,
-        user={"email": payload.email, "role": "operador", "name": name}
-    )
+def operator_login(payload: schemas.LoginRequest, db: Session = Depends(get_db),
+                   request: Request = None):
+    """Operator login. Checks operators table first, falls back to DASHBOARD_PASSWORD."""
+    client_ip = request.client.host if request and request.client else "unknown"
+    ratelimit._login_limiter.check_and_record(client_ip)
+    # Try operators table first
+    op = crud.get_operator_by_email(db, payload.email)
+    if op and auth.verify_password(payload.password, op.password_hash):
+        token = auth.create_operator_token(op.email, op.name or '', str(op.id))
+        return schemas.LoginResponse(
+            token=token,
+            user={"id": str(op.id), "email": op.email, "role": "operador", "name": op.name}
+        )
+    # Fallback to shared DASHBOARD_PASSWORD
+    if auth.verify_dashboard_password(payload.password):
+        name = payload.email.split('@')[0]
+        token = auth.create_operator_token(payload.email, name)
+        return schemas.LoginResponse(
+            token=token,
+            user={"email": payload.email, "role": "operador", "name": name}
+        )
+    raise HTTPException(status_code=401, detail="Credenciales inválidas")
+
+
+@application.post("/auth/refresh")
+def refresh_token(payload: schemas.RefreshRequest, db: Session = Depends(get_db)):
+    """Refresh an existing JWT (operator or client). Issues a new token and revokes the old one (rotation)."""
+    decoded = auth.decode_token_ignore_expiry(payload.refreshToken)
+    if not decoded:
+        raise HTTPException(status_code=401, detail="Token inválido")
+
+    role = decoded.get('role')
+    exp_ts = decoded.get('exp', 0)
+
+    # Grace period: up to 30 days past expiration
+    if datetime.utcnow().timestamp() - exp_ts > 30 * 86400:
+        raise HTTPException(status_code=401, detail="Token expirado, no se puede renovar")
+
+    # Revoke old token (rotation — prevents replay)
+    old_jti = decoded.get('jti', '')
+    if old_jti:
+        crud.revoke_token(db, old_jti, token_type=f'{role}_refresh')
+
+    if role == 'operador':
+        email = decoded.get('email', '')
+        name = decoded.get('name', '')
+        operator_id = decoded.get('operator_id', '')
+        new_token = auth.create_operator_token(email, name, operator_id)
+        return {
+            "token": new_token,
+            "user": {"id": operator_id, "email": email, "role": "operador", "name": name},
+        }
+    elif role == 'cliente':
+        client_id = decoded.get('client_id', '')
+        vcoo_id = decoded.get('vcoo_id', '')
+        email = decoded.get('email', '')
+        client_obj = crud.get_client_by_email(db, email)
+        if not client_obj:
+            raise HTTPException(status_code=401, detail="Cliente no encontrado")
+        new_token = auth.create_client_token(
+            str(client_obj.id),
+            str(client_obj.vcoo_id) if client_obj.vcoo_id else vcoo_id,
+            client_obj.email,
+        )
+        return {
+            "token": new_token,
+            "client": {
+                "id": str(client_obj.id),
+                "email": client_obj.email,
+                "name": client_obj.name,
+                "vcoo_id": str(client_obj.vcoo_id) if client_obj.vcoo_id else None,
+            },
+        }
+
+    raise HTTPException(status_code=401, detail="Rol no soportado para refresh")
+
+
+# ── Operator auth ────────────────────────────────────────────
+
+@application.post("/auth/operator/register")
+def operator_register(payload: schemas.OperatorRegisterRequest, db: Session = Depends(get_db)):
+    """Register a new operator."""
+    existing = crud.get_operator_by_email(db, payload.email)
+    if existing:
+        raise HTTPException(status_code=409, detail="Email ya registrado")
+    password_hash = auth.hash_password(payload.password)
+    op = crud.create_operator(db, email=payload.email, password_hash=password_hash, name=payload.name)
+    token = auth.create_operator_token(op.email, op.name or '', str(op.id))
+    return {
+        "token": token,
+        "operator": {"id": str(op.id), "email": op.email, "name": op.name},
+    }
+
+
+@application.post("/auth/revoke")
+def revoke_operator_token(payload: dict, db: Session = Depends(get_db),
+                          operator: dict = Depends(auth.verify_operator_jwt)):
+    """Revoke an operator or client token by its JTI. Requires operator auth."""
+    jti = payload.get("jti", "")
+    if not jti:
+        raise HTTPException(status_code=400, detail="jti requerido")
+    crud.revoke_token(db, jti, revoked_by=operator.get('operator_id'))
+    crud.create_audit_log(db, action="token.revoked", actor_email=operator.get('email'),
+                          actor_id=operator.get('operator_id'), metadata={"jti": jti})
+    return {"status": "revoked", "jti": jti}
 
 
 # ── Client auth ──────────────────────────────────────────────
 
 @application.post("/auth/client/register")
 def client_register(payload: schemas.ClientRegisterRequest, db: Session = Depends(get_db)):
-    """Register a new client linked to a VCOO via a provision token."""
-    # 1. Validate the provision token (read-only, don't consume)
-    vcoo_id = crud.lookup_provision_token(db, payload.token)
+    """Register a new client linked to a VCOO via a provision token or VCOO UUID."""
+    # 1. Validate the provision token
+    vcoo_id = crud.validate_provision_token(db, payload.token)
+    if not vcoo_id:
+        # Fallback: accept VCOO UUID directly (wizard sends the UUID from the URL)
+        v = crud.get_vcoo(db, payload.token)
+        if v:
+            vcoo_id = str(v.id)
     if not vcoo_id:
         raise HTTPException(status_code=400, detail="Token de provision inválido o expirado")
     # 2. Check email not already registered
@@ -182,8 +304,11 @@ def client_register(payload: schemas.ClientRegisterRequest, db: Session = Depend
 
 
 @application.post("/auth/client/login")
-def client_login(payload: schemas.ClientLoginRequest, db: Session = Depends(get_db)):
+def client_login(payload: schemas.ClientLoginRequest, db: Session = Depends(get_db),
+                 request: Request = None):
     """Login for existing clients."""
+    client_ip = request.client.host if request and request.client else "unknown"
+    ratelimit._login_limiter.check_and_record(client_ip)
     # 1. Find client by email
     client = crud.get_client_by_email(db, payload.email)
     if not client:
@@ -248,7 +373,8 @@ def client_me(client: dict = Depends(auth.get_client_from_token), db: Session = 
 
 # ── VCOO ──────────────────────────────────────────────────
 @application.post("/vcoo")
-def create_vcoo(payload: dict = {}, db: Session = Depends(get_db)):
+def create_vcoo(payload: dict = {}, db: Session = Depends(get_db),
+                operator: dict = Depends(auth.verify_operator_jwt)):
     name = payload.get("name") if payload else None
     modules = payload.get("modules", ["core"]) if payload else ["core"]
     vcoo = crud.create_vcoo(db, name=name)
@@ -268,7 +394,7 @@ def create_vcoo(payload: dict = {}, db: Session = Depends(get_db)):
     }
 
 @application.get("/vcoos")
-def list_vcoos(db: Session = Depends(get_db)):
+def list_vcoos(db: Session = Depends(get_db), operator: dict = Depends(auth.verify_operator_jwt)):
     """List all VCOOs with agent status and active token."""
     vcoos = crud.list_vcoos(db)
     dashboard_url = _os.getenv('DASHBOARD_URL', 'http://localhost:3000')
@@ -678,7 +804,8 @@ def get_hermes_commands_endpoint(identifier: str, service: str = "", db: Session
 
 
 @application.get("/vcoo/{vcoo_id}/provision-token")
-def get_provision_token(vcoo_id: str, db: Session = Depends(get_db)):
+def get_provision_token(vcoo_id: str, db: Session = Depends(get_db),
+                        operator: dict = Depends(auth.verify_operator_jwt)):
     """Return existing active token for this VCOO, or create one if none exists."""
     v = crud.get_vcoo(db, vcoo_id)
     if not v:
@@ -695,7 +822,8 @@ def get_provision_token(vcoo_id: str, db: Session = Depends(get_db)):
     return {"token": token, "install_command": install_cmd, "onboarding_url": onboarding_url}
 
 @application.post("/vcoo/{vcoo_id}/regenerate-token")
-def regenerate_token(vcoo_id: str, db: Session = Depends(get_db)):
+def regenerate_token(vcoo_id: str, db: Session = Depends(get_db),
+                     operator: dict = Depends(auth.verify_operator_jwt)):
     """Revoke current token and generate a new one."""
     v = crud.get_vcoo(db, vcoo_id)
     if not v:
@@ -705,34 +833,43 @@ def regenerate_token(vcoo_id: str, db: Session = Depends(get_db)):
     control_plane = _os.getenv('CONTROL_PLANE', 'http://localhost:8000')
     install_cmd = f"curl -sSL {control_plane}/install.sh | PROVISION_TOKEN={token} bash -"
     onboarding_url = f"{dashboard_url}/setup/{vcoo_id}"
-    crud.create_audit_log(db, action="token.regenerated", vcoo_id=vcoo_id)
+    crud.create_audit_log(db, action="token.regenerated", actor_email=operator.get('email'),
+                          actor_id=operator.get('operator_id'), vcoo_id=vcoo_id)
     return {"token": token, "install_command": install_cmd, "onboarding_url": onboarding_url}
 
 @application.post("/vcoo/{vcoo_id}/complete")
-def complete_vcoo(vcoo_id: str, db: Session = Depends(get_db)):
+def complete_vcoo(vcoo_id: str, db: Session = Depends(get_db),
+                  operator: dict = Depends(auth.verify_operator_jwt)):
     """Mark VCOO as completed (setup finished). Logs are preserved."""
     v = crud.complete_vcoo(db, vcoo_id)
     if not v:
         raise HTTPException(status_code=404, detail="VCOO not found")
+    crud.create_audit_log(db, action="vcoo.completed", actor_email=operator.get('email'),
+                          actor_id=operator.get('operator_id'), vcoo_id=vcoo_id)
     return {"status": "completed"}
 
 @application.post("/vcoo/{vcoo_id}/reactivate")
-def reactivate_vcoo(vcoo_id: str, db: Session = Depends(get_db)):
+def reactivate_vcoo(vcoo_id: str, db: Session = Depends(get_db),
+                    operator: dict = Depends(auth.verify_operator_jwt)):
     """Reactivate a completed VCOO and generate a new token."""
     token = crud.reactivate_vcoo(db, vcoo_id)
     if not token:
         raise HTTPException(status_code=404, detail="VCOO not found")
     control_plane = _os.getenv('CONTROL_PLANE', 'http://localhost:8000')
     install_cmd = f"curl -sSL {control_plane}/install.sh | PROVISION_TOKEN={token} bash -"
+    crud.create_audit_log(db, action="vcoo.reactivated", actor_email=operator.get('email'),
+                          actor_id=operator.get('operator_id'), vcoo_id=vcoo_id)
     return {"status": "active", "token": token, "install_command": install_cmd}
 
 @application.delete("/vcoo/{vcoo_id}")
-def delete_vcoo(vcoo_id: str, db: Session = Depends(get_db)):
+def delete_vcoo(vcoo_id: str, db: Session = Depends(get_db),
+                operator: dict = Depends(auth.verify_operator_jwt)):
     """Permanently delete a VCOO and all associated data."""
     v = crud.get_vcoo(db, vcoo_id)
     if not v:
         raise HTTPException(status_code=404, detail="VCOO not found")
-    crud.create_audit_log(db, action="vcoo.deleted", vcoo_id=vcoo_id, metadata={"name": v.name})
+    crud.create_audit_log(db, action="vcoo.deleted", actor_email=operator.get('email'),
+                          actor_id=operator.get('operator_id'), vcoo_id=vcoo_id, metadata={"name": v.name})
     ok = crud.delete_vcoo(db, vcoo_id)
     if not ok:
         raise HTTPException(status_code=404, detail="VCOO not found")
@@ -779,6 +916,47 @@ def register_agent(payload: dict, db: Session = Depends(get_db)):
 
     crud.create_provision_for_vcoo(db, vcoo_id)
     return {"agent_id": str(agent.id), "vcoo_id": str(vcoo_id), "agent_token": agent_token, "encryption_key": enc_key}
+
+
+@application.post("/agent/{agent_id}/refresh")
+def refresh_agent_token(agent_id: str, authorization: str = Header(None), db: Session = Depends(get_db)):
+    """Refresh an agent token. Accepts the current (or recently expired) agent token
+    in the Authorization header and returns a new one."""
+    if not authorization or not authorization.lower().startswith('bearer '):
+        raise HTTPException(status_code=401, detail="missing auth")
+    token = authorization.split(None, 1)[1]
+    decoded = auth.decode_token_ignore_expiry(token)
+    if not decoded or decoded.get('agent_id') != agent_id:
+        raise HTTPException(status_code=401, detail="invalid agent token")
+
+    agent = crud.get_agent(db, agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="agent not found")
+
+    new_token = auth.create_agent_token(agent_id)
+    payload_token = auth.decode_agent_token(new_token)
+    jti = payload_token.get('jti') if payload_token else None
+    if jti:
+        crud.set_agent_token_jti(db, agent_id, jti)
+
+    return {"token": new_token}
+
+
+@application.post("/agent/{agent_id}/revoke")
+def revoke_agent_token(agent_id: str, authorization: str = Header(None), db: Session = Depends(get_db)):
+    """Revoke an agent's current token. Accepts the agent token in Authorization header
+    and revokes it immediately."""
+    if not authorization or not authorization.lower().startswith('bearer '):
+        raise HTTPException(status_code=401, detail="missing auth")
+    token = authorization.split(None, 1)[1]
+    decoded = auth.decode_token_ignore_expiry(token)
+    if not decoded or decoded.get('agent_id') != agent_id:
+        raise HTTPException(status_code=401, detail="invalid agent token")
+
+    jti = decoded.get('jti', '')
+    if jti:
+        crud.revoke_token(db, jti, token_type='agent')
+    return {"status": "revoked", "agent_id": agent_id}
 
 
 # ── Agent polling & logs ──────────────────────────────────
@@ -942,7 +1120,8 @@ def command_result(vcoo_id: str, cmd_id: str, payload: dict, db: Session = Depen
 # ── State ─────────────────────────────────────────────────
 
 @application.get("/vcoo/{vcoo_id}/state")
-def get_state(vcoo_id: str, db: Session = Depends(get_db)):
+def get_state(vcoo_id: str, db: Session = Depends(get_db),
+              operator: dict = Depends(auth.verify_operator_jwt)):
     v = crud.get_vcoo(db, vcoo_id)
     if not v:
         raise HTTPException(status_code=404, detail="Not found")
@@ -1098,7 +1277,8 @@ def setup_advance_step(identifier: str, authorization: str = Header(None), db: S
 # ── VCOO Logs ────────────────────────────────────────────
 
 @application.get("/vcoo/{vcoo_id}/audit")
-def get_vcoo_audit(vcoo_id: str, db: Session = Depends(get_db)):
+def get_vcoo_audit(vcoo_id: str, db: Session = Depends(get_db),
+                   operator: dict = Depends(auth.verify_operator_jwt)):
     """Return audit log entries for a VCOO."""
     logs = crud.get_audit_log_for_vcoo(db, vcoo_id)
     return {
@@ -1107,6 +1287,7 @@ def get_vcoo_audit(vcoo_id: str, db: Session = Depends(get_db)):
                 "id": str(log.id),
                 "action": log.action,
                 "actor_email": log.actor_email,
+                "actor_id": log.actor_id,
                 "metadata": json.loads(log.log_metadata) if log.log_metadata else None,
                 "created_at": log.created_at.isoformat() if log.created_at else None,
             }
@@ -1116,7 +1297,8 @@ def get_vcoo_audit(vcoo_id: str, db: Session = Depends(get_db)):
 
 
 @application.get("/vcoo/{vcoo_id}/logs")
-def get_vcoo_logs(vcoo_id: str, db: Session = Depends(get_db)):
+def get_vcoo_logs(vcoo_id: str, db: Session = Depends(get_db),
+                  operator: dict = Depends(auth.verify_operator_jwt)):
     """Retrieve all command logs for a VCOO (across all its agents)."""
     agent = crud.get_agent_by_vcoo(db, vcoo_id)
     if not agent:
@@ -1278,7 +1460,8 @@ def get_vcoo_secrets_endpoint(vcoo_id: str, db: Session = Depends(get_db)):
 # ── Onboarding management (operator actions) ─────────────
 
 @application.post("/vcoo/{vcoo_id}/onboarding/retry")
-def retry_onboarding_step(vcoo_id: str, payload: dict, db: Session = Depends(get_db)):
+def retry_onboarding_step(vcoo_id: str, payload: dict, db: Session = Depends(get_db),
+                          operator: dict = Depends(auth.verify_operator_jwt)):
     """Operator manually retries a blocked/failed step."""
     step = payload.get("step")
     if not step:
@@ -1292,11 +1475,14 @@ def retry_onboarding_step(vcoo_id: str, payload: dict, db: Session = Depends(get
         from onboarding import get_step_command
         cmd_name = get_step_command(step)
         crud.create_command(db, agent_id=str(agent.id), command=cmd_name, step=step)
+    crud.create_audit_log(db, action="onboarding.retry", actor_email=operator.get('email'),
+                          actor_id=operator.get('operator_id'), vcoo_id=vcoo_id, metadata={"step": step})
     return {"status": "ok", "step": step, "onboarding_status": st.status}
 
 
 @application.post("/vcoo/{vcoo_id}/onboarding/skip")
-def skip_onboarding_step(vcoo_id: str, payload: dict, db: Session = Depends(get_db)):
+def skip_onboarding_step(vcoo_id: str, payload: dict, db: Session = Depends(get_db),
+                         operator: dict = Depends(auth.verify_operator_jwt)):
     """Operator skips a blocked/impossible step."""
     step = payload.get("step")
     if not step:
@@ -1304,6 +1490,8 @@ def skip_onboarding_step(vcoo_id: str, payload: dict, db: Session = Depends(get_
     st = crud.skip_onboarding_step(db, vcoo_id, step)
     if not st:
         raise HTTPException(status_code=404, detail="Not found")
+    crud.create_audit_log(db, action="onboarding.skip", actor_email=operator.get('email'),
+                          actor_id=operator.get('operator_id'), vcoo_id=vcoo_id, metadata={"step": step, "next": st.step})
     return {"status": "ok", "step": step, "next_step": st.step}
 
 
@@ -1346,7 +1534,7 @@ def get_vcoo_playbook(identifier: str, name: str, authorization: str = Header(No
     if not authorization:
         raise HTTPException(status_code=401, detail='auth required')
     bearer = authorization.split(None, 1)[1]
-    vcoo_id = crud.lookup_provision_token(db, bearer)
+    vcoo_id = crud.validate_provision_token(db, bearer)
     if not vcoo_id or str(vcoo_id) != identifier:
         raise HTTPException(status_code=403, detail='invalid token')
     from fastapi.responses import PlainTextResponse

@@ -88,13 +88,14 @@ def delete_vcoo(db: Session, vcoo_id: str) -> bool:
 # ── Token management ─────────────────────────────────────
 
 def get_active_token_for_vcoo(db: Session, vcoo_id: str):
-    """Return the active (unused, unexpired) token for a VCOO, or None."""
+    """Return the latest unexpired token for a VCOO, or None."""
     return (
         db.query(models.ProvisionToken)
         .filter(
             models.ProvisionToken.vcoo_id == vcoo_id,
-            models.ProvisionToken.used == False,
+            models.ProvisionToken.expires_at > datetime.utcnow(),
         )
+        .order_by(models.ProvisionToken.created_at.desc())
         .first()
     )
 
@@ -161,6 +162,28 @@ def link_client_to_vcoo(db: Session, client_id: str, vcoo_id: str):
     db.commit()
     db.refresh(c)
     return c
+
+
+# ── Operator CRUD ──────────────────────────────────────────
+
+def create_operator(db: Session, email: str, password_hash: str, name: str = None):
+    op = models.Operator(email=email, password_hash=password_hash, name=name)
+    db.add(op)
+    db.commit()
+    db.refresh(op)
+    return op
+
+
+def get_operator_by_email(db: Session, email: str):
+    return db.query(models.Operator).filter(models.Operator.email == email).first()
+
+
+def get_operator_by_id(db: Session, operator_id: str):
+    return db.query(models.Operator).filter(models.Operator.id == operator_id).first()
+
+
+def count_operators(db: Session) -> int:
+    return db.query(models.Operator).count()
 
 
 # ── Agent CRUD ───────────────────────────────────────────
@@ -279,26 +302,13 @@ def create_provision_for_vcoo(db: Session, vcoo_id: str, expires_minutes: int = 
 
 
 def validate_provision_token(db: Session, token: str):
-    pt = db.query(models.ProvisionToken).filter(models.ProvisionToken.token == token).first()
-    if not pt:
-        return None
-    if pt.used:
-        return None
-    if pt.expires_at and pt.expires_at.replace(tzinfo=None) < datetime.utcnow():
-        return None
-    pt.used = True
-    db.commit()
-    return str(pt.vcoo_id)
-
-
-def lookup_provision_token(db: Session, token: str):
-    """Read-only lookup: validates token WITHOUT consuming it (for setup page)."""
+    """Validate a provision token and return its VCOO id.
+    Tokens are not consumed — they remain valid until expiration."""
     pt = db.query(models.ProvisionToken).filter(models.ProvisionToken.token == token).first()
     if not pt:
         return None
     if pt.expires_at and pt.expires_at.replace(tzinfo=None) < datetime.utcnow():
         return None
-    # Don't mark as used — the setup page is read-only
     return str(pt.vcoo_id)
 
 
@@ -536,10 +546,29 @@ def process_agent_result(
 
 # ── Audit Log ────────────────────────────────────────────────
 
-def create_audit_log(db: Session, action: str, actor_email: str = None, vcoo_id: str = None, metadata: dict = None):
+def revoke_token(db: Session, jti: str, token_type: str = None, revoked_by: str = None):
+    """Revoke a JWT by its ID."""
+    existing = db.query(models.RevokedToken).filter(models.RevokedToken.jti == jti).first()
+    if existing:
+        return False
+    rt = models.RevokedToken(jti=jti, token_type=token_type, revoked_by=revoked_by)
+    db.add(rt)
+    db.commit()
+    return True
+
+
+def is_token_revoked(db: Session, jti: str) -> bool:
+    """Check if a JWT ID has been revoked."""
+    if not jti:
+        return False
+    return db.query(models.RevokedToken).filter(models.RevokedToken.jti == jti).first() is not None
+
+
+def create_audit_log(db: Session, action: str, actor_email: str = None, actor_id: str = None, vcoo_id: str = None, metadata: dict = None):
     log = models.AuditLog(
         action=action,
         actor_email=actor_email,
+        actor_id=actor_id,
         vcoo_id=vcoo_id,
         log_metadata=json.dumps(metadata) if metadata else None,
     )

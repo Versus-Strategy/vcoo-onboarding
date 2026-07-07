@@ -382,22 +382,7 @@ const SetupWizard = () => {
 
   const manejarConectarProveedor = async (service: string) => {
     if (!token) return;
-    setConectando(service);
-    try {
-      const { data } = await apiClient.get(
-        `/setup/${token}/auth-url?service=${service}`
-      );
-      const { commands } = data as { commands: string[]; service: string };
-      if (commands && commands.length > 0) {
-        setProveedorSeleccionado(service);
-        setConectando(null);
-        return;
-      }
-    } catch {
-      // fallback: show instructions anyway
-    }
     setProveedorSeleccionado(service);
-    setConectando(null);
   };
 
   const enviarApiKey = async (providerId: string) => {
@@ -409,9 +394,9 @@ const SetupWizard = () => {
         provider: providerId,
         api_key: apiKeyValue.trim(),
       });
-      // Poll for agent confirmation (max 90s)
+      // Poll for agent confirmation (max 60s, check every 5s)
       let ok = false;
-      for (let i = 0; i < 18; i++) {
+      for (let i = 0; i < 12; i++) {
         await new Promise(r => setTimeout(r, 5000));
         const { data } = await apiClient.get(`/setup/${token}`);
         const chk: Record<string, string> = ((data as any).checks as Record<string, string>) || {};
@@ -429,7 +414,7 @@ const SetupWizard = () => {
           setApiKeyValue('');
         }
       } else {
-        setError('El agente está procesando la configuración. Vuelve a intentarlo en un momento.');
+        setError('El agente está procesando la configuración. Haz clic en "Verificar" más tarde.');
       }
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
@@ -560,8 +545,8 @@ const SetupWizard = () => {
         setModeloEnCurso(modelo);
         try {
           await apiClient.post(`/setup/${token}/set-provider`, { provider: prov!.id, model: modelo });
-          for (let i = 0; i < 30; i++) {
-            await new Promise(r => setTimeout(r, 3000));
+          for (let i = 0; i < 15; i++) {
+            await new Promise(r => setTimeout(r, 4000));
             const { data: fresh } = await apiClient.get(`/setup/${token}`);
             const cfg = (fresh as any).checks || {};
             if (cfg.model === 'ok') break;
@@ -967,10 +952,21 @@ const SetupWizard = () => {
   };
 
   const renderPasoFinalizacion = () => {
+    const MODULE_CHECK_KEYS: Record<string, string[]> = {
+      office: ['google'],
+      mail: ['google'],
+      planner: ['trello'],
+      developer: ['github', 'vercel', 'supabase'],
+    };
     const items: { label: string; ok: boolean }[] = [
       { label: 'Agente instalado y activo', ok: true },
       { label: 'Proveedor de IA configurado', ok: checks.provider === 'ok' },
-      { label: 'Módulos conectados', ok: modules.every(m => m === 'core' || checks[m === 'office' ? 'google' : m === 'planner' ? 'trello' : m === 'developer' ? 'github' : ''] === 'ok') },
+      {
+        label: 'Módulos conectados',
+        ok: modules.every((m: string) =>
+          m === 'core' || (MODULE_CHECK_KEYS[m] || []).every(k => checks[k] === 'ok')
+        ),
+      },
     ];
     const allOk = items.every(i => i.ok);
     return (

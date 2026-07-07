@@ -126,6 +126,15 @@ class OnboardingState(Base):
     vcoo = relationship("VCOO", backref="onboarding_state", uselist=False)
 
 
+class Operator(Base):
+    __tablename__ = 'operators'
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    email = Column(String, unique=True, nullable=False)
+    password_hash = Column(String, nullable=False)
+    name = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class AuditLog(Base):
     """Audit trail for operator actions."""
     __tablename__ = 'audit_log'
@@ -133,9 +142,19 @@ class AuditLog(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     action = Column(String(64), nullable=False, index=True)
     actor_email = Column(String(255), nullable=True)
+    actor_id = Column(String(36), nullable=True)
     vcoo_id = Column(String(36), nullable=True, index=True)
     log_metadata = Column(Text, nullable=True)  # JSON
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class RevokedToken(Base):
+    """Tokens that have been revoked (invalidated before expiration)."""
+    __tablename__ = 'revoked_tokens'
+    jti = Column(String(36), primary_key=True)
+    token_type = Column(String(16), nullable=True)  # operator | client | agent
+    created_at = Column(DateTime, default=datetime.utcnow)
+    revoked_by = Column(String(36), nullable=True)  # operator_id who revoked
 
 
 class Client(Base):

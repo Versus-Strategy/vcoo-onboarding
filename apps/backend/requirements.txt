@@ -8,3 +8,4 @@ PyJWT
 python-multipart
 itsdangerous
 httpx
+bcrypt

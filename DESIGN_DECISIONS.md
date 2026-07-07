@@ -99,40 +99,9 @@ vcoo-supervisor/
 
 ---
 
-## 4. Hashing de Contraseñas con hashlib en Lugar de passlib + bcrypt
+## 4. Hashing de Contraseñas con bcrypt
 
-### Contexto
-
-Python tiene librerías estándar para hashing de contraseñas: `passlib` con `bcrypt`. Sin embargo, al momento del desarrollo, `passlib 1.7.4` no era compatible con `bcrypt 5.0.0` (cambio en la API interna de bcrypt que rompió passlib).
-
-### Alternativas consideradas
-
-| Opción | Descripción | Problemas |
-|--------|-------------|-----------|
-| **passlib + bcrypt** | La solución "estándar" | Incompatibilidad entre passlib 1.7.4 y bcrypt 5.0.0. Solucionar requería versiones pinned o forks no oficiales. |
-| **bcrypt directo** | Usar solo `bcrypt` | Dependencia externa, y `bcrypt` requiere compilación de C extensivo. |
-| **hashlib (elegida)** | SHA-256 con salt aleatorio | Cero dependencias externas, suficiente para el caso de uso. |
-
-### Decisión
-
-Usamos **`hashlib`** con el algoritmo SHA-256 y un salt aleatorio de 16 bytes por contraseña.
-
-### Formato
-
-```
-{salt_hex}:{sha256(salt + password).hexdigest()}
-```
-
-### Razones
-
-1. **Evitar dependency hell**: No lidiamos con incompatibilidades entre passlib y bcrypt. No necesitamos versiones específicas ni forks.
-2. **Cero dependencias externas**: `hashlib` es parte de la biblioteca estándar de Python. No requiere compilación de C ni extensiones nativas.
-3. **Adecuado para el caso de uso**: Este no es un sistema bancario ni de alta seguridad. Es un panel de control interno para clientes empresariales. SHA-256 con salt por-password es más que suficiente para proteger contra ataques de tabla arcoíris y fuerza bruta básica.
-4. **Migración futura**: Si en el futuro se requiere mayor seguridad (Argon2, bcrypt), la interfaz `hash_password`/`verify_password` está aislada en `auth.py` y es trivial de cambiar.
-
-### Nota sobre bcrypt en el entorno
-
-El directorio `backend/.venv/` contiene `bcrypt 5.0.0` y `passlib 1.7.4` instalados, pero **no se usan**. Quedan como artefactos de intentos previos. El código activo usa exclusivamente `hashlib`.
+Usamos **bcrypt directo** (`auth.py`). Las contraseñas se almacenan como `$2b$12$...` (hash bcrypt estándar con 12 rounds).
 
 ---
 

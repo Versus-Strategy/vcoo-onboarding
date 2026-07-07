@@ -104,7 +104,7 @@ export const ProveedorDeAuth = ({ children }: { children: ReactNode }) => {
       const { token, user } = response.data;
 
       const usuario: Usuario = {
-        id: user.email || email,
+        id: user.id || user.email || email,
         email: user.email || email,
         nombre: user.name || email.split('@')[0],
         rol: user.role === 'operador' ? 'operador' : 'cliente',
@@ -116,6 +116,9 @@ export const ProveedorDeAuth = ({ children }: { children: ReactNode }) => {
       let mensaje = 'Credenciales inválidas';
       if (axios.isAxiosError(error) && error.response?.data?.detail) {
         mensaje = error.response.data.detail;
+      }
+      if (axios.isAxiosError(error) && error.response?.status === 429) {
+        mensaje = error.response.data?.detail || 'Demasiados intentos. Espere unos minutos.';
       }
       setAuth(prev => ({
         ...prev,
@@ -150,6 +153,9 @@ export const ProveedorDeAuth = ({ children }: { children: ReactNode }) => {
       let mensaje = 'Credenciales inválidas';
       if (axios.isAxiosError(error) && error.response?.data?.detail) {
         mensaje = error.response.data.detail;
+      }
+      if (axios.isAxiosError(error) && error.response?.status === 429) {
+        mensaje = error.response.data?.detail || 'Demasiados intentos. Espere unos minutos.';
       }
       setAuth(prev => ({
         ...prev,
@@ -212,21 +218,13 @@ export const ProveedorDeAuth = ({ children }: { children: ReactNode }) => {
     if (auth.token) {
       try {
         const response = await axios.post(`${API_URL}/auth/refresh`, {
-          refreshToken: auth.token,
+          refreshToken: auth.refreshToken || auth.token,
         });
         const { token } = response.data;
+        if (!token) throw new Error('No token');
 
-        setAuth(prev => ({
-          ...prev,
-          token,
-          refreshToken: token,
-        }));
-
-        const stored = JSON.parse(localStorage.getItem('vcoo-auth') || '{}');
-        stored.token = token;
-        stored.refreshToken = token;
-        stored.marcaDeTiempo = Date.now();
-        localStorage.setItem('vcoo-auth', JSON.stringify(stored));
+        const nuevoUsuario = auth.usuario;
+        guardarAuth(token, nuevoUsuario!);
       } catch {
         cerrarSesion();
       }

@@ -22,9 +22,10 @@ class Plugin:
         self.control_plane = os.environ.get("CONTROL_PLANE", config.get("control_plane", "http://localhost:8000"))
         self.last_command_id = None
         self.tick_interval = self.interval
-        self._tick_count = 0
+        self._tick_count = 1
         self._checks: dict[str, str] = {}
         if self.agent_id:
+            self._run_health_checks()
             self.tick()
 
     def stop(self):
@@ -60,28 +61,67 @@ class Plugin:
     def _handle_set_provider(self, payload: dict) -> dict:
         provider = payload.get("provider", "")
         api_key = payload.get("api_key") or payload.get("encrypted", "")
-        if not provider or not api_key:
-            return {"status": "error", "output": "missing provider or key"}
-        # Run hermes auth add + set as default provider
+        model = payload.get("model", "")
+        if not provider:
+            return {"status": "error", "output": "missing provider"}
         hermes_bin = os.path.expanduser("~/.local/bin/hermes")
         if not os.path.isfile(hermes_bin):
             hermes_bin = "hermes"
         try:
-            r = subprocess.run(
-                [hermes_bin, "auth", "add", provider, "--type", "api-key", "--api-key", api_key],
-                capture_output=True, text=True, timeout=30
-            )
-            if r.returncode != 0:
-                return {"status": "error", "output": r.stderr.strip() or f"hermes auth add exit={r.returncode}"}
-            subprocess.run(
-                [hermes_bin, "config", "set", "model.provider", provider],
-                capture_output=True, text=True, timeout=15
-            )
-            return {"status": "ok", "output": f"Provider {provider} configurado como predeterminado"}
+            # Only run auth add if api_key provided (model-only calls skip this)
+            if api_key:
+                r = subprocess.run(
+                    [hermes_bin, "auth", "add", provider, "--type", "api-key", "--api-key", api_key],
+                    capture_output=True, text=True, timeout=30
+                )
+                if r.returncode != 0:
+                    return {"status": "error", "output": r.stderr.strip() or f"hermes auth add exit={r.returncode}"}
+            if model:
+                subprocess.run(
+                    [hermes_bin, "config", "set", "model.default", model],
+                    capture_output=True, text=True, timeout=15
+                )
+                # Extract provider from model name (e.g. opencode-go/gpt-5.4-mini)
+                if "/" in model:
+                    prov_from_model = model.split("/")[0]
+                    subprocess.run(
+                        [hermes_bin, "config", "set", "model.provider", prov_from_model],
+                        capture_output=True, text=True, timeout=15
+                    )
+            self._run_health_checks()
+            self._report_capabilities()
+            return {"status": "ok", "output": f"Provider {provider} configurado"}
         except FileNotFoundError:
             return {"status": "error", "output": "hermes command not found"}
         except Exception as e:
             return {"status": "error", "output": str(e)}
+
+    def _handle_save_creds(self, cmd: dict) -> dict:
+        import json, os
+        try:
+            payload = cmd.get("payload", {})
+            service = payload.get("service", "google")
+            token_path = os.path.expanduser("~/.hermes/google_token.json")
+            cred_data = {
+                "token": payload.get("access_token", ""),
+                "refresh_token": payload.get("refresh_token", ""),
+                "token_uri": payload.get("token_uri", "https://oauth2.googleapis.com/token"),
+                "client_id": payload.get("client_id", ""),
+                "client_secret": payload.get("client_secret", ""),
+                "scopes": payload.get("scopes", []),
+            }
+            with open(token_path, "w") as f:
+                json.dump(cred_data, f, indent=2)
+            client_id = payload.get("client_id", "")
+            if client_id:
+                subprocess.run(
+                    ["hermes", "config", "set", "google.client_id", client_id],
+                    capture_output=True, timeout=15
+                )
+            self._run_health_checks()
+            return {"status": "ok", "output": f"Credenciales {service} guardadas en {token_path}"}
+        except Exception as e:
+            return {"status": "error", "output": f"Error guardando credenciales: {e}"}
 
     def _execute_command(self, cmd):
         command = cmd.get("command", "")
@@ -90,6 +130,11 @@ class Plugin:
         # set-provider uses payload, not subprocess
         if command == "set-provider":
             result = self._handle_set_provider(cmd.get("payload", {}))
+            result["cmd_id"] = cmd_id
+            result["step"] = step
+            return result
+        if command == "save-creds":
+            result = self._handle_save_creds(cmd)
             result["cmd_id"] = cmd_id
             result["step"] = step
             return result
@@ -200,6 +245,45 @@ class Plugin:
             pass
         return auth_map
 
+    @staticmethod
+    def _pick_fastest_model(models: list[str]) -> str:
+        """Score models: flash keywords +1, premium keywords -1, pick highest score, first in list wins ties."""
+        flash_kw = ("flash", "haiku", "mini", "nano", "small", "fast", "light", "turbo")
+        premium_kw = ("max", "plus", "pro", "ultra", "premium", "advanced", "super")
+        best = models[0] if models else ""
+        best_score = -999
+        for m in models:
+            name = m.split("/")[-1].lower()
+            score = sum(1 for kw in flash_kw if kw in name) - sum(1 for kw in premium_kw if kw in name)
+            if score > best_score:
+                best = m
+                best_score = score
+        return best
+
+    def _discover_models(self, provider_id: str) -> list[str]:
+        """Read available models for a provider from Hermes' OPENROUTER_MODELS and OpenCode lists."""
+        import re as _re
+        hermes_dir = os.path.expanduser("~/.hermes/hermes-agent")
+        models_path = os.path.join(hermes_dir, "hermes_cli", "models.py")
+        if not os.path.isfile(models_path):
+            return []
+        text = open(models_path).read()
+        models: list[str] = []
+        # Check OpenCode model lists
+        for pid in (provider_id,):
+            m = _re.search(r'"' + pid + r'"\s*:\s*\[(.*?)\]', text, _re.DOTALL)
+            if m:
+                models = [v.strip().strip('"\'') for v in m.group(1).split(",") if v.strip()]
+                break
+        if models:
+            return [f"{provider_id}/{m}" for m in models]
+        # Check OPENROUTER_MODELS for provider prefix
+        for m in _re.finditer(r'\("(\w[\w./-]+)"', text):
+            full = m.group(1)
+            if full.startswith(provider_id + "/") or full.startswith(provider_id.replace("-", "-") + "/"):
+                models.append(full)
+        return models
+
     def _discover_providers(self):
         """Read providers dynamically from Hermes' CANONICAL_PROVIDERS."""
         hermes_dir = os.path.expanduser("~/.hermes/hermes-agent")
@@ -247,13 +331,19 @@ class Plugin:
             with open(config_path) as f:
                 content = f.read()
             import re as _re
-            m = _re.search(r"default:\s*['\"](\w[\w./-]*)", content)
+            # First try model.provider
+            m = _re.search(r"provider:\s*['\"]?(\w[\w./-]*)", content)
             if m:
-                full = m.group(1)
-                if "/" in full:
-                    provider, _ = full.split("/", 1)
-                else:
-                    provider = full
+                provider = m.group(1)
+            else:
+                # Fallback: parse from default model
+                m = _re.search(r"default:\s*['\"](\w[\w./-]*)", content)
+                if m:
+                    full = m.group(1)
+                    if "/" in full:
+                        provider, _ = full.split("/", 1)
+                    else:
+                        provider = full
         except Exception:
             pass
         return version, provider
@@ -264,20 +354,50 @@ class Plugin:
         hermes_bin = os.path.expanduser("~/.local/bin/hermes")
         if not os.path.isfile(hermes_bin):
             hermes_bin = "hermes"
-        # Check provider auth
+        config_text = ""
+        auth_text = ""
         try:
-            r = subprocess.run([hermes_bin, "auth", "list"], capture_output=True, text=True, timeout=15)
-            output = r.stdout + r.stderr
-            # If we have a configured provider, check it exists in auth list
-            config_r = subprocess.run([hermes_bin, "config", "show"], capture_output=True, text=True, timeout=15)
-            for line in config_r.stdout.split("\n"):
-                if "provider" in line and ":" in line:
-                    prov = line.split(":")[-1].strip().strip("'\"")
-                    if prov and prov != "auto":
-                        result["provider"] = "ok" if prov in output else "missing"
-                        break
+            cr = subprocess.run([hermes_bin, "config", "show"], capture_output=True, text=True, timeout=15)
+            config_text = cr.stdout
         except Exception:
-            result["provider"] = "unknown"
+            pass
+        try:
+            ar = subprocess.run([hermes_bin, "auth", "list"], capture_output=True, text=True, timeout=15)
+            auth_text = ar.stdout + ar.stderr
+        except Exception:
+            pass
+        # Check provider: look for any provider name in auth list output
+        has_provider = False
+        for line in auth_text.split("\n"):
+            line = line.strip()
+            if line and not line.startswith("#") and not line.startswith("(") and not line.startswith("Credential"):
+                has_provider = True
+                break
+        result["bootstrap"] = "ok" if os.path.isdir(os.path.expanduser("~/.hermes/scripts/vcoo")) else "missing"
+        result["provider"] = "ok" if has_provider else "missing"
+        # Check model.default is configured
+        import re as _re2
+        dm = _re2.search(r"'default':\s*'([^']+)'", config_text)
+        result["model"] = "ok" if (dm and dm.group(1) and "/" in dm.group(1)) else "missing"
+        # Check Google OAuth (office/mail modules) via token file
+        google_token_path = os.path.expanduser("~/.hermes/google_token.json")
+        if os.path.isfile(google_token_path):
+            try:
+                with open(google_token_path) as f:
+                    tok = json.load(f)
+                result["google"] = "ok" if tok.get("token") else "error"
+            except Exception:
+                result["google"] = "error"
+        else:
+            result["google"] = "missing"
+        # Check Trello (planner module)
+        result["trello"] = "ok" if "trello" in auth_text or "trello.api_key" in config_text else "missing"
+        # Check GitHub (developer module)
+        result["github"] = "ok" if "github" in auth_text or "github.token" in config_text else "missing"
+        # Check Vercel (developer module)
+        result["vercel"] = "ok" if "vercel.token" in config_text else "missing"
+        # Check Supabase (developer module)
+        result["supabase"] = "ok" if "supabase.access_token" in config_text else "missing"
         self._checks = result
 
     def _report_capabilities(self):
@@ -289,6 +409,10 @@ class Plugin:
         version, current_provider = self._detect_hermes_config()
         providers = self._discover_providers()
         caps = {"providers": providers, "checks": self._checks}
+        if current_provider:
+            models = self._discover_models(current_provider)
+            recommended = self._pick_fastest_model(models)
+            caps["models"] = {current_provider: {"list": models, "recommended": recommended}}
         self._last_reported_checks = dict(self._checks)
         if version:
             caps["hermes_version"] = version

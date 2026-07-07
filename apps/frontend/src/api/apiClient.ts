@@ -12,6 +12,9 @@ const apiClient = axios.create({
   },
 });
 
+let refrescando = false;
+let colaRefresh: Array<(token: string) => void> = [];
+
 // Request interceptor to add auth token
 apiClient.interceptors.request.use((config) => {
   try {
@@ -34,9 +37,26 @@ apiClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
+    // Rate limiting — no reintentar
+    if (error.response?.status === 429) {
+      return Promise.reject(error);
+    }
+
     // If 401 and haven't tried refreshing yet
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
+
+      if (refrescando) {
+        // Si ya hay un refresh en curso, encolar esta petición
+        return new Promise((resolve) => {
+          colaRefresh.push((newToken: string) => {
+            originalRequest.headers.Authorization = `Bearer ${newToken}`;
+            resolve(apiClient(originalRequest));
+          });
+        });
+      }
+
+      refrescando = true;
       try {
         const stored = localStorage.getItem('vcoo-auth');
         if (stored) {
@@ -46,15 +66,19 @@ apiClient.interceptors.response.use(
               refreshToken: parsed.refreshToken,
             });
 
-            // Update token in localStorage
             const newToken = data.accessToken || data.token || parsed.token;
             parsed.token = newToken;
             parsed.refreshToken = newToken;
             parsed.marcaDeTiempo = Date.now();
             localStorage.setItem('vcoo-auth', JSON.stringify(parsed));
 
+            // Notificar a peticiones en cola
+            colaRefresh.forEach(cb => cb(newToken));
+            colaRefresh = [];
+
             // Retry original request with new token
             originalRequest.headers.Authorization = `Bearer ${newToken}`;
+            refrescando = false;
             return apiClient(originalRequest);
           }
         }
@@ -63,6 +87,8 @@ apiClient.interceptors.response.use(
         localStorage.removeItem('vcoo-auth');
         window.location.href = '/login';
         return Promise.reject(error);
+      } finally {
+        refrescando = false;
       }
     }
 
