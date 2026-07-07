@@ -1,0 +1,14 @@
+# Dependencias y build
+node_modules/
+dist/
+
+# Artefactos de test
+coverage/
+test-results/
+playwright-report/
+playwright/.cache/
+blob-report/
+
+# Entorno
+.env
+.env.local
