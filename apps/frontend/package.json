@@ -10,7 +10,8 @@
     "lint": "eslint src --ext .ts,.tsx",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "build:e2e": "VITE_API_URL=http://localhost:8000 vite build",
+    "test:e2e": "npm run build:e2e && playwright test"
   },
   "dependencies": {
     "@tanstack/react-query": "^4.29.5",

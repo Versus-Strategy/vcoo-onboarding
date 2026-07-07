@@ -22,6 +22,9 @@ const BACKEND_ENV = {
   DASHBOARD_URL: 'http://localhost:4173',
   CONTROL_PLANE: 'http://localhost:8000',
   FRONTEND_URL: 'http://localhost:4173',
+  // Los tests hacen varios logins reales; subimos el límite para no chocar con
+  // el rate limiter (por defecto 5/300s en producción).
+  LOGIN_RATE_MAX_ATTEMPTS: '1000',
 };
 
 export default defineConfig({
@@ -49,6 +52,9 @@ export default defineConfig({
       env: BACKEND_ENV,
     },
     {
+      // Sirve el build de dist/. El build debe hacerse antes con
+      // VITE_API_URL=http://localhost:8000 (ver script test:e2e / paso de CI)
+      // para no depender de un .env local que apunte a otra IP.
       command: 'npm run preview -- --port 4173',
       url: 'http://localhost:4173',
       reuseExistingServer: !process.env.CI,
