@@ -1,5 +1,7 @@
 # VCOO Onboarding API
 
+[![CI](https://github.com/Versus-Strategy/vcoo-onboarding/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Versus-Strategy/vcoo-onboarding/actions/workflows/ci.yml)
+
 API REST que orquesta el ciclo de vida completo de las instancias **VCOO** (Virtual Cognitive Orchestration Operator): provisionamiento, autenticación, onboarding de clientes, registro de agentes y ejecución de comandos de verificación.
 
 ## Stack Tecnológico
@@ -14,6 +16,8 @@ API REST que orquesta el ciclo de vida completo de las instancias **VCOO** (Virt
 | Agente VPS        | vcoo-supervisor (Python, modular, systemd)     |
 | Frontend          | React SPA (vcoo-dashboard)                     |
 | WebSockets        | FastAPI WebSocket + bridge (entorno local)     |
+| Testing           | pytest (backend), Vitest + Testing Library + Playwright (frontend) |
+| CI/CD             | GitHub Actions                                |
 
 ## Arquitectura
 
@@ -44,7 +48,11 @@ Este repositorio es un **monorepo** con la siguiente estructura:
 ```
 apps/           → Aplicaciones desplegables independientemente
   backend/      → FastAPI (Python)
+    tests/      → Suite pytest (test_*.py + conftest.py)
+    pytest.ini  → Configuración de pytest
   frontend/     → React SPA (TypeScript)
+    src/**/*.test.tsx → Tests unitarios (Vitest + Testing Library)
+    e2e/        → Tests end-to-end (Playwright)
 packages/       → Código compartido (no se despliega solo)
   agent/        → Scripts del agente VCOO
   vsd/          → Watchdog systemd
@@ -55,6 +63,7 @@ infra/          → Configuración de infraestructura
   supabase/
 api/            → Entrypoint serverless Vercel
 docs/           → Documentación y planos
+.github/workflows/ci.yml → Pipeline de CI (GitHub Actions)
 ```
 
 ## Endpoints de la API
@@ -267,6 +276,63 @@ El frontend estará en `http://10.0.0.1:3000` y se conectará automáticamente a
 ```
 Frontend (10.0.0.1:3000) → API (10.0.0.1:8000) → SQLite (apps/backend/test.db)
 ```
+
+## Testing
+
+El proyecto tiene tres suites de tests: **pytest** para el backend, **Vitest** (unitarios) y **Playwright** (end-to-end) para el frontend. Todas se ejecutan automáticamente en CI en cada push/PR (ver [CI/CD](#cicd)).
+
+### Backend (pytest)
+
+```bash
+cd apps/backend
+pip install -r requirements.txt -r requirements-dev.txt
+
+# Ejecutar toda la suite
+pytest
+
+# Con reporte de cobertura
+pytest --cov=. --cov-report=term-missing
+```
+
+Los tests viven en `apps/backend/tests/` (`test_auth.py`, `test_vcoos.py`, `test_onboarding.py`, `test_agents.py`, `test_utils.py`) y usan una base de datos SQLite temporal — no requieren PostgreSQL. La configuración está en `apps/backend/pytest.ini`.
+
+> Los scripts en `apps/backend/scripts/manual/` son pruebas manuales ad-hoc (basadas en `print`) y **no** forman parte de la suite pytest.
+
+### Frontend — tests unitarios (Vitest)
+
+```bash
+cd apps/frontend
+npm install
+
+npm run test          # ejecuta los tests una vez
+npm run test:watch    # modo watch durante el desarrollo
+```
+
+Cubren componentes (`src/components/*.test.tsx`), el cliente HTTP con su lógica de refresco de token (`src/api/apiClient.test.ts`) y el store de Zustand (`src/store/almacen.test.ts`).
+
+### Frontend — tests end-to-end (Playwright)
+
+```bash
+cd apps/frontend
+npm install
+npx playwright install --with-deps chromium   # solo la primera vez
+
+npm run test:e2e
+```
+
+Los tests E2E (`apps/frontend/e2e/`) arrancan **automáticamente** un backend FastAPI real (uvicorn + SQLite temporal) y el frontend (`vite preview`) mediante la opción `webServer` de Playwright — no hace falta levantar nada a mano, pero sí tener Python disponible. Cubren el login del operador, la creación de VCOOs y el registro de cliente en el wizard de onboarding.
+
+## CI/CD
+
+Cada `push` y `pull_request` sobre `main` dispara el workflow de **GitHub Actions** (`.github/workflows/ci.yml`), con tres jobs:
+
+| Job | Qué hace |
+|-----|----------|
+| **Backend (pytest)** | Instala dependencias (Python 3.11) y ejecuta `pytest` con cobertura; sube `coverage.xml` como artefacto. |
+| **Frontend (lint + vitest + build)** | `npm ci`, `npm run lint`, `npm run test` (Vitest) y `npm run build`. |
+| **Frontend (Playwright E2E)** | Depende del job anterior. Instala Node + Python, arranca el backend real y ejecuta `npm run test:e2e`; sube el `playwright-report/` como artefacto. |
+
+El estado del pipeline se muestra en el badge del encabezado de este README.
 
 ## Despliegue
 

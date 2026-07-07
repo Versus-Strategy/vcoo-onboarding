@@ -14,6 +14,7 @@ Panel de control para gestionar instancias de **VCOO** (Virtual Cognitive Orches
 | HTTP          | Axios                                                                     |
 | Enrutamiento  | React Router DOM v6                                                       |
 | Empaquetado   | Vite                                                                      |
+| Testing       | Vitest + Testing Library (unitarios), Playwright (E2E)                    |
 
 ## Arquitectura
 
@@ -118,6 +119,23 @@ Copia el archivo `.env.example` a `.env` si existe, o crea uno:
 ```bash
 echo "VITE_API_URL=https://vcoo-onboarding.vercel.app" > .env
 ```
+
+## Testing
+
+```bash
+# Tests unitarios (Vitest + Testing Library)
+npm run test          # una vez
+npm run test:watch    # modo watch
+
+# Tests end-to-end (Playwright)
+npx playwright install --with-deps chromium   # solo la primera vez
+npm run test:e2e
+```
+
+- **Unitarios** (`src/**/*.test.tsx`): componentes, el cliente HTTP (`src/api/apiClient.ts`) y el store de Zustand. Corren en jsdom, sin navegador ni backend.
+- **E2E** (`e2e/*.spec.ts`): Playwright arranca automáticamente un backend FastAPI real (uvicorn + SQLite temporal) y sirve el build del frontend (`vite preview`), así que **no** necesitas levantar el backend a mano — pero sí tener Python disponible. El script `test:e2e` reconstruye el frontend con `VITE_API_URL=http://localhost:8000` antes de lanzar los tests (`build:e2e`).
+
+Ambas suites se ejecutan en CI en cada push/PR (ver el workflow `.github/workflows/ci.yml` en el repo raíz).
 
 ## Autenticación
 
