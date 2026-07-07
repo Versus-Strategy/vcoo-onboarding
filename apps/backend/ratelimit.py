@@ -1,3 +1,4 @@
+import os
 import time
 from collections import defaultdict
 from fastapi import HTTPException
@@ -26,4 +27,17 @@ class LoginRateLimiter:
         self._attempts[ip].append(now)
 
 
-_login_limiter = LoginRateLimiter(max_attempts=5, window_seconds=300)
+def _int_env(name: str, default: int) -> int:
+    """Lee un entero de env var con fallback silencioso al default."""
+    try:
+        return int(os.getenv(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+# Configurable por entorno (útil para tests E2E que hacen múltiples logins).
+# Los defaults (5 intentos / 300s) son los de producción.
+_login_limiter = LoginRateLimiter(
+    max_attempts=_int_env("LOGIN_RATE_MAX_ATTEMPTS", 5),
+    window_seconds=_int_env("LOGIN_RATE_WINDOW_SECONDS", 300),
+)
