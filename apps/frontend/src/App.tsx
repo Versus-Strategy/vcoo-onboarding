@@ -1,36 +1,44 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Suspense, lazy } from 'react';
 import { ProveedorDeAuth } from './auth/authContext';
 import { useAuth } from './auth/authContext';
 import Login from './pages/Login/Login';
 import ClientLayout from '@/layouts/ClientLayout';
 import OperatorLayout from '@/layouts/OperatorLayout';
-// Importar rutas de cliente
-import RutasCliente from '@/rutas/rutasCliente';
-// Importar páginas de operador
-import ClientesPage from '@/pages/operador/Clientes/Clientes';
-import NuevoClientePage from '@/pages/operador/Clientes/NuevoCliente';
-import DetalleClientePage from '@/pages/operador/Clientes/DetalleCliente';
-// Importar wizard público de onboarding
-import SetupWizard from '@/pages/public/SetupWizard/SetupWizard';
+// Rutas de cliente (carga diferida)
+const RutasCliente = lazy(() => import('@/rutas/rutasCliente'));
+// Páginas de operador (carga diferida — no se descargan para clientes)
+const ClientesPage = lazy(() => import('@/pages/operador/Clientes/Clientes'));
+const NuevoClientePage = lazy(() => import('@/pages/operador/Clientes/NuevoCliente'));
+const DetalleClientePage = lazy(() => import('@/pages/operador/Clientes/DetalleCliente'));
+// Wizard público de onboarding (carga diferida — es el archivo más grande)
+const SetupWizard = lazy(() => import('@/pages/public/SetupWizard/SetupWizard'));
+
+/** Spinner de carga a pantalla completa, reutilizado para Suspense y sesión. */
+const PantallaCarga = ({ texto = 'Cargando...' }: { texto?: string }) => (
+  <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+      <p className="text-gray-600">{texto}</p>
+    </div>
+  </div>
+);
 
 function AppContent() {
   const { auth } = useAuth();
 
   // Ruta pública para el wizard de onboarding — no requiere autenticación
   if (window.location.pathname.startsWith('/setup/') || window.location.pathname.startsWith('/onboarding/')) {
-    return <SetupWizard />;
+    return (
+      <Suspense fallback={<PantallaCarga />}>
+        <SetupWizard />
+      </Suspense>
+    );
   }
 
   // Mostrar pantalla de carga mientras se restaura la sesión
   if (auth.cargando) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Cargando sesión...</p>
-        </div>
-      </div>
-    );
+    return <PantallaCarga texto="Cargando sesión..." />;
   }
 
   if (!auth.estaAutenticado) {
@@ -41,35 +49,32 @@ function AppContent() {
   if (auth.usuario?.rol === 'cliente') {
     return (
       <ClientLayout>
-        <RutasCliente />
+        <Suspense fallback={<PantallaCarga />}>
+          <RutasCliente />
+        </Suspense>
       </ClientLayout>
     );
   } else if (auth.usuario?.rol === 'operador') {
     return (
-      <Routes>
-        <Route element={<OperatorLayout />}>
-          <Route
-            path="/operador"
-            element={<Navigate to="/operador/clientes" replace />}
-          />
-          <Route path="/operador/clientes" element={<ClientesPage />} />
-          <Route path="/operador/clientes/nuevo" element={<NuevoClientePage />} />
-          <Route path="/operador/clientes/:id" element={<DetalleClientePage />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/operador" replace />} />
-      </Routes>
+      <Suspense fallback={<PantallaCarga />}>
+        <Routes>
+          <Route element={<OperatorLayout />}>
+            <Route
+              path="/operador"
+              element={<Navigate to="/operador/clientes" replace />}
+            />
+            <Route path="/operador/clientes" element={<ClientesPage />} />
+            <Route path="/operador/clientes/nuevo" element={<NuevoClientePage />} />
+            <Route path="/operador/clientes/:id" element={<DetalleClientePage />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/operador" replace />} />
+        </Routes>
+      </Suspense>
     );
   }
 
   // Caso por defecto (no debería ocurrir)
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center py-12">
-      <h1 className="text-2xl font-bold text-gray-900 mb-4">
-        Cargando...
-      </h1>
-      <p className="text-gray-600">Redirigiendo según su rol...</p>
-    </div>
-  );
+  return <PantallaCarga texto="Redirigiendo según su rol..." />;
 }
 
 function App() {

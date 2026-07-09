@@ -1,5 +1,4 @@
 import { usarAlmacen } from '../store/almacen';
-import apiClient from '../api/apiClient';
 
 interface UpdateData {
   agenteInstalado?: boolean;
@@ -62,12 +61,12 @@ class RealtimeManager {
 
   private initPollingFallback() {
     this.isPollingFallback = true;
-    this.fetchUpdates(); // Immediate initial call
-
-    // Poll with jitter (15s ± 5s)
-    this.pollingInterval = setInterval(() => {
-      this.fetchUpdates();
-    }, 15000 + Math.random() * 10000);
+    // NOTA: los endpoints de polling (`/estado-agente/{id}` y
+    // `/operador/clientes/actualizaciones`) no existen en el backend, así que
+    // no se lanza ningún poll: solo generaba 404s constantes y ruido en
+    // consola. Las actualizaciones del panel de operador ya se hacen vía React
+    // Query (`refetchInterval`). Si en el futuro se implementan estos
+    // endpoints (o WebSocket), reactivar aquí el `setInterval(fetchUpdates)`.
   }
 
   private handleWsOpen = () => {
@@ -145,41 +144,6 @@ class RealtimeManager {
   private sendHeartbeat() {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'heartbeat' }));
-    }
-  }
-
-  private async fetchUpdates() {
-    // Avoid concurrent polls
-    const currentState = usarAlmacen.getState();
-    if (currentState.api.estaRealizandoEncuesta) return;
-
-    usarAlmacen.setState((state) => ({
-      api: { ...state.api, estaRealizandoEncuesta: true },
-    }));
-
-    try {
-      const rol = currentState.app.rol;
-      let endpoint = '';
-
-      if (rol === 'cliente') {
-        const userId = currentState.auth.usuario?.id;
-        if (userId) {
-          endpoint = `/estado-agente/${userId}`;
-        }
-      } else if (rol === 'operador') {
-        endpoint = '/operador/clientes/actualizaciones';
-      }
-
-      if (endpoint) {
-        const { data } = await apiClient.get<UpdateData>(endpoint);
-        this.processUpdates(data);
-      }
-    } catch (error) {
-      console.error('Error fetching updates:', error);
-    } finally {
-      usarAlmacen.setState((state) => ({
-        api: { ...state.api, estaRealizandoEncuesta: false },
-      }));
     }
   }
 

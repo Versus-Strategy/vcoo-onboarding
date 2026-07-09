@@ -27,13 +27,13 @@ const DetalleClientePage = () => {
     setCargando(true);
     setError(null);
     try {
-      const [estadoRes, tokenRes] = await Promise.all([
+      const [estadoRes, tokenRes, auditRes] = await Promise.all([
         apiClient.get(`/vcoo/${id}/state`),
         apiClient.get(`/vcoo/${id}/provision-token`),
+        apiClient.get(`/vcoo/${id}/audit`),
       ]);
       setEstado(estadoRes.data as Record<string, unknown>);
       setTokenData(tokenRes.data as { token?: string; install_command?: string; onboarding_url?: string });
-      const auditRes = await apiClient.get(`/vcoo/${id}/audit`);
       setAuditLog(auditRes.data.audit_log as typeof auditLog);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail

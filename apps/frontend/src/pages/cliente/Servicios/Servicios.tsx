@@ -8,7 +8,7 @@ import Button from '../../../components/Button';
 import type { Servicio } from '../../../store/tipos';
 
 const ServiciosPage = () => {
-  const { data: servicios, isLoading } = useServiciosCliente();
+  const { data: servicios, isLoading, isFetching, refetch } = useServiciosCliente();
   const { establecerServicios } = usarAccionesCliente();
   const navigate = useNavigate();
   const [serviciosData, setServiciosData] = useState<Record<string, unknown>[]>([]);
@@ -65,7 +65,7 @@ const ServiciosPage = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-900">Tus Servicios VCOO</h1>
-        <Button variant="secondary" onClick={() => window.location.reload()}>
+        <Button variant="secondary" onClick={() => refetch()} loading={isFetching}>
           Actualizar lista
         </Button>
       </div>
