@@ -642,6 +642,19 @@ def trigger_step_verification(identifier: str, db: Session = Depends(get_db)):
         if existing:
             return {"status": "enqueued", "cmd_id": str(existing.id), "step": step, "command": cmd_name, "duplicate": True}
         cmd = crud.create_command(db, agent_id=str(agent.id), command=cmd_name, step=step)
+        # Si el paso es bootstrap, el hecho de que el agente esté vivo
+        # ya verifica que la instalación fue exitosa; no necesitamos
+        # esperar a que el agente procese `verify-bootstrap` para avanzar.
+        if step == "bootstrap":
+            crud.advance_onboarding_step(db, vcoo_id, step)
+            db.refresh(st)
+            return {
+                "status": "completed",
+                "cmd_id": str(cmd.id),
+                "step": step,
+                "next_step": st.step,
+                "message": "Agente detectado, paso completado.",
+            }
         return {
             "status": "enqueued",
             "cmd_id": str(cmd.id),
