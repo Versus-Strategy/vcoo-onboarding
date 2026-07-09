@@ -46,6 +46,42 @@ def get_db():
     finally:
         db.close()
 
+
+def seed_first_operator():
+    """Crea el primer operador si aún no existe ninguno.
+
+    Lee FIRST_OPERATOR_EMAIL/PASSWORD/NAME del entorno. Trata las variables
+    vacías como ausentes (os.getenv devuelve "" si están definidas vacías, lo
+    que NO dispararía un default) y aplica fallbacks. Si tras aplicar fallbacks
+    el email o la contraseña siguen vacíos, NO crea la cuenta: sembrar un
+    operador con credenciales vacías produce una cuenta inservible con la que
+    nadie puede autenticarse.
+    """
+    import sys as _sys
+    try:
+        db = SessionLocal()
+        try:
+            if crud.count_operators(db) != 0:
+                return
+            admin_email = (_os.getenv('FIRST_OPERATOR_EMAIL') or 'admin@versus-strategy.com').strip()
+            admin_password = _os.getenv('FIRST_OPERATOR_PASSWORD') or ''
+            admin_name = (_os.getenv('FIRST_OPERATOR_NAME') or 'Admin').strip()
+            if not admin_email or not admin_password:
+                print(
+                    "[seed] SKIP: FIRST_OPERATOR_EMAIL/PASSWORD vacíos; "
+                    "no se crea operador (define valores no vacíos para sembrarlo).",
+                    file=_sys.stderr,
+                )
+                return
+            pw_hash = auth.hash_password(admin_password)
+            crud.create_operator(db, email=admin_email, password_hash=pw_hash, name=admin_name)
+            print(f"[seed] Created first operator: {admin_email}")
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"[seed] Skipped: {e}", file=_sys.stderr)
+
+
 @application.on_event("startup")
 async def startup():
     from sqlalchemy import text as _sql_text
@@ -124,26 +160,34 @@ async def startup():
     if _os.getenv("VERCEL_ENV") is None:
         register_ws_routes(application)
     # ── Seed first operator ──
-    try:
-        db = SessionLocal()
-        if crud.count_operators(db) == 0:
-            admin_email = _os.getenv('FIRST_OPERATOR_EMAIL', 'admin@vcoo.io')
-            admin_password = _os.getenv('FIRST_OPERATOR_PASSWORD', 'admin')
-            admin_name = _os.getenv('FIRST_OPERATOR_NAME', 'Admin')
-            pw_hash = auth.hash_password(admin_password)
-            crud.create_operator(db, email=admin_email, password_hash=pw_hash, name=admin_name)
-            print(f"[seed] Created first operator: {admin_email}")
-        db.close()
-    except Exception as e:
-        import sys as _sys
-        print(f"[seed] Skipped: {e}", file=_sys.stderr)
+    seed_first_operator()
 
 
 # ── Health / Debug ────────────────────────────────────────────
 
 @application.get('/healthz')
 def healthz():
-    return {"status": "ok", "version": "v2", "python": sys.version.split()[0]}
+    """Healthcheck que comprueba la conectividad real con la base de datos.
+
+    Devuelve 200 si la BD responde; 503 si no. Un 200 a ciegas ocultaría
+    caídas de la BD (el backend quedaría inutilizable devolviendo 500 en cada
+    request sin que ningún monitor lo detectara).
+    """
+    from sqlalchemy import text as _sql_text
+    base = {"status": "ok", "version": "v2", "python": sys.version.split()[0]}
+    try:
+        db = SessionLocal()
+        try:
+            db.execute(_sql_text("SELECT 1"))
+        finally:
+            db.close()
+        base["db"] = "ok"
+        return base
+    except Exception as e:
+        base["status"] = "degraded"
+        base["db"] = "error"
+        base["detail"] = str(e).splitlines()[0][:200]
+        return JSONResponse(content=base, status_code=503)
 
 
 # ── OAuth callback ────────────────────────────────────────────

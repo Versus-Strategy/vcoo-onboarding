@@ -220,7 +220,7 @@ Este sistema está separado de Hermes Agent por diseño: el watchdog no debe dep
 
 | Variable              | Local (apps/backend/.env) | Producción (Vercel)                             | Descripción                                                     |
 |-----------------------|---------------------------|-------------------------------------------------|-----------------------------------------------------------------|
-| `POSTGRES_URL`        | `sqlite:///./test.db`     | PostgreSQL URL (Supabase)                       | URL de conexión a base de datos.                                |
+| `POSTGRES_URL`        | `sqlite:///./test.db`     | PostgreSQL URL vía **pooler** (Supabase)        | URL de conexión a base de datos. En Vercel usa el connection pooler (IPv4): `postgresql://postgres.<ref>:<pwd>@aws-0-<region>.pooler.supabase.com:6543/postgres`. La conexión directa (`db.<ref>.supabase.co:5432`) es solo IPv6 y falla en serverless. |
 | `MASTER_KEY`          | `vcoo-test-master-key-…`  | Secreto seguro (64+ chars)                      | Clave HMAC para firmar/verificar todos los JWT.                 |
 | `DASHBOARD_PASSWORD`  | `versus`                  | Contraseña del dashboard de operador            | Login del operador en `/auth/verify`.                           |
 | `DASHBOARD_URL`       | `http://10.0.0.1:3000`    | `https://vcoo-dashboard.vercel.app`             | URL del frontend SPA (dashboard + wizard).                      |
