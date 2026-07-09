@@ -416,7 +416,7 @@ const DetalleClientePage = () => {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Token de Provisionamiento
             </label>
-            <div className="flex items-center space-x-2">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
               <code className="flex-1 block rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm font-mono text-gray-700 break-all">
                 {provisionToken}
               </code>
@@ -444,7 +444,7 @@ const DetalleClientePage = () => {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Comando de Instalación
             </label>
-            <div className="flex items-center space-x-2">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
               <code className="flex-1 block rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm font-mono text-gray-700 break-all">
                 {installCommand}
               </code>
@@ -467,7 +467,7 @@ const DetalleClientePage = () => {
             <p className="text-xs text-gray-500 mb-2">
               Comparte este enlace con tu cliente para que complete la configuración inicial.
             </p>
-            <div className="flex items-center space-x-2">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
               <code className="flex-1 block rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm font-mono text-gray-700 break-all">
                 {onboardingUrl}
               </code>

@@ -169,7 +169,7 @@ const NuevoClientePage = () => {
           {vcooId && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">ID del VCOO</label>
-              <div className="flex items-center space-x-2">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                 <code className="flex-1 block rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm font-mono text-gray-700">
                   {vcooId}
                 </code>
@@ -190,7 +190,7 @@ const NuevoClientePage = () => {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Token de Provisionamiento
               </label>
-              <div className="flex items-center space-x-2">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                 <code className="flex-1 block rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm font-mono text-gray-700 break-all">
                   {provisionToken}
                 </code>
@@ -211,7 +211,7 @@ const NuevoClientePage = () => {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Comando de Instalación
               </label>
-              <div className="flex items-center space-x-2">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                 <code className="flex-1 block rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm font-mono text-gray-700 break-all">
                   {installCommand}
                 </code>

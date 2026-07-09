@@ -36,7 +36,7 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({
         />
       </div>
 
-      <div className="flex justify-between">
+      <div className="flex justify-between overflow-x-auto gap-1 pb-1">
         {pasos.map((paso, idx) => {
           const isCurrent = idx === pasoActual;
           const isUnlocked = idx <= unlockedLimit;
@@ -47,7 +47,7 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({
           return (
           <div key={idx}
             onClick={() => isUnlocked && onStepClick?.(idx)}
-            className={`flex flex-col items-center ${isUnlocked && onStepClick ? 'cursor-pointer' : ''}`}
+            className={`flex flex-col items-center flex-shrink-0 min-w-[56px] text-center ${isUnlocked && onStepClick ? 'cursor-pointer' : ''}`}
           >
             <div
               className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
