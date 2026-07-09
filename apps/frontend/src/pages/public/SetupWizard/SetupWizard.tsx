@@ -447,8 +447,23 @@ const SetupWizard = () => {
       }
       if (ok) {
         const { data: fresh } = await apiClient.get(`/setup/${token}`);
-        const provModels = ((fresh as any).models || {})[providerId] || ((fresh as any).models || {})['opencode-go'];
-        const modelList = provModels?.list || (Array.isArray(provModels) ? provModels : []);
+        // Los modelos pueden venir bajo el providerId o bajo un key alternativo;
+        // y la lista puede llamarse "list" o "models" según el agente.
+        const modelSources = [providerId, 'opencode-go'];
+        let provModels: unknown = undefined;
+        for (const src of modelSources) {
+          const m = ((fresh as any).models || {})[src];
+          if (m) { provModels = m; break; }
+        }
+        const extractList = (pm: unknown): unknown[] => {
+          if (Array.isArray(pm)) return pm;
+          if (pm && typeof pm === 'object') {
+            const o = pm as Record<string, unknown>;
+            return (o.list || o.models || []) as unknown[];
+          }
+          return [];
+        };
+        const modelList = extractList(provModels);
         if (modelList.length > 0) {
           setModoSelectorModelo(true);
         } else {
@@ -580,9 +595,9 @@ const SetupWizard = () => {
 
     if (modoSelectorModelo) {
       const prov = raw.find(p => p.id === proveedorSeleccionado);
-      const models = (((onboarding as any).models || {})[prov?.id || ''] || {});
-      const list: string[] = Array.isArray(models) ? models : (models.list || []);
-      const recommended: string = Array.isArray(models) ? '' : (models.recommended || '');
+      const modelsRaw = (((onboarding as any).models || {})[prov?.id || ''] || {});
+      const list: string[] = Array.isArray(modelsRaw) ? modelsRaw : ((modelsRaw.list || modelsRaw.models || []) as string[]);
+      const recommended: string = Array.isArray(modelsRaw) ? '' : (modelsRaw.recommended || '');
       const rest = list.filter(m => m !== recommended);
       const configurar = async (modelo: string) => {
         setModeloEnCurso(modelo);
