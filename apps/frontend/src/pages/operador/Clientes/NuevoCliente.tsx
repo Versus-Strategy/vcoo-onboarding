@@ -74,6 +74,7 @@ const NuevoClientePage = () => {
   const installCommand = resultado?.install_command as string | undefined;
   const provisionToken = resultado?.token as string | undefined;
   const vcooId = resultado?.id as string | undefined;
+  const onboardingUrl = resultado?.onboarding_url as string | undefined;
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -165,22 +166,36 @@ const NuevoClientePage = () => {
             </p>
           </div>
 
-          {/* VCOO ID */}
-          {vcooId && (
+          {/* Enlace de incorporación */}
+          {onboardingUrl && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">ID del VCOO</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Enlace de incorporación para el cliente
+              </label>
+              <p className="text-xs text-gray-500 mb-2">
+                Comparte este enlace con tu cliente para que complete la configuración inicial.
+              </p>
               <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                <code className="flex-1 block rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm font-mono text-gray-700">
-                  {vcooId}
+                <code className="flex-1 block rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm font-mono text-gray-700 break-all">
+                  {onboardingUrl}
                 </code>
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => copiarAlPortapapeles(vcooId)}
+                  onClick={() => copiarAlPortapapeles(onboardingUrl)}
                 >
                   {copiado ? '¡Copiado!' : 'Copiar'}
                 </Button>
               </div>
+            </div>
+          )}
+
+          {/* Botón al detalle del operador */}
+          {vcooId && (
+            <div className="flex justify-end">
+              <Button onClick={() => navigate(`/operador/clientes/${vcooId}`)}>
+                Ir al detalle del cliente
+              </Button>
             </div>
           )}
 
