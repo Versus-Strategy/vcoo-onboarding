@@ -11,14 +11,7 @@ import {
   ClockIcon,
   ExclamationTriangleIcon,
 } from '@/components/icons';
-
-const statusMap: Record<string, string> = {
-  active: 'en-linea',
-  completed: 'completado',
-  offline: 'fuera-de-linea',
-  in_progress: 'configurando',
-  online: 'en-linea',
-};
+import { mapEstadoVcoo, mapEstadoAgente, mapEstadoOnboarding } from '@/store/estados';
 
 const DetalleClientePage = () => {
   const { id } = useParams<{ id: string }>();
@@ -223,11 +216,12 @@ const DetalleClientePage = () => {
   }
 
   const nombre = (estado?.name as string) || (estado?.nombre as string) || 'Cliente sin nombre';
-  const estadoCliente = statusMap[(estado?.status as string) || 'offline'] || 'fuera-de-linea';
+  const estadoCliente = mapEstadoVcoo(estado?.status as string | undefined);
   const createdAt = (estado?.created_at as string) || (estado?.createdAt as string) || '';
   const agentInfo = estado?.agent as Record<string, unknown> | undefined;
-  const agentStatus = agentInfo?.status as string || 'offline';
-  const agentStatusLocal = statusMap[agentStatus] || agentStatus || 'fuera-de-linea';
+  const agentStatusLocal = agentInfo
+    ? mapEstadoAgente(agentInfo.status as string | undefined)
+    : 'sin-provisionar';
   const lastSeen = agentInfo?.last_seen as string | undefined;
   const capabilities = agentInfo?.capabilities as Record<string, unknown> | undefined;
   const providers = capabilities?.providers as Array<Record<string, unknown>> | undefined;
@@ -304,7 +298,7 @@ const DetalleClientePage = () => {
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Estado del VCOO</h2>
             <p className="text-sm text-gray-500 mt-1">
-              Actualmente: <StatusBadge estado={statusMap[(estado?.status as string) || ''] || (estado?.status as string) || 'desconocido'} />
+              Actualmente: <StatusBadge estado={mapEstadoVcoo(estado?.status as string | undefined)} />
             </p>
           </div>
           <div className="flex gap-2">
@@ -618,7 +612,7 @@ const DetalleClientePage = () => {
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
             <span className="text-gray-500">Estado</span>
-            <StatusBadge estado={statusMap[onboardingStatus] || onboardingStatus} />
+            <StatusBadge estado={mapEstadoOnboarding(onboardingStatus)} />
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-gray-500">Pasos completados</span>

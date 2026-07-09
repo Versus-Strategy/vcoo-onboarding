@@ -7,24 +7,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import StatusBadge from '@/components/StatusBadge';
 import Button from '@/components/Button';
 import { ChevronUpDownIcon, ChevronUpIcon, ChevronDownIcon } from '@/components/icons';
+import { etiquetasEstado } from '@/store/estados';
 
-const statusMap: Record<string, string> = {
-  active: 'en-linea',
-  completed: 'completado',
-  offline: 'fuera-de-linea',
-  in_progress: 'configurando',
-  online: 'en-linea',
-};
-
-// Etiquetas legibles para los chips de filtro (independientes del mapa interno de estados)
-const filtroEstadoLabels: Record<string, string> = {
-  active: 'Activo',
-  completed: 'Completado',
-};
-const filtroAgenteLabels: Record<string, string> = {
-  online: 'En línea',
-  offline: 'Fuera de línea',
-};
+// Los valores de los chips coinciden con los estados de UI ya mapeados que
+// guarda useClientesOperador (cliente.estado y servicios[0].estado), para que
+// la comparación del filtro funcione. La etiqueta visible sale de etiquetasEstado.
+const FILTRO_VCOO = ['en-linea', 'completado'] as const;
+const FILTRO_AGENTE = ['en-linea', 'fuera-de-linea', 'sin-provisionar'] as const;
 
 type SortField = 'nombre' | 'estado' | 'ultimoContacto' | 'agente';
 type SortDir = 'asc' | 'desc';
@@ -82,7 +71,7 @@ const ClientesPage = () => {
     }
     if (filtroAgente) {
       items = items.filter(c => {
-        const ag = c.servicios?.[0]?.estado as string || 'offline';
+        const ag = c.servicios?.[0]?.estado as string || 'sin-provisionar';
         return ag === filtroAgente;
       });
     }
@@ -166,7 +155,7 @@ const ClientesPage = () => {
             </div>
             <div className="flex flex-wrap gap-2">
               <span className="text-xs text-gray-500 font-medium mr-1 self-center">VCOO:</span>
-              {['active', 'completed'].map(s => (
+              {FILTRO_VCOO.map(s => (
                 <button
                   key={s}
                   onClick={() => setFiltroEstado(filtroEstado === s ? null : s)}
@@ -176,11 +165,11 @@ const ClientesPage = () => {
                       : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'
                   }`}
                 >
-                  {filtroEstadoLabels[s] || s}
+                  {etiquetasEstado[s]}
                 </button>
               ))}
               <span className="text-xs text-gray-500 font-medium mx-1 self-center">| Agente:</span>
-              {['online', 'offline'].map(s => (
+              {FILTRO_AGENTE.map(s => (
                 <button
                   key={s}
                   onClick={() => setFiltroAgente(filtroAgente === s ? null : s)}
@@ -190,7 +179,7 @@ const ClientesPage = () => {
                       : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'
                   }`}
                 >
-                  {filtroAgenteLabels[s] || s}
+                  {etiquetasEstado[s]}
                 </button>
               ))}
               {(busqueda || filtroEstado || filtroAgente) && (
@@ -228,10 +217,9 @@ const ClientesPage = () => {
                 {filtrados.map((cliente: RowData) => {
                   const id = cliente.id as string;
                   const nombre = (cliente.nombre as string) || 'Sin nombre';
-                  const estadoRaw = (cliente.estado as string) || 'offline';
-                  const estado = statusMap[estadoRaw] || estadoRaw || 'fuera-de-linea';
+                  const estado = (cliente.estado as string) || 'sin-provisionar';
                   const ultimoContacto = cliente.ultimoContacto as string | undefined;
-                  const agenteEstado = statusMap[cliente.servicios?.[0]?.estado as string] || 'fuera-de-linea';
+                  const agenteEstado = (cliente.servicios?.[0]?.estado as string) || 'sin-provisionar';
                   const modulos = cliente.servicios?.[0]?.modulos as string[] | undefined;
 
                   return (
@@ -312,10 +300,9 @@ const ClientesPage = () => {
               filtrados.map((cliente: RowData) => {
                 const id = cliente.id as string;
                 const nombre = (cliente.nombre as string) || 'Sin nombre';
-                const estadoRaw = (cliente.estado as string) || 'offline';
-                const estado = statusMap[estadoRaw] || estadoRaw || 'fuera-de-linea';
+                const estado = (cliente.estado as string) || 'sin-provisionar';
                 const ultimoContacto = cliente.ultimoContacto as string | undefined;
-                const agenteEstado = statusMap[cliente.servicios?.[0]?.estado as string] || 'fuera-de-linea';
+                const agenteEstado = (cliente.servicios?.[0]?.estado as string) || 'sin-provisionar';
                 const modulos = cliente.servicios?.[0]?.modulos as string[] | undefined;
 
                 return (

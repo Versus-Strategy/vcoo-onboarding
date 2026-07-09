@@ -1,6 +1,7 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
 import apiClient from '../api/apiClient';
 import type { Servicio } from '../store/tipos';
+import { mapEstadoAgente, mapEstadoVcoo } from '../store/estados';
 
 // Generic query hook
 export function useApiConsulta<TData = unknown, TError = unknown>(
@@ -10,6 +11,8 @@ export function useApiConsulta<TData = unknown, TError = unknown>(
     staleTime?: number;
     cacheTime?: number;
     enabled?: boolean;
+    refetchInterval?: number | false;
+    refetchIntervalInBackground?: boolean;
   }
 ) {
   return useQuery<TData, TError>({
@@ -52,17 +55,13 @@ export function useApiMutacion<TData = unknown, TVariables = void, TError = unkn
 
 function vcooToServicio(vcoo: Record<string, unknown>): Servicio {
   const agent = vcoo.agent as Record<string, unknown> | undefined;
-  let estado: Servicio['estado'];
-
-  if (vcoo.status === 'completed') {
-    estado = 'completado';
-  } else if (agent) {
-    // Agent exists — use its computed online/offline status
-    estado = agent.status === 'online' ? 'en-linea' : 'fuera-de-linea';
-  } else {
-    // No agent yet — pending provisioning
-    estado = 'configurando';
-  }
+  // El estado del servicio refleja la salud real del AGENTE, no el ciclo de
+  // vida del VCOO. Así "sin agente" (sin-provisionar) no se confunde con
+  // "agente caído" (fuera-de-linea), y un VCOO completado con agente vivo no
+  // aparece como offline.
+  const estado: Servicio['estado'] = agent
+    ? mapEstadoAgente(agent.status as string | undefined)
+    : 'sin-provisionar';
 
   return {
     id: vcoo.id as string,
@@ -151,12 +150,12 @@ export const useClientesOperador = () => {
         id: v.id as string,
         nombre: (v.name as string) || 'Sin nombre',
         email: (v.name as string)?.toLowerCase().replace(/\s+/g, '.') + '@cliente.vcoo' || 'desconocido@vcoo',
-        estado: (v.status as string) || 'offline',
+        estado: mapEstadoVcoo(v.status as string | undefined),
         servicios: [vcooToServicio(v)],
         ultimoContacto: ((v.agent as Record<string, unknown>)?.last_seen as string) || (v.created_at as string) || '',
       }));
     }),
-    { staleTime: 5 * 60 * 1000, refetchInterval: 15000 }
+    { staleTime: 5 * 60 * 1000, refetchInterval: 15000, refetchIntervalInBackground: false }
   );
 };
 

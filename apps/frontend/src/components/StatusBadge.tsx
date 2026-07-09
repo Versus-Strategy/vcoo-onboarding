@@ -1,31 +1,23 @@
 import React from 'react';
+import { coloresEstado, etiquetasEstado } from '../store/estados';
 
 interface StatusBadgeProps {
   estado: string;
 }
 
-const statusColors: Record<string, string> = {
-  'en-linea': 'bg-green-100 text-green-800',
-  'fuera-de-linea': 'bg-red-100 text-red-800',
-  completado: 'bg-gray-100 text-gray-700',
-  configurando: 'bg-blue-100 text-blue-800',
-  // Alias retrocompatible (antes se usaba "pausado" para VCOO completado)
-  pausado: 'bg-gray-100 text-gray-700',
-};
-
-const statusLabels: Record<string, string> = {
-  'en-linea': 'En línea',
-  'fuera-de-linea': 'Fuera de línea',
-  completado: 'Completado',
-  configurando: 'Configurando',
-  pausado: 'Completado',
+// Alias retrocompatibles hacia los estados de UI canónicos.
+const alias: Record<string, string> = {
+  pausado: 'completado', // antes "pausado" representaba un VCOO completado
+  bloqueado: 'bloqueado',
 };
 
 const StatusBadge: React.FC<StatusBadgeProps> = ({ estado }) => {
-  const colorClass = statusColors[estado] || 'bg-gray-100 text-gray-800';
+  const key = alias[estado] || estado;
+  const colorClass = coloresEstado[key as keyof typeof coloresEstado] || 'bg-gray-100 text-gray-800';
+  const label = etiquetasEstado[key as keyof typeof etiquetasEstado] || estado;
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${colorClass}`}>
-      {statusLabels[estado] || estado}
+      {label}
     </span>
   );
 };
