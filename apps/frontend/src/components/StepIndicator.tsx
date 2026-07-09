@@ -42,7 +42,7 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({
           const isUnlocked = idx <= unlockedLimit;
           const degraded = isDegraded(idx);
           const isNext = idx === unlockedLimit + 1;
-          const isDone = idx < pasoCompletado || (idx <= unlockedLimit && !isNext);
+          const isDone = idx < pasoCompletado;
           const showCheckmark = !isCurrent && (isDone || degraded) && !isNext;
           return (
           <div key={idx}

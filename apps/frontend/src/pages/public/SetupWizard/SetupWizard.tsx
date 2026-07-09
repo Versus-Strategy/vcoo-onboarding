@@ -370,6 +370,23 @@ const SetupWizard = () => {
 
   const pasoActual = vistaActual ?? onboarding.wizard_step ?? 0;
   const pasoBackend = onboarding.wizard_step ?? 0;
+  // Mismo mapa que WIZARD_STEP_MAP en onboarding.py: backend step -> wizard index
+  const wizardStepMap: Record<string, number> = {
+    bootstrap: 0,
+    'google-oauth': 1,
+    'gmail-setup': 2,
+    'trello-setup': 2,
+    'github-setup': 2,
+    'vercel-setup': 2,
+    'supabase-setup': 2,
+    finalize: 3,
+    done: 3,
+  };
+  const pasosCompletados = new Set(
+    (onboarding.completed || [])
+      .map((s: string) => wizardStepMap[s])
+      .filter((s: number | undefined): s is number => s !== undefined)
+  ).size;
   // Pasos degradados según checks del agente
   const checks: Record<string, string> = (onboarding as any).checks || {};
   const modules = onboarding.modules || [];
@@ -1046,7 +1063,7 @@ const SetupWizard = () => {
         <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6 shadow-sm">
           <StepIndicator
             pasoActual={pasoActual}
-            pasoCompletado={pasoBackend}
+            pasoCompletado={pasosCompletados}
             pasosTotales={4}
             pasos={PASOS}
             pasosDegradados={pasosDegradados}
