@@ -446,24 +446,30 @@ const SetupWizard = () => {
         if (chk.provider === 'ok') { ok = true; break; }
       }
       if (ok) {
-        const { data: fresh } = await apiClient.get(`/setup/${token}`);
-        // Los modelos pueden venir bajo el providerId o bajo un key alternativo;
-        // y la lista puede llamarse "list" o "models" según el agente.
-        const modelSources = [providerId, 'opencode-go'];
-        let provModels: unknown = undefined;
-        for (const src of modelSources) {
-          const m = ((fresh as any).models || {})[src];
-          if (m) { provModels = m; break; }
-        }
-        const extractList = (pm: unknown): unknown[] => {
-          if (Array.isArray(pm)) return pm;
-          if (pm && typeof pm === 'object') {
-            const o = pm as Record<string, unknown>;
-            return (o.list || o.models || []) as unknown[];
+        // El proveedor confirmó, pero los modelos pueden tardar unos segundos
+        // más en aparecer en las capabilities del agente. Polleamos hasta 30s
+        // adicionales esperando la lista de modelos.
+        let modelList: unknown[] = [];
+        for (let i = 0; i < 6; i++) {
+          const { data: fresh } = await apiClient.get(`/setup/${token}`);
+          const modelSources = [providerId, 'opencode-go'];
+          let provModels: unknown = undefined;
+          for (const src of modelSources) {
+            const m = ((fresh as any).models || {})[src];
+            if (m) { provModels = m; break; }
           }
-          return [];
-        };
-        const modelList = extractList(provModels);
+          const extractList = (pm: unknown): unknown[] => {
+            if (Array.isArray(pm)) return pm;
+            if (pm && typeof pm === 'object') {
+              const o = pm as Record<string, unknown>;
+              return (o.list || o.models || []) as unknown[];
+            }
+            return [];
+          };
+          modelList = extractList(provModels);
+          if (modelList.length > 0) break;
+          await new Promise(r => setTimeout(r, 5000));
+        }
         if (modelList.length > 0) {
           setModoSelectorModelo(true);
         } else {
