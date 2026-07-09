@@ -387,16 +387,33 @@ const SetupWizard = () => {
       .map((s: string) => wizardStepMap[s])
       .filter((s: number | undefined): s is number => s !== undefined)
   ).size;
-  // Pasos degradados según checks del agente
+  // Checks reportados por el agente: "ok" | "missing" | "error"
   const checks: Record<string, string> = (onboarding as any).checks || {};
   const modules = onboarding.modules || [];
+  const completed = (onboarding.completed as string[]) || [];
+
+  // Solo marcar como degradado si el paso ya se completó y ahora falta:
+  // así "pendiente" (nunca configurado) ≠ "problemático" (configurado y roto).
   const pasosDegradados: number[] = [];
-  if (checks.provider === "missing") pasosDegradados.push(1);
-  const moduleSteps: Record<string, number> = { google: 2, trello: 2, github: 2, vercel: 2, supabase: 2 };
-  const moduleMap: Record<string, string> = { google: "office", trello: "planner", github: "developer", vercel: "developer", supabase: "developer" };
-  for (const [check, step] of Object.entries(moduleSteps)) {
-    if (checks[check] === "missing" && modules.includes(moduleMap[check])) {
-      if (!pasosDegradados.includes(step)) pasosDegradados.push(step);
+  if (checks.provider === "missing" && completed.includes('google-oauth')) {
+    pasosDegradados.push(1);
+  }
+  if (checks.provider === "error" && completed.includes('google-oauth')) {
+    pasosDegradados.push(1);
+  }
+  // Chequeos de módulos OAuth: el paso backend correspondiente debe estar completado
+  // y el módulo debe estar habilitado para este VCOO.
+  const checkToBackendStep: Record<string, { steps: string[]; mod: string }> = {
+    google: { steps: ['gmail-setup'], mod: 'office' },
+    trello: { steps: ['trello-setup'], mod: 'planner' },
+    github: { steps: ['github-setup'], mod: 'developer' },
+    vercel: { steps: ['vercel-setup'], mod: 'developer' },
+    supabase: { steps: ['supabase-setup'], mod: 'developer' },
+  };
+  for (const [check, cfg] of Object.entries(checkToBackendStep)) {
+    const val = checks[check];
+    if ((val === "missing" || val === "error") && modules.includes(cfg.mod) && cfg.steps.some(s => completed.includes(s))) {
+      if (!pasosDegradados.includes(2)) pasosDegradados.push(2);
     }
   }
   const pasoBackendEfectivo = pasosDegradados.length > 0
