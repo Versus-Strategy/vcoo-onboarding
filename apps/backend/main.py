@@ -48,6 +48,7 @@ def get_db():
 
 @application.on_event("startup")
 async def startup():
+    from sqlalchemy import text as _sql_text
     # ── Ensure database exists ──
     try:
         db_url = _os.environ.get('POSTGRES_URL', 'postgresql://postgres:postgres@db:5432/postgres')
@@ -72,7 +73,6 @@ async def startup():
         print(f"[startup] create_all skipped (DB unreachable): {e}", file=_sys.stderr)
     # ── Schema migrations (add columns that create_all won't add) ──
     try:
-        from sqlalchemy import text as _sql_text
         with engine.connect() as conn:
             # Check if health_payload column exists in agents table
             result = conn.execute(_sql_text("""
