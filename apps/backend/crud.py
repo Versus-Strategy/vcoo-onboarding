@@ -19,20 +19,63 @@ def get_vcoo(db: Session, vcoo_id: str):
 
 
 def list_vcoos(db: Session, limit: int = 50):
-    """List VCOOs with their latest agent, ordered by creation date."""
+    """List VCOOs with their latest agent, active token y módulos.
+
+    Evita el N+1 (antes: 1 + 3 consultas por VCOO): trae los agentes, tokens y
+    estados de onboarding de toda la página en 3 consultas con IN y los asocia
+    en memoria, preservando la semántica de "más reciente".
+    """
     vcoos = (
         db.query(models.VCOO)
         .order_by(models.VCOO.created_at.desc())
         .limit(limit)
         .all()
     )
+    if not vcoos:
+        return vcoos
+
+    ids = [str(v.id) for v in vcoos]
+    now = datetime.utcnow()
+
+    # Agente más reciente por vcoo (por last_seen). Orden ascendente para que,
+    # al recorrer, el último asignado sea el más reciente.
+    agents = (
+        db.query(models.Agent)
+        .filter(models.Agent.vcoo_id.in_(ids))
+        .order_by(models.Agent.last_seen.asc())
+        .all()
+    )
+    agent_by_vcoo: dict = {}
+    for a in agents:
+        agent_by_vcoo[str(a.vcoo_id)] = a
+
+    # Token activo (no expirado) más reciente por vcoo (por created_at).
+    tokens = (
+        db.query(models.ProvisionToken)
+        .filter(
+            models.ProvisionToken.vcoo_id.in_(ids),
+            models.ProvisionToken.expires_at > now,
+        )
+        .order_by(models.ProvisionToken.created_at.asc())
+        .all()
+    )
+    token_by_vcoo: dict = {}
+    for t in tokens:
+        token_by_vcoo[str(t.vcoo_id)] = t
+
+    # Estado de onboarding (uno por vcoo).
+    states = (
+        db.query(models.OnboardingState)
+        .filter(models.OnboardingState.vcoo_id.in_(ids))
+        .all()
+    )
+    state_by_vcoo = {str(s.vcoo_id): s for s in states}
+
     for v in vcoos:
-        agent = get_agent_by_vcoo(db, str(v.id))
-        v.agent = agent
-        active_token = get_active_token_for_vcoo(db, str(v.id))
-        v.active_token = active_token
-        # Attach modules from onboarding_state
-        st = get_onboarding_state(db, str(v.id))
+        vid = str(v.id)
+        v.agent = agent_by_vcoo.get(vid)
+        v.active_token = token_by_vcoo.get(vid)
+        st = state_by_vcoo.get(vid)
         v.modules = st.modules if st else ["core"]
     return vcoos
 

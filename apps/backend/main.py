@@ -17,6 +17,23 @@ import json
 import os as _os
 
 
+# ── URLs de producción (por defecto si no hay variable de entorno) ──────────
+
+_CONTROL_PLANE_PROD = "https://vcoo-onboarding.vercel.app"
+_DASHBOARD_PROD = "https://vcoo-dashboard.vercel.app"
+
+
+def _url(var: str, *, vercel_default: str, local_default: str) -> str:
+    """Lee una URL del entorno; si no está definida, elige un default según si
+    estamos en Vercel (producción) o local (desarrollo)."""
+    val = _os.getenv(var)
+    if val and val.strip():
+        return val.strip()
+    if _os.getenv("VERCEL_ENV"):
+        return vercel_default
+    return local_default
+
+
 
 
 application = FastAPI(title="VCOO Onboarding API v2")
@@ -82,10 +99,36 @@ def seed_first_operator():
         print(f"[seed] Skipped: {e}", file=_sys.stderr)
 
 
-@application.on_event("startup")
-async def startup():
+def _should_run_startup_migrations() -> bool:
+    """¿Debe ejecutarse la creación de esquema + migraciones en el arranque?
+
+    En serverless (Vercel) el evento `startup` se ejecuta en CADA cold start, y
+    hacer `CREATE DATABASE` + `create_all` + sondas a information_schema + ALTER
+    añade ~7-9 idas y vueltas a Supabase (con handshake SSL) ANTES de poder
+    responder a la primera petición. En producción el esquema ya existe, así que
+    ese trabajo es lastre puro en la latencia de la primera carga.
+
+    Por eso el esquema/migraciones solo corren:
+      - en local/CI/dev (cuando VERCEL_ENV no está definido), donde la BD puede
+        no existir todavía, o
+      - cuando se fuerza explícitamente con RUN_STARTUP_MIGRATIONS=1 (p.ej. un
+        job puntual de despliegue).
+    """
+    if _os.getenv("RUN_STARTUP_MIGRATIONS") == "1":
+        return True
+    return _os.getenv("VERCEL_ENV") is None
+
+
+def run_startup_migrations():
+    """Crea la base de datos, las tablas y aplica migraciones de columnas.
+
+    Solo pensado para entornos donde el esquema puede no existir todavía
+    (local/CI). Ver `_should_run_startup_migrations`.
+    """
     from sqlalchemy import text as _sql_text
-    # ── Ensure database exists ──
+    import sys as _sys
+    # ── Ensure database exists (solo tiene sentido en Postgres local tipo Docker;
+    # en Supabase la BD siempre existe) ──
     try:
         db_url = _os.environ.get('POSTGRES_URL', 'postgresql://postgres:postgres@db:5432/postgres')
         base_url = db_url.rsplit('/', 1)[0] + '/postgres'
@@ -99,67 +142,40 @@ async def startup():
                 print("[startup] Created database 'vcoo'")
         admin_engine.dispose()
     except Exception as e:
-        import sys as _sys
         print(f"[startup] Cannot ensure database: {e}", file=_sys.stderr)
     # ── Create tables ──
     try:
         Base.metadata.create_all(bind=engine)
     except Exception as e:
-        import sys as _sys
         print(f"[startup] create_all skipped (DB unreachable): {e}", file=_sys.stderr)
     # ── Schema migrations (add columns that create_all won't add) ──
     try:
         with engine.connect() as conn:
-            # Check if health_payload column exists in agents table
-            result = conn.execute(_sql_text("""
-                SELECT column_name FROM information_schema.columns
-                WHERE table_name='agents' AND column_name='health_payload'
-            """))
-            if not result.fetchone():
-                conn.execute(_sql_text(
-                    "ALTER TABLE agents ADD COLUMN health_payload TEXT"
-                ))
-                conn.commit()
-                print("[migration] Added health_payload column to agents table")
-            # Check if capabilities column exists
-            result = conn.execute(_sql_text("""
-                SELECT column_name FROM information_schema.columns
-                WHERE table_name='agents' AND column_name='capabilities'
-            """))
-            if not result.fetchone():
-                conn.execute(_sql_text(
-                    "ALTER TABLE agents ADD COLUMN capabilities TEXT"
-                ))
-                conn.commit()
-                print("[migration] Added capabilities column to agents table")
-            # Check if template_version column exists
-            result = conn.execute(_sql_text("""
-                SELECT column_name FROM information_schema.columns
-                WHERE table_name='agents' AND column_name='template_version'
-            """))
-            if not result.fetchone():
-                conn.execute(_sql_text(
-                    "ALTER TABLE agents ADD COLUMN template_version VARCHAR(32)"
-                ))
-                conn.commit()
-                print("[migration] Added template_version column to agents table")
-            # Check if supervisor_version column exists
-            result = conn.execute(_sql_text("""
-                SELECT column_name FROM information_schema.columns
-                WHERE table_name='agents' AND column_name='supervisor_version'
-            """))
-            if not result.fetchone():
-                conn.execute(_sql_text(
-                    "ALTER TABLE agents ADD COLUMN supervisor_version VARCHAR(32)"
-                ))
-                conn.commit()
-                print("[migration] Added supervisor_version column to agents table")
+            for col, ddl in (
+                ("health_payload", "ALTER TABLE agents ADD COLUMN health_payload TEXT"),
+                ("capabilities", "ALTER TABLE agents ADD COLUMN capabilities TEXT"),
+                ("template_version", "ALTER TABLE agents ADD COLUMN template_version VARCHAR(32)"),
+                ("supervisor_version", "ALTER TABLE agents ADD COLUMN supervisor_version VARCHAR(32)"),
+            ):
+                exists = conn.execute(_sql_text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='agents' AND column_name=:c"
+                ), {"c": col}).fetchone()
+                if not exists:
+                    conn.execute(_sql_text(ddl))
+                    conn.commit()
+                    print(f"[migration] Added {col} column to agents table")
     except Exception as e:
-        import sys as _sys
         print(f"[migration] Skipped (non-critical): {e}", file=_sys.stderr)
+
+
+@application.on_event("startup")
+async def startup():
+    if _should_run_startup_migrations():
+        run_startup_migrations()
     if _os.getenv("VERCEL_ENV") is None:
         register_ws_routes(application)
-    # ── Seed first operator ──
+    # ── Seed first operator (idempotente; 1 consulta) ──
     seed_first_operator()
 
 
@@ -426,7 +442,7 @@ def create_vcoo(payload: dict = {}, db: Session = Depends(get_db),
     crud.get_or_create_onboarding_state(db, str(vcoo.id), modules)
     # Generate provision token
     token = crud.create_provision_for_vcoo(db, str(vcoo.id))
-    frontend_url = _os.getenv('FRONTEND_URL', 'http://localhost:5173')
+    frontend_url = _url('FRONTEND_URL', vercel_default=_DASHBOARD_PROD, local_default='http://localhost:5173')
     onboarding_url = frontend_url.rstrip('/') + '/setup/' + str(vcoo.id)
     crud.create_audit_log(db, action="vcoo.created", vcoo_id=str(vcoo.id), metadata={"name": name})
     return {
@@ -441,7 +457,7 @@ def create_vcoo(payload: dict = {}, db: Session = Depends(get_db),
 def list_vcoos(db: Session = Depends(get_db), operator: dict = Depends(auth.verify_operator_jwt)):
     """List all VCOOs with agent status and active token."""
     vcoos = crud.list_vcoos(db)
-    dashboard_url = _os.getenv('DASHBOARD_URL', 'http://localhost:3000')
+    dashboard_url = _url('DASHBOARD_URL', vercel_default=_DASHBOARD_PROD, local_default='http://localhost:3000')
     return [
         {
             "id": str(v.id),
@@ -529,7 +545,7 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
     current_step = st.step
     completed_steps = st.completed or []
     all_done = is_onboarding_complete(current_step, completed_steps, modules)
-    control_plane = _os.getenv('CONTROL_PLANE', 'http://localhost:8000')
+    control_plane = _url('CONTROL_PLANE', vercel_default=_CONTROL_PLANE_PROD, local_default='http://localhost:8000')
     active_token_obj = crud.get_active_token_for_vcoo(db, vcoo_id)
     if not active_token_obj:
         raw_token = crud.create_provision_for_vcoo(db, vcoo_id)
@@ -671,7 +687,7 @@ def get_auth_url(identifier: str, service: str = "", db: Session = Depends(get_d
     service = service.lower().strip()
     if service in _GOOGLE_SCOPES_MAP:
         client_id = _os.getenv("GOOGLE_CLIENT_ID", "")
-        redirect = _os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/callback")
+        redirect = _url('GOOGLE_REDIRECT_URI', vercel_default=f'{_CONTROL_PLANE_PROD}/auth/callback', local_default='http://localhost:8000/auth/callback')
         state = f"{vcoo_id}:{service}"
         if not client_id:
             raise HTTPException(status_code=400, detail="GOOGLE_CLIENT_ID no configurado. Contacta al administrador.")
@@ -686,7 +702,7 @@ def get_auth_url(identifier: str, service: str = "", db: Session = Depends(get_d
         api_key = _os.getenv("TRELLO_API_KEY", "")
         if not api_key:
             raise HTTPException(status_code=400, detail="TRELLO_API_KEY no configurado. Contacta al administrador.")
-        control_plane_oauth = _os.getenv('CONTROL_PLANE', 'http://localhost:8000')
+        control_plane_oauth = _url('CONTROL_PLANE', vercel_default=_CONTROL_PLANE_PROD, local_default='http://localhost:8000')
         url = "https://trello.com/1/authorize?expiration=never&name=VCOO&scope=read,write&response_type=token&key={}&return_url={}".format(api_key, f"{control_plane_oauth}/auth/callback?service=trello")
         return {"url": url, "service": "trello"}
     elif service == "github":
@@ -744,7 +760,7 @@ def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session
     if service == "google":
         client_id = _os.getenv("GOOGLE_CLIENT_ID", "")
         client_secret = _os.getenv("GOOGLE_CLIENT_SECRET", "")
-        redirect_uri = _os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/callback")
+        redirect_uri = _url('GOOGLE_REDIRECT_URI', vercel_default=f'{_CONTROL_PLANE_PROD}/auth/callback', local_default='http://localhost:8000/auth/callback')
         if client_id and client_secret:
             try:
                 import urllib.request
@@ -859,8 +875,8 @@ def get_provision_token(vcoo_id: str, db: Session = Depends(get_db),
         token = active.token
     else:
         token = crud.create_provision_for_vcoo(db, vcoo_id)
-    dashboard_url = _os.getenv('DASHBOARD_URL', 'http://localhost:3000')
-    control_plane = _os.getenv('CONTROL_PLANE', 'http://localhost:8000')
+    dashboard_url = _url('DASHBOARD_URL', vercel_default=_DASHBOARD_PROD, local_default='http://localhost:3000')
+    control_plane = _url('CONTROL_PLANE', vercel_default=_CONTROL_PLANE_PROD, local_default='http://localhost:8000')
     install_cmd = f"curl -sSL {control_plane}/install.sh | PROVISION_TOKEN={token} bash -"
     onboarding_url = f"{dashboard_url}/setup/{vcoo_id}"
     return {"token": token, "install_command": install_cmd, "onboarding_url": onboarding_url}
@@ -873,8 +889,8 @@ def regenerate_token(vcoo_id: str, db: Session = Depends(get_db),
     if not v:
         raise HTTPException(status_code=404, detail="VCOO not found")
     token = crud.regenerate_token_for_vcoo(db, vcoo_id)
-    dashboard_url = _os.getenv('DASHBOARD_URL', 'http://localhost:3000')
-    control_plane = _os.getenv('CONTROL_PLANE', 'http://localhost:8000')
+    dashboard_url = _url('DASHBOARD_URL', vercel_default=_DASHBOARD_PROD, local_default='http://localhost:3000')
+    control_plane = _url('CONTROL_PLANE', vercel_default=_CONTROL_PLANE_PROD, local_default='http://localhost:8000')
     install_cmd = f"curl -sSL {control_plane}/install.sh | PROVISION_TOKEN={token} bash -"
     onboarding_url = f"{dashboard_url}/setup/{vcoo_id}"
     crud.create_audit_log(db, action="token.regenerated", actor_email=operator.get('email'),
@@ -899,7 +915,7 @@ def reactivate_vcoo(vcoo_id: str, db: Session = Depends(get_db),
     token = crud.reactivate_vcoo(db, vcoo_id)
     if not token:
         raise HTTPException(status_code=404, detail="VCOO not found")
-    control_plane = _os.getenv('CONTROL_PLANE', 'http://localhost:8000')
+    control_plane = _url('CONTROL_PLANE', vercel_default=_CONTROL_PLANE_PROD, local_default='http://localhost:8000')
     install_cmd = f"curl -sSL {control_plane}/install.sh | PROVISION_TOKEN={token} bash -"
     crud.create_audit_log(db, action="vcoo.reactivated", actor_email=operator.get('email'),
                           actor_id=operator.get('operator_id'), vcoo_id=vcoo_id)
@@ -1599,7 +1615,7 @@ def get_install_script():
         raise HTTPException(status_code=404, detail='Not found')
     content = open(path).read()
     # Inyectar CONTROL_PLANE real y fix para HOME unbound
-    control_plane_url = _os.getenv('CONTROL_PLANE', 'https://vcoo-onboarding.vercel.app')
+    control_plane_url = _url('CONTROL_PLANE', vercel_default=_CONTROL_PLANE_PROD, local_default='http://localhost:8000')
     lines = content.split('\n')
     home_fix = '\n# Fix HOME unbound (systemd) - inyectado por backend\n'
     home_fix += 'export HOME="${HOME:-/root}"\n'
