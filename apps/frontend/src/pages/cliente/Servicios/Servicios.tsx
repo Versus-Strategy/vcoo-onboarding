@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useServiciosCliente } from '../../../query/useConsulta';
 import { usarAccionesCliente } from '../../../store/useAppStore';
 import StatusBadge from '../../../components/StatusBadge';
@@ -9,6 +10,7 @@ import type { Servicio } from '../../../store/tipos';
 const ServiciosPage = () => {
   const { data: servicios, isLoading } = useServiciosCliente();
   const { establecerServicios } = usarAccionesCliente();
+  const navigate = useNavigate();
   const [serviciosData, setServiciosData] = useState<Record<string, unknown>[]>([]);
 
   // Update client state when services data changes
@@ -16,6 +18,7 @@ const ServiciosPage = () => {
     if (servicios !== undefined && servicios.length > 0) {
       setServiciosData(
         servicios.map((svc: Servicio) => ({
+          id: svc.id,
           nombre: svc.nombre,
           estado: svc.estado,
           modulos: svc.modulos,
@@ -25,6 +28,10 @@ const ServiciosPage = () => {
       establecerServicios(servicios);
     }
   }, [servicios, establecerServicios]);
+
+  const irAConfiguracion = (id: unknown) => {
+    if (id) navigate(`/onboarding/${id}`);
+  };
 
   const columns = [
     { accessor: 'nombre', label: 'Servicio' },
@@ -46,8 +53,8 @@ const ServiciosPage = () => {
     {
       accessor: 'acciones',
       label: 'Acciones',
-      render: () => (
-        <Button variant="secondary" size="sm">
+      render: (_value: unknown, row: Record<string, unknown>) => (
+        <Button variant="secondary" size="sm" onClick={() => irAConfiguracion(row.id)}>
           Configurar
         </Button>
       ),
@@ -63,15 +70,57 @@ const ServiciosPage = () => {
         </Button>
       </div>
 
-      <DataTable
-        columns={columns}
-        data={serviciosData}
-        loading={isLoading}
-        emptyState={{
-          title: 'No tienes servicios activos',
-          description: 'Contacta a soporte para activar servicios VCOO',
-        }}
-      />
+      {/* Tabla (escritorio) */}
+      <div className="hidden md:block">
+        <DataTable
+          columns={columns}
+          data={serviciosData}
+          loading={isLoading}
+          emptyState={{
+            title: 'No tienes servicios activos',
+            description: 'Contacta a soporte para activar servicios VCOO',
+          }}
+        />
+      </div>
+
+      {/* Tarjetas (móvil) */}
+      <div className="md:hidden space-y-3">
+        {isLoading ? (
+          [1, 2, 3].map((i) => (
+            <div key={i} className="bg-white rounded-lg shadow p-4 animate-pulse space-y-3">
+              <div className="h-4 bg-gray-200 rounded w-1/2" />
+              <div className="h-3 bg-gray-200 rounded w-1/3" />
+            </div>
+          ))
+        ) : serviciosData.length === 0 ? (
+          <div className="bg-white rounded-lg shadow p-8 text-center">
+            <h3 className="text-base font-medium text-gray-900">No tienes servicios activos</h3>
+            <p className="mt-2 text-sm text-gray-500">Contacta a soporte para activar servicios VCOO</p>
+          </div>
+        ) : (
+          serviciosData.map((svc) => (
+            <div key={svc.id as string} className="bg-white rounded-lg shadow p-4 space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <h3 className="text-base font-semibold text-gray-900 break-words">{svc.nombre as string}</h3>
+                <StatusBadge estado={svc.estado as string} />
+              </div>
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                <div>
+                  <dt className="text-gray-500">Módulos</dt>
+                  <dd className="text-gray-900">{(svc.modulos as string[]).length} activos</dd>
+                </div>
+                <div>
+                  <dt className="text-gray-500">Último visto</dt>
+                  <dd className="text-gray-900">{new Date(svc.ultimoVisto as string).toLocaleDateString()}</dd>
+                </div>
+              </dl>
+              <Button variant="secondary" size="sm" className="w-full" onClick={() => irAConfiguracion(svc.id)}>
+                Configurar
+              </Button>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 };

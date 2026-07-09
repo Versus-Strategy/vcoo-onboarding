@@ -3,10 +3,18 @@ import { useParams, useNavigate } from 'react-router-dom';
 import apiClient from '@/api/apiClient';
 import StatusBadge from '@/components/StatusBadge';
 import Button from '@/components/Button';
+import {
+  ChartBarIcon,
+  CpuChipIcon,
+  ClipboardListIcon,
+  GlobeAltIcon,
+  ClockIcon,
+  ExclamationTriangleIcon,
+} from '@/components/icons';
 
 const statusMap: Record<string, string> = {
   active: 'en-linea',
-  completed: 'pausado',
+  completed: 'completado',
   offline: 'fuera-de-linea',
   in_progress: 'configurando',
   online: 'en-linea',
@@ -60,7 +68,7 @@ const DetalleClientePage = () => {
   const [model, setModel] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [configuring, setConfiguring] = useState(false);
-  const [configResult, setConfigResult] = useState<string | null>(null);
+  const [configResult, setConfigResult] = useState<{ tipo: 'ok' | 'error'; texto: string } | null>(null);
   const [regenerando, setRegenerando] = useState(false);
   const [auditLog, setAuditLog] = useState<Array<{action: string; actor_email: string | null; metadata: Record<string, unknown> | null; created_at: string}>>([]);
   const [accionMsg, setAccionMsg] = useState<{tipo: 'ok' | 'error'; texto: string} | null>(null);
@@ -245,12 +253,12 @@ const DetalleClientePage = () => {
         model,
         api_key: apiKey,
       });
-      setConfigResult(`✅ Comando enviado: ${data.provider}${data.model ? ` (${data.model})` : ''}`);
+      setConfigResult({ tipo: 'ok', texto: `Comando enviado: ${data.provider}${data.model ? ` (${data.model})` : ''}` });
       setApiKey('');
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
         || (err as Error).message || 'Error desconocido';
-      setConfigResult(`❌ Error: ${msg}`);
+      setConfigResult({ tipo: 'error', texto: `Error: ${msg}` });
     } finally {
       setConfiguring(false);
     }
@@ -307,7 +315,7 @@ const DetalleClientePage = () => {
             )}
             {(estado?.status as string) === 'completed' && (
               <Button variant="secondary" size="sm" onClick={handleReactivate} disabled={reactivando}>
-                {reactivando ? 'Reactivando...' : 'Reactivar VCOO'}
+                {reactivando ? 'Reactivando...' : 'Reactivar'}
               </Button>
             )}
           </div>
@@ -348,9 +356,12 @@ const DetalleClientePage = () => {
         </div>
       </div>
 
-      {/* 📊 Server metrics */}
+      {/* Server metrics */}
       <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">📊 Métricas del servidor</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <ChartBarIcon className="w-5 h-5 text-gray-400" />
+          Métricas del servidor
+        </h2>
         {healthPayload ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
             <div>
@@ -373,8 +384,11 @@ const DetalleClientePage = () => {
             </div>
             <div>
               <span className="text-sm text-gray-500">Hermes</span>
-              <p className="text-sm font-medium text-gray-900">
-                {healthPayload.hermes_running ? '● En ejecución' : '○ Detenido'}
+              <p className="text-sm font-medium text-gray-900 flex items-center gap-1.5">
+                <span
+                  className={`inline-block w-2 h-2 rounded-full ${healthPayload.hermes_running ? 'bg-green-500' : 'bg-gray-400'}`}
+                />
+                {healthPayload.hermes_running ? 'En ejecución' : 'Detenido'}
               </p>
             </div>
             <div>
@@ -461,8 +475,9 @@ const DetalleClientePage = () => {
 
         {onboardingUrl && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              🌐 Enlace de incorporación para el cliente
+            <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1.5">
+              <GlobeAltIcon className="w-4 h-4 text-gray-400" />
+              Enlace de incorporación para el cliente
             </label>
             <p className="text-xs text-gray-500 mb-2">
               Comparte este enlace con tu cliente para que complete la configuración inicial.
@@ -485,15 +500,19 @@ const DetalleClientePage = () => {
 
       {/* Provider configuration */}
       <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">🤖 Proveedor de IA</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <CpuChipIcon className="w-5 h-5 text-gray-400" />
+          Proveedor de IA
+        </h2>
         <p className="text-sm text-gray-500 mb-4">
           Configura el proveedor de inteligencia artificial del agente. La API key se envía cifrada y el agente la aplica automáticamente.
         </p>
 
         {!providers ? (
           <div className="bg-gray-50 rounded-lg p-6 text-center">
+            <ClockIcon className="w-8 h-8 text-gray-400 mx-auto mb-2" />
             <p className="text-sm text-gray-500">
-              ⏳ Esperando a que el agente reporte sus capacidades...
+              Esperando a que el agente reporte sus capacidades...
             </p>
             <p className="text-xs text-gray-400 mt-2">
               El agente debe estar en línea para poder configurar el proveedor de IA.
@@ -585,8 +604,8 @@ const DetalleClientePage = () => {
             </Button>
 
             {configResult && (
-              <p className={`text-sm ${configResult.startsWith('✅') ? 'text-green-600' : 'text-red-600'}`}>
-                {configResult}
+              <p className={`text-sm ${configResult.tipo === 'ok' ? 'text-green-600' : 'text-red-600'}`}>
+                {configResult.texto}
               </p>
             )}
           </div>
@@ -637,8 +656,9 @@ const DetalleClientePage = () => {
           {/* Acciones para onboarding bloqueado */}
           {onboardingStatus === 'blocked' && (
             <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <p className="text-sm font-medium text-yellow-800 mb-2">
-                ⚠ El onboarding está bloqueado
+              <p className="text-sm font-medium text-yellow-800 mb-2 flex items-center gap-1.5">
+                <ExclamationTriangleIcon className="w-4 h-4 flex-shrink-0" />
+                El onboarding está bloqueado
               </p>
               <div className="flex gap-2">
                 <Button variant="primary" size="sm" onClick={() => handleRetryOnboarding((estado?.step as string) || '')}>
@@ -672,10 +692,13 @@ const DetalleClientePage = () => {
         )}
       </div>
 
-      {/* 📋 Activity log */}
+      {/* Activity log */}
       {auditLog.length > 0 && (
         <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">📋 Actividad reciente</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <ClipboardListIcon className="w-5 h-5 text-gray-400" />
+            Actividad reciente
+          </h2>
           <div className="space-y-3">
             {auditLog.map((entry, idx) => (
               <div key={idx} className="flex items-start gap-3 text-sm">

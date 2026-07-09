@@ -6,13 +6,24 @@ import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import StatusBadge from '@/components/StatusBadge';
 import Button from '@/components/Button';
+import { ChevronUpDownIcon, ChevronUpIcon, ChevronDownIcon } from '@/components/icons';
 
 const statusMap: Record<string, string> = {
   active: 'en-linea',
-  completed: 'pausado',
+  completed: 'completado',
   offline: 'fuera-de-linea',
   in_progress: 'configurando',
   online: 'en-linea',
+};
+
+// Etiquetas legibles para los chips de filtro (independientes del mapa interno de estados)
+const filtroEstadoLabels: Record<string, string> = {
+  active: 'Activo',
+  completed: 'Completado',
+};
+const filtroAgenteLabels: Record<string, string> = {
+  online: 'En línea',
+  offline: 'Fuera de línea',
 };
 
 type SortField = 'nombre' | 'estado' | 'ultimoContacto' | 'agente';
@@ -49,6 +60,16 @@ const ClientesPage = () => {
     }
   };
 
+  const handleEliminar = (id: string, nombre: string) => {
+    if (window.confirm(`¿Estás seguro de eliminar el cliente "${nombre}"? Esta acción eliminará todos los datos asociados.`)) {
+      eliminarVCOO.mutate(id, {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ['operador', 'clientes'] });
+        },
+      });
+    }
+  };
+
   const filtrados = useMemo(() => {
     if (!clientes) return [];
     let items = clientes as unknown as RowData[];
@@ -77,8 +98,10 @@ const ClientesPage = () => {
   }, [clientes, busqueda, filtroEstado, filtroAgente, sortField, sortDir]);
 
   const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) return <span className="ml-1 text-gray-300">↕</span>;
-    return <span className="ml-1 text-primary-600">{sortDir === 'asc' ? '↑' : '↓'}</span>;
+    if (sortField !== field) return <ChevronUpDownIcon className="inline-block ml-1 w-3.5 h-3.5 text-gray-300" />;
+    return sortDir === 'asc'
+      ? <ChevronUpIcon className="inline-block ml-1 w-3.5 h-3.5 text-primary-600" />
+      : <ChevronDownIcon className="inline-block ml-1 w-3.5 h-3.5 text-primary-600" />;
   };
 
   if (isLoading) {
@@ -153,7 +176,7 @@ const ClientesPage = () => {
                       : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'
                   }`}
                 >
-                  {statusMap[s] || s}
+                  {filtroEstadoLabels[s] || s}
                 </button>
               ))}
               <span className="text-xs text-gray-500 font-medium mx-1 self-center">| Agente:</span>
@@ -167,7 +190,7 @@ const ClientesPage = () => {
                       : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'
                   }`}
                 >
-                  {statusMap[s] || s}
+                  {filtroAgenteLabels[s] || s}
                 </button>
               ))}
               {(busqueda || filtroEstado || filtroAgente) && (
@@ -181,8 +204,8 @@ const ClientesPage = () => {
             </div>
           </div>
 
-          {/* Tabla */}
-          <div className="bg-white rounded-lg shadow overflow-x-auto">
+          {/* Tabla (escritorio) */}
+          <div className="hidden md:block bg-white rounded-lg shadow overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -260,13 +283,7 @@ const ClientesPage = () => {
                             className="text-red-600 hover:bg-red-50"
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (window.confirm(`¿Estás seguro de eliminar el cliente "${nombre}"? Esta acción eliminará todos los datos asociados.`)) {
-                                eliminarVCOO.mutate(id, {
-                                  onSuccess: () => {
-                                    queryClient.invalidateQueries({ queryKey: ['operador', 'clientes'] });
-                                  },
-                                });
-                              }
+                              handleEliminar(id, nombre);
                             }}
                           >
                             Eliminar
@@ -282,6 +299,92 @@ const ClientesPage = () => {
               <div className="text-center py-8 text-sm text-gray-500">
                 No se encontraron clientes con los filtros actuales.
               </div>
+            )}
+          </div>
+
+          {/* Tarjetas (móvil) */}
+          <div className="md:hidden space-y-3">
+            {filtrados.length === 0 ? (
+              <div className="bg-white rounded-lg shadow p-8 text-center text-sm text-gray-500">
+                No se encontraron clientes con los filtros actuales.
+              </div>
+            ) : (
+              filtrados.map((cliente: RowData) => {
+                const id = cliente.id as string;
+                const nombre = (cliente.nombre as string) || 'Sin nombre';
+                const estadoRaw = (cliente.estado as string) || 'offline';
+                const estado = statusMap[estadoRaw] || estadoRaw || 'fuera-de-linea';
+                const ultimoContacto = cliente.ultimoContacto as string | undefined;
+                const agenteEstado = statusMap[cliente.servicios?.[0]?.estado as string] || 'fuera-de-linea';
+                const modulos = cliente.servicios?.[0]?.modulos as string[] | undefined;
+
+                return (
+                  <div
+                    key={id}
+                    className="bg-white rounded-lg shadow p-4 space-y-3 cursor-pointer hover:bg-gray-50 transition-colors"
+                    onClick={() => navigate(`/operador/clientes/${id}`)}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-gray-900 break-words">{nombre}</div>
+                        {modulos && modulos.filter(m => m !== 'core').length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {modulos.filter(m => m !== 'core').slice(0, 3).map(m => (
+                              <span key={m} className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{m}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                      <div>
+                        <dt className="text-gray-500 text-xs">Estado VCOO</dt>
+                        <dd className="mt-0.5"><StatusBadge estado={estado} /></dd>
+                      </div>
+                      <div>
+                        <dt className="text-gray-500 text-xs">Agente</dt>
+                        <dd className="mt-0.5"><StatusBadge estado={agenteEstado} /></dd>
+                      </div>
+                      <div className="col-span-2">
+                        <dt className="text-gray-500 text-xs">Último contacto</dt>
+                        <dd className="mt-0.5 text-gray-900">
+                          {ultimoContacto
+                            ? new Date(ultimoContacto).toLocaleDateString('es-ES', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                              })
+                            : '—'}
+                        </dd>
+                      </div>
+                    </dl>
+                    <div className="flex items-center gap-2 pt-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex-1"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/operador/clientes/${id}`);
+                        }}
+                      >
+                        Ver detalle
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex-1 text-red-600 hover:bg-red-50"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEliminar(id, nombre);
+                        }}
+                      >
+                        Eliminar
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })
             )}
           </div>
         </>

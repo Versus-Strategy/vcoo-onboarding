@@ -1,9 +1,20 @@
 import { useParams } from 'react-router-dom';
 import { useState, useEffect, useCallback } from 'react';
+import type { ReactNode } from 'react';
 import apiClient from '@/api/apiClient';
 import { useAuth } from '@/auth/authContext';
 import StepIndicator from '@/components/StepIndicator';
 import Button from '@/components/Button';
+import {
+  DocumentTextIcon,
+  EnvelopeIcon,
+  CalendarIcon,
+  CodeBracketIcon,
+  PuzzlePieceIcon,
+  CheckCircleIcon,
+  ExclamationTriangleIcon,
+  ClockIcon,
+} from '@/components/icons';
 
 // ── Tipos ──
 
@@ -339,7 +350,7 @@ const SetupWizard = () => {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white border border-red-200 rounded-xl p-8 max-w-md w-full text-center shadow-sm">
-          <div className="text-red-500 text-5xl mb-4">⚠</div>
+          <ExclamationTriangleIcon className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <h1 className="text-xl font-bold text-gray-900 mb-2">
             Error de conexión
           </h1>
@@ -734,7 +745,7 @@ const SetupWizard = () => {
         <div className="text-center py-12">
           {providersTimeout ? (
             <>
-              <div className="text-yellow-500 text-5xl mb-4">⏱</div>
+              <ClockIcon className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
               <p className="text-gray-700 font-medium">El agente no reportó proveedores</p>
               <p className="text-gray-500 text-sm mt-2">Asegúrate de que el agente esté instalado y funcionando, luego haz clic en <strong>Refrescar</strong>.</p>
               <div className="mt-4">
@@ -783,27 +794,27 @@ const SetupWizard = () => {
 
     const modulosInfo: Record<
       string,
-      { nombre: string; descripcion: string; icono: string }
+      { nombre: string; descripcion: string; icono: ReactNode }
     > = {
       office: {
         nombre: onboarding.module_labels?.office?.label || 'Google Drive',
         descripcion: onboarding.module_labels?.office?.description || 'Documentos, hojas de cálculo y almacenamiento en la nube',
-        icono: '📄',
+        icono: <DocumentTextIcon className="w-7 h-7 text-gray-600" />,
       },
       mail: {
         nombre: onboarding.module_labels?.mail?.label || 'Gmail',
         descripcion: onboarding.module_labels?.mail?.description || 'Correo electrónico y bandeja de entrada inteligente',
-        icono: '✉',
+        icono: <EnvelopeIcon className="w-7 h-7 text-gray-600" />,
       },
       planner: {
         nombre: onboarding.module_labels?.planner?.label || 'Calendar + Trello',
         descripcion: onboarding.module_labels?.planner?.description || 'Calendario, tareas y organización del trabajo',
-        icono: '📅',
+        icono: <CalendarIcon className="w-7 h-7 text-gray-600" />,
       },
       developer: {
         nombre: onboarding.module_labels?.developer?.label || 'Developer',
         descripcion: onboarding.module_labels?.developer?.description || 'GitHub, Vercel, Supabase y herramientas para desarrolladores',
-        icono: '💻',
+        icono: <CodeBracketIcon className="w-7 h-7 text-gray-600" />,
       },
     };
 
@@ -913,7 +924,7 @@ const SetupWizard = () => {
               const info = modulosInfo[modulo] || {
                 nombre: modulo.charAt(0).toUpperCase() + modulo.slice(1),
                 descripcion: 'Servicio conectable',
-                icono: '🔌',
+                icono: <PuzzlePieceIcon className="w-7 h-7 text-gray-600" />,
               };
               return (
                 <div
@@ -922,13 +933,13 @@ const SetupWizard = () => {
                   className="group cursor-pointer bg-white border border-gray-200 rounded-xl p-5 transition-all duration-200 hover:border-primary-500 hover:shadow-lg hover:shadow-primary-100/50"
                 >
                   <div className="flex flex-col items-center text-center">
-                    <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-3 text-2xl ${
+                    <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-3 ${
                       modulo === 'office' && (checks as Record<string, string>).google === 'ok' ? 'bg-green-100' :
                       modulo === 'mail' && (checks as Record<string, string>).google === 'ok' ? 'bg-green-100' :
                       'bg-gray-100'
                     }`}>
-                      {modulo === 'office' && (checks as Record<string, string>).google === 'ok' ? '✅' :
-                       modulo === 'mail' && (checks as Record<string, string>).google === 'ok' ? '✅' :
+                      {modulo === 'office' && (checks as Record<string, string>).google === 'ok' ? <CheckCircleIcon className="w-7 h-7 text-green-600" /> :
+                       modulo === 'mail' && (checks as Record<string, string>).google === 'ok' ? <CheckCircleIcon className="w-7 h-7 text-green-600" /> :
                        info.icono}
                     </div>
                     <h3 className="font-semibold text-gray-900 mb-1">
