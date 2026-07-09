@@ -1,9 +1,9 @@
 # Especificación de Integración: VCOO Onboarding
 
-**Versión:** 2.0.0  
+**Versión:** 2.3.0  
 **Autor:** MAGI — VERSUS Strategy SL  
-**Fecha:** 2026-06-22  
-**Estado:** Revisión
+**Fecha:** 2026-07-07  
+**Estado:** Implementación
 
 ---
 
@@ -45,52 +45,63 @@ El sistema VCOO Onboarding orquesta la instalación y configuración de un asist
 
 ```
 ┌───────────────────────────────────────────────────┐
-│              FRONTEND (React + Vite)               │
+│         FRONTEND (apps/frontend — React + Vite)    │
 │                                                    │
 │  /dashboard      → Panel del operador              │
 │  /setup/:token   → Wizard de instalación           │
-│  /api/*          → Proxy a backend                 │
+│  Poll cada 15s a GET /setup/:token                 │
 └─────────────────────┬─────────────────────────────┘
                       │ HTTP (API calls)
                       ▼
 ┌───────────────────────────────────────────────────┐
-│              BACKEND (FastAPI + Vercel)             │
+│     BACKEND (apps/backend — FastAPI + Vercel)      │
 │                                                    │
 │  POST   /vcoo                         Crear VCOO   │
 │  GET    /vcoo/:id/state               Estado       │
 │  POST   /vcoo/:id/provision-token     Generar token│
-│  GET    /setup/:token                 Info wizard  │  ← NUEVO
+│  GET    /setup/:token                 Info wizard  │
 │  POST   /register                     Registrar ag.│
 │  GET    /agent/:id/poll                Poll comandos│
-│  POST   /agent/:id/result             Reportar (ACK)│ ← NUEVO
-│  POST   /agent/heartbeat              Heartbeat    │  ← NUEVO
-│  GET    /install.sh                   Installer     │
-│  GET    /playbooks/:name              Scripts aux.  │
-└─────────────────────┬─────────────────────────────┘
-                      │ SQLAlchemy + service_role
-                      ▼
-┌───────────────────────────────────────────────────┐
-│              SUPABASE (PostgreSQL)                 │
-│                                                    │
-│  vcoos              → Instancias VCOO             │
-│  onboarding_state   → Progreso del onboarding     │
-│  provision_tokens   → Tokens de provision         │
-│  agents             → Agentes registrados         │
-│  commands           → Comandos encolados          │
-│  command_logs       → Logs de ejecución           │
-└───────────────────────────────────────────────────┘
+│  POST   /agent/:id/result             Reportar ACK │
+│  POST   /agent/:id/tick               Tick unificado│
+│  POST   /agent/heartbeat              Heartbeat    │
+│  GET    /install.sh                   Installer    │
+│  GET    /playbooks/:name/raw          Scripts aux. │
+│  GET    /auth/callback                OAuth callback│
+│  GET    /setup/:token/auth-url        URL OAuth    │
+└──────────┬──────────────────┬─────────────────────┘
+           │ SQLAlchemy       │ WebSocket (ws_bridge)
+           ▼                  ▼
+┌──────────────────┐ ┌──────────────────────┐
+│  SUPABASE (PG)   │ │  WS Bridge (mem)     │
+│                  │ │  Logs en tiempo real  │
+│  vcoos           │ └──────────────────────┘
+│  onboarding_state│
+│  provision_tokens│
+│  agents          │
+│  commands        │
+│  command_logs    │
+│  operators       │
+│  clients         │
+│  revoked_tokens  │
+│  audit_log       │
+│  vcoo_dashboard  │
+└──────────────────┘
          │ polling cada 15s (GET /agent/:id/poll)
          ▼
 ┌───────────────────────────────────────────────────┐
-│         AGENTE POLLING (agent_http.py)             │
-│         (se ejecuta en servidor del cliente)       │
+│   AGENTE (packages/vcoo-supervisor — tick.py)      │
+│   (se ejecuta en servidor del cliente)             │
 │                                                    │
-│  Bucle principal:                                  │
-│  1. GET /poll → comandos pendientes                │
+│  Plugin tick.py (cada 60s, 5s si hay comandos):   │
+│  1. POST /agent/:id/tick → comandos + health      │
 │  2. Ejecuta scripts VCOO según COMMAND_MAP        │
-│  3. POST /result → reporta con ACK                │
-│  4. Si "finalize" → limpia y termina              │
-│  5. Heartbeat cada 60s                            │
+│  3. Reporta resultado en la misma respuesta tick  │
+│  4. save-creds: guarda tokens OAuth en disco      │
+│  5. Si "finalize" → limpia y termina              │
+│                                                    │
+│  Alternativa: packages/agent/agent.py (standalone) │
+│  Bucle simple de poll + execute + report           │
 └───────────────────────────────────────────────────┘
 ```
 
@@ -105,13 +116,12 @@ OPERADOR                    CLIENTE                     SERVIDOR CLIENTE
    │                          │  Abre /setup/:token          │
    │                          │  Ve instrucciones            │
    │                          │  Copia one-liner             │
-   │                          │  Lo pega en su terminal      │
-   │                          │ ─────────────────────────►   │
-   │                          │                              │  curl | bash
-   │                          │                              │  1. Instala Hermes Agent
-   │                          │                              │  2. Descarga scripts VCOO
-   │                          │                              │  3. Descarga skills VCOO
-   │                          │                              │  4. Lanza agent_http.py
+│  │  Lo pega en su terminal      │
+│  │ ─────────────────────────►   │
+│  │                              │  curl | bash
+│  │                              │  1. Crea venv + instala deps
+│  │                              │  2. Descarga scripts VCOO
+│  │                              │  3. Descarga y lanza agent
    │                          │                              │
    │                          │                              │  agent_http.py:
    │                          │                              │  → POST /register
@@ -132,7 +142,7 @@ OPERADOR                    CLIENTE                     SERVIDOR CLIENTE
 
 ### 3.1 Tablas existentes
 
-Las tablas `vcoos`, `provision_tokens`, `agents`, `commands` y `command_logs` ya existen en Supabase. Ver `supabase.sql`.
+Las tablas `vcoos`, `provision_tokens`, `agents`, `commands`, `command_logs`, `operators`, `clients`, `revoked_tokens`, `audit_log` y la vista `vcoo_dashboard` existen en Supabase. Ver `supabase/migrations/20260706000000_full_schema.sql`.
 
 ### 3.2 Nueva tabla: `onboarding_state`
 
@@ -363,49 +373,25 @@ El agente polling envía heartbeat cada 60s. Si el control plane no recibe heart
 
 ---
 
-## 5. Agente Polling (agent_http.py)
+## 5. Agente Polling
 
-### 5.1 Bucle principal
+Hay dos implementaciones del agente:
 
-```python
-async def main():
-    # 1. Cargar o registrar
-    loaded = load_agent()  # desde ~/.vcoo-agent/agent.json
-    if loaded:
-        agent_id = loaded['agent_id']
-        agent_token = loaded['agent_token']
-        vcoo_id = loaded['vcoo_id']
-    else:
-        provision_token = PROVISION_TOKEN  # de env o argumento
-        reg = await register(provision_token)
-        agent_id = reg['agent_id']
-        vcoo_id = reg['vcoo_id']
-        agent_token = reg['agent_token']
-        save_agent(agent_id, agent_token, vcoo_id)
+- **Producción:** `packages/vcoo-supervisor/plugins/tick.py` — plugin del supervisor que unifica health + comandos en un solo tick
+- **Standalone/POC:** `packages/agent/agent.py` — versión simple con bucle poll + execute + report
 
-    # 2. Bucle de polling (con heartbeat)
-    last_heartbeat = 0
-    while True:
-        now = time.time()
-        if now - last_heartbeat >= 60:
-            await heartbeat(agent_id, vcoo_id, agent_token)
-            last_heartbeat = now
+### 5.1 Supervisor tick (producción)
 
-        commands = await poll(agent_id, agent_token)
-        for cmd in commands:
-            result = await execute_command(cmd)     # ejecuta scripts VCOO
-            acked = await report_with_retry(        # POST /result con ACK
-                agent_id, agent_token, cmd, result
-            )
-            if acked:
-                if cmd['command'] == 'finalize':
-                    await finalize(vcoo_id)          # cleanup + exit
-        await asyncio.sleep(POLL_INTERVAL + jitter)
-```
+El plugin `tick.py` (en `packages/vcoo-supervisor/`) ejecuta un tick cada 60s (o 5s si hay comandos pendientes):
+
+1. Envía `POST /agent/:id/tick` con health + ACK de comando anterior
+2. Recibe comandos pendientes en la respuesta
+3. Ejecuta cada comando según COMMAND_MAP
+4. Reporta resultado en el siguiente tick
 
 ### 5.2 COMMAND_MAP — Ejecución de comandos
 
-El agente **NO ejecuta comandos arbitrarios**. Solo ejecuta una lista predefinida que corresponde a los scripts VCOO instalados:
+Definido en `tick.py`. El agente **NO ejecuta comandos arbitrarios**:
 
 ```python
 COMMAND_MAP = {
@@ -416,12 +402,25 @@ COMMAND_MAP = {
     "verify-github":    ["gh", "repo", "list", "--limit", "3"],
     "verify-vercel":    ["vercel", "projects", "ls", "--limit", "3"],
     "verify-supabase":  ["supabase", "status"],
-    "save-creds":       None,  # manejado por la web, no por el agente
+    "save-creds":       None,  # manejado por tick.py _handle_save_creds()
     "finalize":         None,  # manejado internamente
 }
 ```
 
+Comandos especiales con handlers dedicados:
+- `save-creds` — escribe tokens OAuth en `~/.hermes/google_token.json` y configura `google.client_id` vía `hermes config set`
+- `set-provider` — configura el proveedor de IA vía `hermes config set model.provider/default`
+
 **Si un comando no está en COMMAND_MAP, el agente lo ignora** (no ejecuta nada fuera de la lista).
+
+### 5.3 Agente standalone (agent.py)
+
+Para entornos sin el supervisor, `packages/agent/agent.py` implementa un bucle más simple:
+1. Registra el agente via `POST /register`
+2. Almacena `agent_token` cifrado con Fernet + `master.key`
+3. Poll `GET /agent/:id/poll` cada 15s (+ jitter 0-2s)
+4. Ejecuta comandos (simulados en POC)
+5. Reporta vía `POST /vcoo/:id/commands/:cmd_id/result`
 
 ### 5.3 Mecanismo de reporte con ACK
 
@@ -571,62 +570,52 @@ def get_total_steps(modules: list[str]) -> int:
 
 ### 8.1 Responsabilidades del install.sh
 
-Cuando el cliente ejecuta el one-liner, `install.sh` debe:
+Instalador real en `packages/agent/install.sh` (v2.4). Cuando el cliente ejecuta el one-liner:
 
-1. **Verificar Python 3.10+** — instalarlo si falta (apt-get)
-2. **Instalar Hermes Agent** — descargar e instalar el binario `hermes`
-3. **Descargar scripts VCOO** — desde `/playbooks/vcoo-*.py` a `~/.hermes/scripts/vcoo/`
-4. **Descargar skills VCOO** — desde el control plane a `~/.hermes/skills/versus-multiagent-orchestration/`
-5. **Crear estructura de directorios** — `~/.hermes/`, `~/.vcoo-agent/`
-6. **Descargar y lanzar agent_http.py** — con `PROVISION_TOKEN`
+1. **Verificar Python 3.10+** — instalarlo si falta (gestor de paquetes del sistema)
+2. **Instalar uv** (opcional, 10x más rápido)
+3. **Crear venv** con 3-tier fallback (uv → venv → venv+sin-pip → pip --user)
+4. **Instalar dependencias** `requests` + `rich` en el venv
+5. **Descargar scripts VCOO** desde `/playbooks/:name/raw` a `~/.hermes/scripts/vcoo/`
+6. **Descargar agent* desde `CONTROL_PLANE/agent_http.py` a `~/.vcoo-agent/agent_http.py`
+7. **Ejecutar agente** en foreground
 
 ```bash
-#!/bin/sh
-# VCOO Agent one-liner installer v2
-set -e
+#!/usr/bin/env bash
+# packages/agent/install.sh — VCOO Agent Installer v2.4
+# One-liner: curl -sSL <url>/install.sh | PROVISION_TOKEN=*** bash -
+set -euo pipefail
 
 CONTROL_PLANE="${CONTROL_PLANE:-https://vcoo-onboarding.vercel.app}"
-HERMES_VERSION="${HERMES_VERSION:-latest}"
+AGENT_URL="${AGENT_URL:-${CONTROL_PLANE}/agent_http.py}"
+AGENT_HOME="${AGENT_HOME:-$HOME/.vcoo-agent}"
+VENV_DIR="$AGENT_HOME/venv"
+HERMES_DIR="${HERMES_DIR:-$HOME/.hermes}"
+VCOO_DIR="$HERMES_DIR/scripts/vcoo"
 
-echo "=== VCOO Agent Installer v2 ==="
-
-# ── 1. Verificar Python ──
+# ── 1. Python 3 ──
 if ! command -v python3 >/dev/null 2>&1; then
-    echo "Instalando Python 3..."
-    apt-get update -qq && apt-get install -y -qq python3 python3-pip
+    apt-get install -y -qq python3
 fi
 
-# ── 2. Instalar Hermes Agent ──
-if ! command -v hermes >/dev/null 2>&1; then
-    echo "Instalando Hermes Agent..."
-    curl -fsSL https://get.hermes.fyi | bash
-fi
+# ── 2. Venv con 3-tier fallback ──
+# Tier 1: uv venv
+# Tier 2: python3 -m venv
+# Tier 3: --without-pip + get-pip.py
+ensure_venv() { ... }
 
-# ── 3. Crear estructura ──
-mkdir -p ~/.hermes/scripts/vcoo
-mkdir -p ~/.hermes/skills/versus-multiagent-orchestration
-mkdir -p ~/.vcoo-agent
+# ── 3. Instalar deps ──
+"$VENV_DIR/bin/pip" install -q requests rich
 
 # ── 4. Descargar scripts VCOO ──
-echo "Descargando scripts VCOO..."
 for script in vcoo-bootstrap.py vcoo-google.py vcoo-trello.py vcoo-email.py; do
-    curl -fsSL "$CONTROL_PLANE/playbooks/$script" -o ~/.hermes/scripts/vcoo/$script
-    chmod +x ~/.hermes/scripts/vcoo/$script
+    curl -fsSf -o "$VCOO_DIR/$script" "$CONTROL_PLANE/playbooks/$script/raw"
+    chmod 700 "$VCOO_DIR/$script"
 done
 
-# ── 5. Descargar skills VCOO ──
-echo "Descargando skills VCOO..."
-curl -fsSL "$CONTROL_PLANE/skills/vcoo-core.tar.gz" | tar xz -C ~/.hermes/skills/versus-multiagent-orchestration/
-
-# ── 6. Instalar dependencias Python ──
-python3 -m pip install --user requests 2>/dev/null || true
-
-# ── 7. Lanzar agente polling ──
-AGENT_URL="$CONTROL_PLANE/agent_http.py"
-curl -fsSL "$AGENT_URL" -o /tmp/vcoo-agent_http.py
-
-echo "Starting agent..."
-python3 /tmp/vcoo-agent_http.py "$CONTROL_PLANE" "$PROVISION_TOKEN"
+# ── 5. Descargar y ejecutar agente ──
+curl -fsSf -o "$AGENT_HOME/agent_http.py" "$AGENT_URL"
+exec "$VENV_DIR/bin/python" "$AGENT_HOME/agent_http.py" "$CONTROL_PLANE" "$PROVISION_TOKEN"
 ```
 
 ### 8.2 Script `vcoo-bootstrap.py` — Verificación inicial
@@ -865,7 +854,7 @@ Después del cleanup, persiste únicamente:
 
 ### 12.3 Polling del frontend
 
-El frontend hace `GET /setup/:token` cada **3 segundos** mientras está en la página de setup para actualizar el progreso automáticamente cuando el agente reporta resultados.
+El frontend hace `GET /setup/:token` cada **15 segundos** (`setInterval(fetchOnboarding, 15000)` en `SetupWizard.tsx`) mientras está en la página de setup para actualizar el progreso automáticamente cuando el agente reporta resultados.
 
 ---
 
@@ -873,11 +862,17 @@ El frontend hace `GET /setup/:token` cada **3 segundos** mientras está en la p�
 
 ### Tokens
 
+### Tokens y autenticación
+
 | Token | Quién lo crea | Validez | Propósito |
 |---|---|---|---|
-| `provision_token` (JWT) | Control plane | **7 días**, 1 uso | Identificar al cliente durante el onboarding |
-| `agent_token` (JWT) | Control plane | **7 días** | Autenticar al agente en el polling |
-| `MASTER_KEY` | Operador | Permanente | Firmar JWTs en el backend |
+| `provision_token` (JWT) | Backend | **7 días**, 1 uso | Identificar al cliente durante el onboarding |
+| `agent_token` (JWT) | Backend | **30 días** | Autenticar al agente en el polling |
+| `operator_token` (JWT) | Backend | **24 horas** | Sesión de operador en el dashboard |
+| `client_token` (JWT) | Backend | **30 días** | Sesión de cliente en el wizard |
+| `MASTER_KEY` | Operador | Permanente | Firmar JWTs + cifrado de API keys |
+
+Implementado en `apps/backend/auth.py` con tres token types: `operator`, `client`, `agent`. Cada token incluye `jti` (JWT ID) para revocación individual vía tabla `revoked_tokens`. Soporta refresh con rotation.
 
 ### Comunicaciones
 
@@ -885,6 +880,18 @@ El frontend hace `GET /setup/:token` cada **3 segundos** mientras está en la p�
 - El `agent_token` viaja en header `Authorization: Bearer ***`
 - El control plane valida el token JWT en cada petición
 - El agente nunca expone puertos al exterior (solo conexiones salientes)
+- WebSocket bridge local (`ws_bridge.py`) para streaming de logs en tiempo real
+
+### Seguridad adicional
+
+| Mecanismo | Dónde |
+|---|---|
+| JWT con JTI + revocación | `auth.py` + `revoked_tokens` |
+| bcrypt (12 rounds) para passwords | `auth.py` |
+| Rate limiting (5 intentos/5 min) por IP | `ratelimit.py` |
+| Cifrado PBKDF2+XOR+HMAC para API keys | `crypto.py` |
+| Fernet para agent token en disco | `packages/agent/agent.py` |
+| RLS en todas las tablas de Supabase | Migración SQL |
 
 ### Principio de mínimo privilegio
 
@@ -894,28 +901,42 @@ El frontend hace `GET /setup/:token` cada **3 segundos** mientras está en la p�
 
 ---
 
-## 14. Plan de Implementación
+## 14. Plan de Implementación (histórico)
 
-| # | Componente | Tarea | Esfuerzo | Depende de |
-|---|---|---|---|---|
-| 1 | **Backend** | Crear tabla `onboarding_state` + extender `commands` en Supabase | 30 min | — |
-| 2 | **Backend** | Endpoint `POST /agent/:id/result` con ACK + lógica de pasos | 1h | #1 |
-| 3 | **Backend** | Endpoint `GET /setup/:token` para el wizard frontend | 30 min | #1 |
-| 4 | **Backend** | Extender `POST /vcoo` para aceptar `modules` | 30 min | #1 |
-| 5 | **Backend** | Endpoint `GET /vcoo/:id/state` extendido con progreso | 30 min | #1 |
-| 6 | **Backend** | Endpoint `POST /agent/heartbeat` | 15 min | — |
-| 7 | **Backend** | Lógica de reintentos (×3 → blocked) y skip de paso | 45 min | #2 |
-| 8 | **Agente** | COMMAND_MAP fijo + ejecución de scripts VCOO | 1h | — |
-| 9 | **Agente** | Reporte con ACK (reintentos + backoff 5s/15s/30s) | 1h | #2 |
-| 10 | **Agente** | Heartbeat periódico (cada 60s) | 30 min | #6 |
-| 11 | **Agente** | Comando `finalize` con cleanup + autoborrado | 1h | — |
-| 12 | **Playbooks** | Crear `vcoo-bootstrap.py`, `vcoo-google.py`, `vcoo-trello.py`, `vcoo-email.py` | 2h | — |
-| 13 | **install.sh** | Refactorizar: instalar Hermes + scripts + skills + lanzar agente | 1h | #12 |
-| 14 | **Frontend** | Wizard paso a paso en `/setup/:token` | 3h | #3, #5 |
-| 15 | **Frontend** | Dashboard extendido con módulos, progreso y gestión de errores | 1.5h | #5, #7 |
-| 16 | **Integración** | Tests end-to-end con Docker simulado | 2h | #1–15 |
+Items del plan original (SPEC v2.0). Todos implementados:
 
-**Total estimado:** ~16 horas
+| # | Componente | Tarea | Estado |
+|---|---|---|---|
+| 1 | **Backend** | Crear tabla `onboarding_state` + extender `commands` | ✅ Implementado |
+| 2 | **Backend** | `POST /agent/:id/result` con ACK + lógica de pasos | ✅ Implementado |
+| 3 | **Backend** | `GET /setup/:token` para el wizard | ✅ Implementado |
+| 4 | **Backend** | Extender `POST /vcoo` para aceptar `modules` | ✅ Implementado |
+| 5 | **Backend** | `GET /vcoo/:id/state` extendido con progreso | ✅ Implementado |
+| 6 | **Backend** | `POST /agent/heartbeat` | ✅ Implementado |
+| 7 | **Backend** | Reintentos (×3 → blocked) y skip de paso | ✅ Implementado |
+| 8 | **Agente** | COMMAND_MAP fijo + scripts VCOO | ✅ Implementado |
+| 9 | **Agente** | Reporte con ACK (reintentos + backoff) | ✅ Implementado |
+| 10 | **Agente** | Heartbeat periódico (cada 60s) | ✅ Implementado |
+| 11 | **Agente** | Comando `finalize` con cleanup + autoborrado | ✅ Implementado |
+| 12 | **Playbooks** | Scripts de verificación VCOO | ✅ Implementado |
+| 13 | **install.sh** | Instalador v2.4 con venv + uv | ✅ Implementado |
+| 14 | **Frontend** | Wizard paso a paso en `/setup/:token` | ✅ Implementado |
+| 15 | **Frontend** | Dashboard con módulos, progreso y errores | ✅ Implementado |
+| 16 | **Integración** | Tests e2e | 🟡 Tests parciales (pytest auth, Playwright ad-hoc) |
+
+### Mejoras pendientes (ver architecture-review.md)
+
+| # | Mejora | Prioridad |
+|---|---|---|
+| P1 | Cifrado de credenciales en disco (`~/.hermes/`) | Alta |
+| P2 | Timeout + auto-skip para pasos opcionales | Media |
+| P3 | Webhooks en vez de polling agente | Media |
+| P4 | Supabase Realtime para frontend | Media |
+| P5 | Verificación SHA-256 de install.sh | Baja |
+| P6 | Rate limiting en `/register` y `/poll` | Baja |
+| P7 | Multi-VCOO agent | Baja |
+| P8 | Custom domain | Baja |
+| P9 | Tests E2E automatizados (Playwright) | Baja |
 
 ---
 
