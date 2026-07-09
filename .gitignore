@@ -4,6 +4,9 @@ __pycache__/
 agent.token
 master.key
 .env
+# Todos los .env* con secretos (Vercel CLI, local, prod…); .example sí se versiona
+.env.*
+!.env.example
 /tmp/
 .vercel
 node_modules/
@@ -11,8 +14,14 @@ dist/
 
 # Monorepo: apps
 apps/*/.env
+apps/*/.env.*
+!apps/*/.env.example
 apps/backend/test*.py
 apps/backend/test.db
+
+# SQLite de tests (raíz)
+test.db
+*.db-journal
 
 # Cobertura y caché de tests
 .coverage
