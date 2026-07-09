@@ -27,6 +27,7 @@ interface ProviderInfo {
   id: string;
   nombre: string;
   descripcion: string;
+  auth?: { type?: string; credential?: string; hint?: string };
 }
 
 interface OnboardingState {
@@ -631,7 +632,7 @@ const SetupWizard = () => {
 
     if (proveedorSeleccionado) {
       const prov = raw.find(p => p.id === proveedorSeleccionado);
-      const auth = prov?.auth as { type?: string; credential?: string; hint?: string } | undefined;
+      const auth = prov?.auth;
       return (
         <div className="space-y-6 max-w-2xl">
           <button onClick={() => { setProveedorSeleccionado(null); setError(null); }}
