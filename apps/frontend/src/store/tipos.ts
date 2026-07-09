@@ -3,7 +3,7 @@ import type { AuthState } from '../auth/authContext';
 export interface Servicio {
   id: string;
   nombre: string;
-  estado: 'en-linea' | 'fuera-de-linea' | 'pausado' | 'configurando';
+  estado: 'en-linea' | 'fuera-de-linea' | 'completado' | 'pausado' | 'configurando';
   modulos: string[];
   ultimoVisto: string; // ISO timestamp
 }
@@ -37,7 +37,7 @@ export type EstadoClienteInfo = {
   id: string;
   nombre: string;
   email: string;
-  estado: 'en-linea' | 'fuera-de-linea' | 'pausado';
+  estado: 'en-linea' | 'fuera-de-linea' | 'completado' | 'pausado';
   servicios: Servicio[];
   ultimoContacto: string;
 };
@@ -70,7 +70,7 @@ export interface EstadoOperador {
   clienteActual: ClienteActual | null;
   productos: Producto[];
   filtros: {
-    estado: ('en-linea' | 'fuera-de-linea' | 'pausado')[];
+    estado: ('en-linea' | 'fuera-de-linea' | 'completado' | 'pausado')[];
     rangoDeFecha: { desde: string | null; hasta: string | null };
   };
   consultaDeBusqueda: string;

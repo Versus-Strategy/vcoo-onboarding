@@ -52,10 +52,10 @@ export function useApiMutacion<TData = unknown, TVariables = void, TError = unkn
 
 function vcooToServicio(vcoo: Record<string, unknown>): Servicio {
   const agent = vcoo.agent as Record<string, unknown> | undefined;
-  let estado: string;
+  let estado: Servicio['estado'];
 
   if (vcoo.status === 'completed') {
-    estado = 'pausado';
+    estado = 'completado';
   } else if (agent) {
     // Agent exists — use its computed online/offline status
     estado = agent.status === 'online' ? 'en-linea' : 'fuera-de-linea';
