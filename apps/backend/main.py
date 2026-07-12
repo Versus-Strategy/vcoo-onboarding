@@ -72,6 +72,16 @@ def _url(var: str, *, vercel_default: str, local_default: str) -> str:
 
 application = FastAPI(title="VCOO Onboarding API v2")
 
+
+@application.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+
 # Global exception handler — return detail but not traceback in production
 @application.exception_handler(Exception)
 async def global_exception_handler(request, exc):
