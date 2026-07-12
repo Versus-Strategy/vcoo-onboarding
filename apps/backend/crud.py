@@ -346,14 +346,20 @@ def create_provision_for_vcoo(db: Session, vcoo_id: str, expires_minutes: int = 
     return token
 
 
-def validate_provision_token(db: Session, token: str):
+def validate_provision_token(db: Session, token: str, mark_used: bool = False):
     """Validate a provision token and return its VCOO id.
-    Tokens are not consumed — they remain valid until expiration."""
+    By default does not consume the token (allows read-only access).
+    Pass mark_used=True to consume it (one-time use for registration)."""
     pt = db.query(models.ProvisionToken).filter(models.ProvisionToken.token == token).first()
     if not pt:
         return None
     if pt.expires_at and pt.expires_at.replace(tzinfo=None) < datetime.utcnow():
         return None
+    if mark_used and pt.used:
+        return None
+    if mark_used:
+        pt.used = True
+        db.commit()
     return str(pt.vcoo_id)
 
 
@@ -603,6 +609,9 @@ def revoke_token(db: Session, jti: str, token_type: str = None, revoked_by: str 
     if existing:
         return False
     rt = models.RevokedToken(jti=jti, token_type=token_type, revoked_by=revoked_by)
+    # Invalidar cache de JTI en auth.py
+    from auth import _invalidate_jti
+    _invalidate_jti(jti)
     db.add(rt)
     db.commit()
     return True

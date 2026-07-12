@@ -1,5 +1,6 @@
 import jwt
 import os
+import time
 import uuid
 import logging as _logging
 from datetime import datetime, timedelta
@@ -155,15 +156,38 @@ def verify_password(password: str, hashed: str) -> bool:
         return False
 
 
+_jti_cache: dict[str, tuple[bool, float]] = {}
+_JTI_CACHE_TTL = 30  # segundos
+
+
+def _reset_jti_cache():
+    """Clear the JTI revocation cache (used by test teardown)."""
+    _jti_cache.clear()
+
+
+def _invalidate_jti(jti: str):
+    """Remove a specific JTI from the cache (called when token is revoked)."""
+    _jti_cache.pop(jti, None)
+
+
 def _is_jti_revoked(jti: str) -> bool:
-    """Check if a JWT ID has been revoked. Opens a lightweight DB session."""
+    """Check if a JWT ID has been revoked. Uses a short-lived in-memory cache."""
     if not jti:
         return False
+    now = time.time()
+    if jti in _jti_cache:
+        result, ts = _jti_cache[jti]
+        if now - ts < _JTI_CACHE_TTL:
+            return result
+        del _jti_cache[jti]
+    if len(_jti_cache) > 500:
+        _jti_cache.clear()
     try:
         db = SessionLocal()
         from crud import is_token_revoked as _check
         result = _check(db, jti)
         db.close()
+        _jti_cache[jti] = (result, now)
         return result
     except Exception:
         return False

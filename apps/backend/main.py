@@ -22,6 +22,16 @@ _CONTROL_PLANE_PROD = "https://vcoo-onboarding.vercel.app"
 _DASHBOARD_PROD = "https://vcoo-dashboard.vercel.app"
 
 # Comandos de verificación válidos para agentes (compartido entre poll y tick)
+_MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+
+
+def _safe_read_file(path: str) -> str:
+    """Lee un archivo con límite de tamaño para evitar DoS."""
+    size = _os.path.getsize(path)
+    if size > _MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail="Archivo demasiado grande")
+    with open(path, 'r') as f:
+        return f.read()
 
 
 def _install_command(control_plane: str, token: str) -> str:
@@ -241,7 +251,9 @@ def healthz():
 
 
 @application.post("/auth/verify")
-def verify_auth(payload: dict):
+def verify_auth(payload: dict, request: Request = None):
+    client_ip = request.client.host if request and request.client else "unknown"
+    ratelimit._login_limiter.check_and_record(client_ip)
     password = payload.get("password", "")
     if auth.verify_dashboard_password(password):
         return {"status": "ok"}
@@ -326,8 +338,11 @@ def refresh_token(payload: schemas.RefreshRequest, db: Session = Depends(get_db)
 # ── Operator auth ────────────────────────────────────────────
 
 @application.post("/auth/operator/register")
-def operator_register(payload: schemas.OperatorRegisterRequest, db: Session = Depends(get_db)):
+def operator_register(payload: schemas.OperatorRegisterRequest, db: Session = Depends(get_db),
+                      request: Request = None):
     """Register a new operator."""
+    client_ip = request.client.host if request and request.client else "unknown"
+    ratelimit._login_limiter.check_and_record(client_ip)
     existing = crud.get_operator_by_email(db, payload.email)
     if existing:
         raise HTTPException(status_code=409, detail="Email ya registrado")
@@ -356,10 +371,13 @@ def revoke_operator_token(payload: dict, db: Session = Depends(get_db),
 # ── Client auth ──────────────────────────────────────────────
 
 @application.post("/auth/client/register")
-def client_register(payload: schemas.ClientRegisterRequest, db: Session = Depends(get_db)):
+def client_register(payload: schemas.ClientRegisterRequest, db: Session = Depends(get_db),
+                    request: Request = None):
     """Register a new client linked to a VCOO via a provision token or VCOO UUID."""
-    # 1. Validate the provision token
-    vcoo_id = crud.validate_provision_token(db, payload.token)
+    client_ip = request.client.host if request and request.client else "unknown"
+    ratelimit._login_limiter.check_and_record(client_ip)
+    # 1. Validate the provision token (consume it — one-time use)
+    vcoo_id = crud.validate_provision_token(db, payload.token, mark_used=True)
     if not vcoo_id:
         # Fallback: accept VCOO UUID directly (wizard sends the UUID from the URL)
         v = crud.get_vcoo(db, payload.token)
@@ -1608,7 +1626,7 @@ def get_playbook(name: str):
     path = _os.path.join(_PLAYBOOKS_DIR, safe_name)
     if not _os.path.isfile(path):
         raise HTTPException(status_code=404, detail='Playbook not found')
-    content = open(path).read()
+    content = _safe_read_file(path)
     return {'name': safe_name, 'script': content}
 
 @application.get('/playbooks/{name}/raw')
@@ -1619,9 +1637,8 @@ def get_playbook_raw(name: str):
     path = _os.path.join(_PLAYBOOKS_DIR, safe_name)
     if not _os.path.isfile(path):
         raise HTTPException(status_code=404, detail='Playbook not found')
-    content = open(path).read()
+    content = _safe_read_file(path)
     return PlainTextResponse(content, media_type='text/x-python')
-
 
 @application.get('/setup/{identifier}/playbooks/{name}')
 def get_vcoo_playbook(identifier: str, name: str, authorization: str = Header(None), db: Session = Depends(get_db)):
@@ -1637,7 +1654,8 @@ def get_vcoo_playbook(identifier: str, name: str, authorization: str = Header(No
     path = _os.path.join(_PLAYBOOKS_DIR, safe_name)
     if not _os.path.isfile(path):
         raise HTTPException(status_code=404, detail='Playbook not found')
-    return PlainTextResponse(open(path).read(), media_type='text/x-python')
+    content = _safe_read_file(path)
+    return PlainTextResponse(content, media_type='text/x-python')
 
 
 # ── Static assets ─────────────────────────────────────────
@@ -1649,7 +1667,7 @@ def get_install_script():
     path = _os.path.join(_STATIC_DIR, 'install.sh')
     if not _os.path.isfile(path):
         raise HTTPException(status_code=404, detail='Not found')
-    content = open(path).read()
+    content = _safe_read_file(path)
     # Inyectar CONTROL_PLANE real y fix para HOME unbound
     control_plane_url = _url('CONTROL_PLANE', vercel_default=_CONTROL_PLANE_PROD, local_default='http://localhost:8000')
     lines = content.split('\n')
