@@ -1354,21 +1354,15 @@ def setup_set_provider(identifier: str, payload: dict, authorization: str = Head
     if not agent:
         raise HTTPException(status_code=400, detail="agent not installed yet")
 
-    if api_key and agent.encryption_key:
-        from crypto import encrypt_api_key
-        encrypted = encrypt_api_key(api_key, agent.encryption_key, str(agent.id))
-        command_payload = json.dumps({
-            "encrypted": encrypted,
-            "provider": provider,
-            "model": model,
-        })
-    else:
-        command_payload = json.dumps({
-            "api_key": api_key,
-            "provider": provider,
-            "model": model,
-            "encrypted": False,
-        })
+    # NOTA: el agente NO descifra API keys (no implementa _crypto_decrypt).
+    # Por ahora enviamos en texto plano. Cuando el agente implemente descifrado,
+    # usar crypto.encrypt_api_key() aquí.
+    command_payload = json.dumps({
+        "api_key": api_key,
+        "provider": provider,
+        "model": model,
+        "encrypted": False,
+    })
     cmd = crud.create_command(db, agent_id=str(agent.id), command="set-provider", result=command_payload)
     return {"status": "command_sent", "cmd_id": str(cmd.id), "provider": provider}
 
