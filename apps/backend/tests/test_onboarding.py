@@ -57,20 +57,22 @@ class TestOnboarding:
 
     # ── /setup/{id}/verify (modo demo, sin agente) ──
 
-    def test_verify_auto_completes_in_demo_mode(self, client, make_vcoo):
+    def test_verify_auto_completes_in_demo_mode(self, client, operator_token, make_vcoo):
         """Sin agente conectado, verify auto-avanza el paso (modo demo)."""
         vid = make_vcoo("VerifyDemo")
-        r = client.post(f"/setup/{vid}/verify")
+        r = client.post(
+            f"/setup/{vid}/verify",
+            headers={"Authorization": f"Bearer {operator_token}"},
+        )
         assert r.status_code == 200
         d = r.json()
         assert d["status"] == "auto_completed"
         assert "step" in d
         assert "next_step" in d
 
-    def test_verify_invalid_identifier_400(self, client):
+    def test_verify_no_auth_401(self, client):
         r = client.post("/setup/nope/verify")
-        assert r.status_code == 400
-        assert r.json()["detail"]["error"] == "token_invalid"
+        assert r.status_code == 401
 
     # ── /setup/{id}/auth-url ──
 

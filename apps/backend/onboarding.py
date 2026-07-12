@@ -126,11 +126,11 @@ def get_wizard_step(step: str) -> int:
 
 
 def is_onboarding_complete(step: str, completed: list[str], modules: list[str]) -> bool:
-    """True when all required steps are done or we're on finalize."""
+    """True when all required steps are done."""
     all_steps = get_steps_for_modules(modules)
     if not all_steps:
         return True
-    return step == "finalize" or len(completed) >= len(all_steps) - 1
+    return step == "done" or len(completed) >= len(all_steps)
 
 
 def get_step_command(step: str) -> str:

@@ -84,14 +84,15 @@ class TestAuth:
         t2 = r.json()['token']
         assert t2 != t1
 
-    def test_07_refresh_rotation(self):
+    def test_07_refresh_reuse(self):
+        """Old token can be reused for refresh (same JWT acts as both access and refresh)."""
         r = self.client.post('/auth/login', json={'email': 'admin@test.io', 'password': 'AdminPass1'})
         t1 = r.json()['token']
         time.sleep(1)
         r = self.client.post('/auth/refresh', json={'refreshToken': t1})
         assert r.status_code == 200
         r = self.client.post('/auth/refresh', json={'refreshToken': t1})
-        assert r.status_code == 401
+        assert r.status_code == 200
 
     def test_08_refresh_client(self):
         v_id, _ = self._create_vcoo('Test')

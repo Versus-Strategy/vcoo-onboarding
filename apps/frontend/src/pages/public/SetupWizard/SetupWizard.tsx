@@ -330,7 +330,7 @@ const SetupWizard = () => {
 
   if (!mostrarWizard) {
     // Still checking localStorage on first render
-    if (checkBase && !auth.cargando) {
+    if (checkBase || auth.cargando) {
       return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center">
           <div className="text-center">
@@ -456,7 +456,7 @@ const SetupWizard = () => {
       // Poll for agent confirmation (max 60s, check every 5s)
       let ok = false;
       for (let i = 0; i < 12; i++) {
-        await new Promise(r => setTimeout(r, 5000));
+        if (i > 0) await new Promise(r => setTimeout(r, 5000));
         const { data } = await apiClient.get(`/setup/${token}`);
         const chk: Record<string, string> = ((data as any).checks as Record<string, string>) || {};
         if (chk.provider === 'ok') { ok = true; break; }
@@ -487,6 +487,7 @@ const SetupWizard = () => {
           await new Promise(r => setTimeout(r, 5000));
         }
         if (modelList.length > 0) {
+          await fetchOnboarding();
           setModoSelectorModelo(true);
         } else {
           await fetchOnboarding();
@@ -758,7 +759,7 @@ const SetupWizard = () => {
               </div>
             ) : modoSelectorModelo ? null
             : auth.type === 'api_key' ? (
-              <div className="space-y-4">
+              <form onSubmit={(e) => { e.preventDefault(); enviarApiKey(prov!.id); }} className="space-y-4">
                 <p className="text-sm text-gray-600">{auth.hint}</p>
                 <input type="password"
                   placeholder={`API Key (${auth.credential || ''})`}
@@ -769,14 +770,14 @@ const SetupWizard = () => {
                 {error && (
                   <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>
                 )}
-                <Button onClick={() => enviarApiKey(prov!.id)}
+                <Button type="submit"
                   disabled={!apiKeyValue.trim() || enviando}
                   loading={enviando}
                   variant="primary" size="lg" className="w-full"
                 >
                   {enviando ? 'Conectando...' : 'Conectar'}
                 </Button>
-              </div>
+              </form>
             ) : auth.type === 'oauth' ? (
               <div className="text-center py-6">
                 <p className="text-sm text-gray-600 mb-4">{auth.hint}</p>

@@ -244,7 +244,9 @@ def operator_login(payload: schemas.LoginRequest, db: Session = Depends(get_db),
 
 @application.post("/auth/refresh")
 def refresh_token(payload: schemas.RefreshRequest, db: Session = Depends(get_db)):
-    """Refresh an existing JWT (operator or client). Issues a new token and revokes the old one (rotation)."""
+    """Refresh an existing JWT (operator or client). Issues a new token.
+    Note: does NOT revoke the old JTI because the same JWT serves as both
+    access token and refresh token. Revoking it would break in-flight requests."""
     decoded = auth.decode_token_ignore_expiry(payload.refreshToken)
     if not decoded:
         raise HTTPException(status_code=401, detail="Token inválido")
@@ -255,11 +257,6 @@ def refresh_token(payload: schemas.RefreshRequest, db: Session = Depends(get_db)
     # Grace period: up to 30 days past expiration
     if datetime.utcnow().timestamp() - exp_ts > 30 * 86400:
         raise HTTPException(status_code=401, detail="Token expirado, no se puede renovar")
-
-    # Revoke old token (rotation — prevents replay)
-    old_jti = decoded.get('jti', '')
-    if old_jti:
-        crud.revoke_token(db, old_jti, token_type=f'{role}_refresh')
 
     if role == 'operador':
         email = decoded.get('email', '')
@@ -592,10 +589,17 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
 
 
 @application.post("/setup/{identifier}/verify")
-def trigger_step_verification(identifier: str, db: Session = Depends(get_db)):
+def trigger_step_verification(identifier: str, authorization: str = Header(None), db: Session = Depends(get_db)):
     """Client clicks 'Verificar' in the wizard — enqueues the verification command.
     Waits up to 10s for the agent to register (race condition fix).
     If no agent is connected, auto-advances the step for dev/demo mode."""
+    if not authorization or not authorization.lower().startswith('bearer '):
+        raise HTTPException(status_code=401, detail="auth required")
+    bearer = authorization.split(None, 1)[1]
+    token_payload = auth.verify_client_token(bearer)
+    if not token_payload:
+        raise HTTPException(status_code=401, detail="invalid token")
+    is_operator = token_payload.get('role') == 'operador'
     v = crud.get_vcoo(db, identifier)
     if not v:
         raise HTTPException(
@@ -606,6 +610,13 @@ def trigger_step_verification(identifier: str, db: Session = Depends(get_db)):
                 "action": "solicitar_nuevo_enlace"
             }
         )
+    vcoo_id = str(v.id)
+    if not is_operator:
+        client_email = token_payload.get("email", "")
+        client_obj = crud.get_client_by_email(db, client_email)
+        owns = client_obj and client_obj.vcoo_id and str(client_obj.vcoo_id) == vcoo_id
+        if not owns:
+            raise HTTPException(status_code=403, detail="not your VCOO")
     vcoo_id = str(v.id)
     st = crud.get_onboarding_state(db, vcoo_id)
     if not st:

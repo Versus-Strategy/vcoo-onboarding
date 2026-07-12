@@ -61,20 +61,20 @@ apiClient.interceptors.response.use(
         const stored = localStorage.getItem('vcoo-auth');
         if (stored) {
           const parsed = JSON.parse(stored);
-          if (parsed.refreshToken) {
+          if (parsed.token) {
             const { data } = await apiClient.post('/auth/refresh', {
-              refreshToken: parsed.refreshToken,
+              refreshToken: parsed.token,
             });
 
-            const newToken = data.accessToken || data.token || parsed.token;
+            const newToken = data.token || parsed.token;
             parsed.token = newToken;
-            parsed.refreshToken = newToken;
             parsed.marcaDeTiempo = Date.now();
             localStorage.setItem('vcoo-auth', JSON.stringify(parsed));
 
-            // Notificar a peticiones en cola
-            colaRefresh.forEach(cb => cb(newToken));
+            // Notificar a peticiones en cola con el nuevo token
+            const cola = colaRefresh;
             colaRefresh = [];
+            cola.forEach(cb => cb(newToken));
 
             // Retry original request with new token
             originalRequest.headers.Authorization = `Bearer ${newToken}`;
@@ -84,11 +84,13 @@ apiClient.interceptors.response.use(
         }
       } catch {
         // If refresh fails, redirect to login
+        const cola = colaRefresh;
+        colaRefresh = [];
+        cola.forEach(cb => cb(''));  // vaciar cola
+        refrescando = false;
         localStorage.removeItem('vcoo-auth');
         window.location.href = '/login';
         return Promise.reject(error);
-      } finally {
-        refrescando = false;
       }
     }
 

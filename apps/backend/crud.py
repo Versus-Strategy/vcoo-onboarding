@@ -566,27 +566,33 @@ def process_agent_result(
 
     vcoo_id = str(agent.vcoo_id)
 
+    # Commands without a step ("set-provider", "save-creds") are config commands,
+    # not verification steps — do NOT advance onboarding for them.
+    is_verification_step = bool(cmd.step and cmd.step.strip())
+
     if status == "ok":
-        # Advance onboarding + auto-enqueue next step
-        st = advance_onboarding_step(db, vcoo_id, step)
-        if st and st.step not in ("done", step):
-            from onboarding import get_step_command
-            cmd_name = get_step_command(st.step)
-            if cmd_name:
-                create_command(db, agent_id=agent_id, command=cmd_name, step=st.step)
-        next_step = st.step if st and st.step != "done" else None
+        if is_verification_step:
+            st = advance_onboarding_step(db, vcoo_id, step)
+            if st and st.step not in ("done", step):
+                from onboarding import get_step_command
+                cmd_name = get_step_command(st.step)
+                if cmd_name:
+                    create_command(db, agent_id=agent_id, command=cmd_name, step=st.step)
+            next_step = st.step if st and st.step != "done" else None
+        else:
+            next_step = None
         return cmd, True, next_step, 201
     else:
-        # Record error
-        st = add_onboarding_error(db, vcoo_id, step, output)
-        if st and st.status == "blocked":
-            return cmd, True, None, 201  # blocked, stop
-        # Re-enqueue same command for retry (if not blocked)
-        if st and st.status != "blocked":
-            from onboarding import get_step_command
-            cmd_name = get_step_command(step)
-            create_command(db, agent_id=agent_id, command=cmd_name, step=step)
-        return cmd, True, step, 201  # same step, retry pending
+        if is_verification_step:
+            st = add_onboarding_error(db, vcoo_id, step, output)
+            if st and st.status == "blocked":
+                return cmd, True, None, 201
+            if st and st.status != "blocked":
+                from onboarding import get_step_command
+                cmd_name = get_step_command(step)
+                create_command(db, agent_id=agent_id, command=cmd_name, step=step)
+            return cmd, True, step, 201
+        return cmd, True, None, 201
 
 
 # ── Audit Log ────────────────────────────────────────────────
