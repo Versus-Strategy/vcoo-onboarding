@@ -67,14 +67,15 @@ def decode_agent_token(token: str):
 
 # Dashboard password verification
 _DASHBOARD_PASSWORD = os.getenv('DASHBOARD_PASSWORD')
-if not _DASHBOARD_PASSWORD:
-    if os.getenv('VERCEL_ENV'):
-        raise RuntimeError("DASHBOARD_PASSWORD must be set in production")
-    _DASHBOARD_PASSWORD = 'versus'  # dev default only
 
 def verify_dashboard_password(password: str) -> bool:
     """Simple password check for dashboard access."""
-    return password == _DASHBOARD_PASSWORD
+    pwd = _DASHBOARD_PASSWORD or os.getenv('DASHBOARD_PASSWORD')
+    if not pwd:
+        if os.getenv('VERCEL_ENV'):
+            return False  # sin fallback en produccion
+        pwd = 'versus'  # dev default only
+    return password == pwd
 
 # Operator login token
 def create_operator_token(email: str, name: str, operator_id: str = '', expires_hours: int = 24):
