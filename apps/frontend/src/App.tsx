@@ -27,15 +27,6 @@ const PantallaCarga = ({ texto = 'Cargando...' }: { texto?: string }) => (
 function AppContent() {
   const { auth } = useAuth();
 
-  // Ruta pública para el wizard de onboarding — no requiere autenticación
-  if (window.location.pathname.startsWith('/setup/') || window.location.pathname.startsWith('/onboarding/')) {
-    return (
-      <Suspense fallback={<PantallaCarga />}>
-        <SetupWizard />
-      </Suspense>
-    );
-  }
-
   // Mostrar pantalla de carga mientras se restaura la sesión
   if (auth.cargando) {
     return <PantallaCarga texto="Cargando sesión..." />;
@@ -83,6 +74,12 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/setup/:token" element={
+            <Suspense fallback={<PantallaCarga />}><SetupWizard /></Suspense>
+          } />
+          <Route path="/onboarding/:token" element={
+            <Suspense fallback={<PantallaCarga />}><SetupWizard /></Suspense>
+          } />
           <Route path="*" element={<AppContent />} />
         </Routes>
       </BrowserRouter>

@@ -30,22 +30,30 @@ interface ProviderInfo {
   auth?: { type?: string; credential?: string; hint?: string };
 }
 
+interface OnboardingProgress {
+  total: number;
+  done: number;
+}
+
 interface OnboardingState {
   vcoo_id: string;
   name: string;
   modules: string[];
-  module_labels?: Record<string, ModuleLabel>;
-  providers?: ProviderInfo[];
+  module_labels: Record<string, ModuleLabel>;
+  providers: ProviderInfo[];
   step: string;
-  wizard_step?: number;
+  wizard_step: number;
   status: string;
   completed: string[];
-  all_done?: boolean;
+  all_done: boolean;
   install_command: string;
   agent_online: boolean;
-  progress: number | { total: number; done: number };
-  checks?: Record<string, string>;
-  models?: Record<string, string[]>;
+  progress: OnboardingProgress;
+  checks: Record<string, string>;
+  models: Record<string, string[] | { list?: string[]; models?: string[]; recommended?: string }>;
+  requires_registration?: boolean;
+  errors: Array<{ step: string; error: string; timestamp?: string; skipped_by_operator?: boolean }>;
+  retry_count: Record<string, number>;
 }
 
 const PASOS = [
@@ -178,7 +186,7 @@ const AuthForm = ({ setupToken, onAutenticado }: AuthFormProps) => {
                 className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 outline-none transition-colors"
                 placeholder="••••••••"
                 required
-                minLength={6}
+                minLength={8}
               />
             </div>
 
@@ -289,15 +297,24 @@ const SetupWizard = () => {
     }
   }, [mostrarWizard, fetchOnboarding]);
 
-  // ── Polling: auto-refresh every 15s + auto-verify when agent online ──
+  // ── Auto-verify when agent comes online on step 0 ──
   useEffect(() => {
     if (!mostrarWizard) return;
     if (onboarding?.agent_online && onboarding.wizard_step === 0) {
-      apiClient.post(`/setup/${token}/verify`).catch(() => {});
+      apiClient.post(`/setup/${token}/verify`).then(() => {
+        fetchOnboarding();
+      }).catch(() => {
+        setError('No se pudo verificar la instalación del agente. Asegúrate de que el agente esté ejecutándose y vuelve a intentar.');
+      });
     }
+  }, [onboarding?.agent_online, onboarding?.wizard_step, mostrarWizard, token, fetchOnboarding]);
+
+  // ── Polling: auto-refresh every 15s ──
+  useEffect(() => {
+    if (!mostrarWizard) return;
     const interval = setInterval(fetchOnboarding, 15000);
     return () => clearInterval(interval);
-  }, [mostrarWizard, fetchOnboarding, onboarding?.agent_online, onboarding?.wizard_step, token]);
+  }, [mostrarWizard, fetchOnboarding]);
 
   // ── Timeout for provider loading ──
   const [providersTimeout, setProvidersTimeout] = useState(false);
@@ -388,7 +405,7 @@ const SetupWizard = () => {
       .filter((s: number | undefined): s is number => s !== undefined)
   ).size;
   // Checks reportados por el agente: "ok" | "missing" | "error"
-  const checks: Record<string, string> = (onboarding as any).checks || {};
+  const checks = onboarding.checks || {};
   const modules = onboarding.modules || [];
   const completed = (onboarding.completed as string[]) || [];
 
@@ -416,10 +433,9 @@ const SetupWizard = () => {
       if (!pasosDegradados.includes(2)) pasosDegradados.push(2);
     }
   }
-  const pasoBackendEfectivo = pasosDegradados.length > 0
-    ? Math.min(...pasosDegradados)
-    : pasoBackend;
-  const progreso = Math.round(Math.min(pasoBackendEfectivo, 3) / 3 * 100);
+  const totalSteps = onboarding.progress?.total || 4;
+  const doneSteps = onboarding.progress?.done ?? pasosCompletados;
+  const progreso = totalSteps > 0 ? Math.round((doneSteps / totalSteps) * 100) : 0;
 
   // ── Conectar proveedor ──
 
@@ -540,6 +556,32 @@ const SetupWizard = () => {
           fetchOnboarding();
         }
       }, 500);
+      // Timeout de seguridad: si después de 120s no se cierra, avisar al usuario
+      const safetyTimer = setTimeout(() => {
+        if (!popup.closed) {
+          clearInterval(checkClosed);
+          setConectando(null);
+          setError('La ventana de autorización no se cerró automáticamente. Ciérrala manualmente y haz clic en "Verificar" si es necesario.');
+        }
+      }, 120000);
+      const handleMessage = (e: MessageEvent) => {
+        if (e.data === 'oauth-complete') {
+          clearInterval(checkClosed);
+          clearTimeout(safetyTimer);
+          setConectando(null);
+          fetchOnboarding();
+          window.removeEventListener('message', handleMessage);
+        }
+      };
+      window.addEventListener('message', handleMessage);
+      // Cleanup si el popup se cierra antes del timeout
+      const pollCleanup = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(pollCleanup);
+          clearTimeout(safetyTimer);
+          window.removeEventListener('message', handleMessage);
+        }
+      }, 1000);
     } catch {
       setError('Error al iniciar la conexión con Google');
       setConectando(null);
@@ -601,7 +643,7 @@ const SetupWizard = () => {
 
     if (modoSelectorModelo) {
       const prov = raw.find(p => p.id === proveedorSeleccionado);
-      const modelsRaw = (((onboarding as any).models || {})[prov?.id || ''] || {});
+      const modelsRaw = (onboarding.models || {})[prov?.id || ''] || {};
       const list: string[] = Array.isArray(modelsRaw) ? modelsRaw : ((modelsRaw.list || modelsRaw.models || []) as string[]);
       const recommended: string = Array.isArray(modelsRaw) ? '' : (modelsRaw.recommended || '');
       const rest = list.filter(m => m !== recommended);
@@ -878,7 +920,7 @@ const SetupWizard = () => {
       const info = modulosInfo[moduloSeleccionado];
       const instr = MODULE_INSTRUCTIONS[moduloSeleccionado];
       const oauthConfig = MODULE_OAUTH[moduloSeleccionado];
-      const googleCheck = (checks as Record<string, string>).google;
+      const googleCheck = checks.google;
       const googleOk = googleCheck === 'ok';
       const googleError = googleCheck === 'error';
       return (
@@ -990,19 +1032,19 @@ const SetupWizard = () => {
                 >
                   <div className="flex flex-col items-center text-center">
                     <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-3 ${
-                      modulo === 'office' && (checks as Record<string, string>).google === 'ok' ? 'bg-green-100' :
-                      modulo === 'mail' && (checks as Record<string, string>).google === 'ok' ? 'bg-green-100' :
+                      modulo === 'office' && checks.google === 'ok' ? 'bg-green-100' :
+                      modulo === 'mail' && checks.google === 'ok' ? 'bg-green-100' :
                       'bg-gray-100'
                     }`}>
-                      {modulo === 'office' && (checks as Record<string, string>).google === 'ok' ? <CheckCircleIcon className="w-7 h-7 text-green-600" /> :
-                       modulo === 'mail' && (checks as Record<string, string>).google === 'ok' ? <CheckCircleIcon className="w-7 h-7 text-green-600" /> :
+                      {modulo === 'office' && checks.google === 'ok' ? <CheckCircleIcon className="w-7 h-7 text-green-600" /> :
+                       modulo === 'mail' && checks.google === 'ok' ? <CheckCircleIcon className="w-7 h-7 text-green-600" /> :
                        info.icono}
                     </div>
                     <h3 className="font-semibold text-gray-900 mb-1">
                       {info.nombre}
                     </h3>
                     <p className="text-sm text-gray-500">
-                      {(checks as Record<string, string>).google === 'ok' && (modulo === 'office' || modulo === 'mail') ? 'Conectado' :
+                      {checks.google === 'ok' && (modulo === 'office' || modulo === 'mail') ? 'Conectado' :
                        info.descripcion}
                     </p>
                   </div>
@@ -1023,7 +1065,7 @@ const SetupWizard = () => {
       developer: ['github', 'vercel', 'supabase'],
     };
     const items: { label: string; ok: boolean }[] = [
-      { label: 'Agente instalado y activo', ok: true },
+      { label: 'Agente instalado y activo', ok: onboarding.agent_online === true },
       { label: 'Proveedor de IA configurado', ok: checks.provider === 'ok' },
       {
         label: 'Módulos conectados',
@@ -1112,6 +1154,8 @@ const SetupWizard = () => {
                 setVistaActual(idx);
                 setProveedorSeleccionado(null);
                 setModuloSeleccionado(null);
+                setModoSelectorModelo(false);
+                setModeloEnCurso(null);
                 setError(null);
               }
             }}

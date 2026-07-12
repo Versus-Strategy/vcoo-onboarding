@@ -20,7 +20,7 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({
   const porcentaje = progreso ?? Math.round(Math.min(pasoCompletado, pasosReales) / pasosReales * 100);
 
   const isDegraded = (idx: number) =>
-    pasosDegradados.includes(idx) || (pasosDegradados.length > 0 && idx === pasosTotales - 1);
+    pasosDegradados.includes(idx);
 
   return (
     <div className="space-y-4">

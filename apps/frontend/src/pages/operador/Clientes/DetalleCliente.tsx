@@ -231,7 +231,8 @@ const DetalleClientePage = () => {
   const completedSteps = (estado?.completed_steps as string[]) || [];
   const onboardingStatus = (estado?.onboarding_status as string) || 'in_progress';
   const modulos = (estado?.modules as string[]) || [];
-  const totalPasos = 5;
+  const progressData = estado?.progress as { total?: number; done?: number } | undefined;
+  const totalPasos = progressData?.total || modulos.length + 1;
 
   const provisionToken = tokenData?.token;
   const installCommand = tokenData?.install_command;
@@ -538,8 +539,9 @@ const DetalleClientePage = () => {
             </div>
 
             {(() => {
-              const currentProvider = providers.find((p) => p.id === provider) as Record<string, unknown> | undefined;
-              const models = (currentProvider?.models as string[]) || [];
+              // Los modelos vienen en capabilities.models[providerId], no dentro de cada provider
+              const capsModels = capabilities?.models as Record<string, string[]> | undefined;
+              const models = capsModels?.[provider] || [];
 
               if (models.length > 0) {
                 return (
