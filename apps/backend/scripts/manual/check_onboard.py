@@ -1,6 +1,6 @@
 import os
 os.environ['POSTGRES_URL'] = 'sqlite:///./test.db'
-os.environ['MASTER_KEY'] = 'vcoo-test-master-key-supersecret-2026'
+os.environ.setdefault('MASTER_KEY', 'dev-key-only-for-local')
 os.environ['SECRET_KEY'] = 'testsecret'
 os.environ['FRONTEND_URL'] = 'https://vcoo-onboarding.vercel.app'
 os.environ['DASHBOARD_URL'] = 'https://vcoo-dashboard.vercel.app'
@@ -9,7 +9,7 @@ import sys
 sys.path.insert(0, '.')
 from fastapi.testclient import TestClient
 import requests
-client = TestClient(app)
+client = TestClient(application)
 resp = client.post('/vcoo', json={'name':'test-vcoo','modules':['core']})
 if resp.status_code != 200:
     print('Error creating VCOO:', resp.text); sys.exit(1)

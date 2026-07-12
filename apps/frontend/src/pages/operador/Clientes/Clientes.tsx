@@ -55,6 +55,9 @@ const ClientesPage = () => {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: ['operador', 'clientes'] });
         },
+        onError: () => {
+          alert('Error al eliminar el cliente. Intenta de nuevo.');
+        },
       });
     }
   };

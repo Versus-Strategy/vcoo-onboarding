@@ -524,6 +524,7 @@ const DetalleClientePage = () => {
                 onChange={(e) => {
                   setProvider(e.target.value);
                   setModel('');
+                  setConfigResult(null);
                 }}
               >
                 {providers.length === 0 ? (

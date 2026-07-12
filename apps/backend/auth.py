@@ -1,12 +1,13 @@
 import jwt
 import os
 import uuid
-import logging
+import logging as _logging
 from datetime import datetime, timedelta
 from fastapi import Header, HTTPException
 from db import SessionLocal
 
-logging.basicConfig(level=logging.DEBUG)
+_logger = _logging.getLogger(__name__)
+_logger.setLevel(_logging.DEBUG if os.getenv("VERCEL_ENV") is None else _logging.INFO)
 
 
 # MASTER_KEY read dynamically from environment
@@ -63,11 +64,15 @@ def decode_agent_token(token: str):
     except Exception:
         return None
 
-# Dashboard password verification (dev: hardcoded 'versus')
-_DASHBOARD_PASSWORD = os.getenv('DASHBOARD_PASSWORD', 'versus')
+# Dashboard password verification
+_DASHBOARD_PASSWORD = os.getenv('DASHBOARD_PASSWORD')
+if not _DASHBOARD_PASSWORD:
+    if os.getenv('VERCEL_ENV'):
+        raise RuntimeError("DASHBOARD_PASSWORD must be set in production")
+    _DASHBOARD_PASSWORD = 'versus'  # dev default only
 
 def verify_dashboard_password(password: str) -> bool:
-    """Simple password check for dashboard access. Dev default: 'versus'."""
+    """Simple password check for dashboard access."""
     return password == _DASHBOARD_PASSWORD
 
 # Operator login token

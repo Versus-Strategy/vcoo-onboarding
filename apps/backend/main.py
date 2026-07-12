@@ -22,6 +22,17 @@ _CONTROL_PLANE_PROD = "https://vcoo-onboarding.vercel.app"
 _DASHBOARD_PROD = "https://vcoo-dashboard.vercel.app"
 
 # Comandos de verificación válidos para agentes (compartido entre poll y tick)
+
+
+def _install_command(control_plane: str, token: str) -> str:
+    """Construye el comando curl para instalar el agente."""
+    return f"curl -sSL {control_plane}/install.sh | CONTROL_PLANE={control_plane} PROVISION_TOKEN={token} bash -"
+
+
+def _check_client_owns_vcoo(db: Session, client_email: str, vcoo_id: str) -> bool:
+    """Verifica que un cliente sea dueño del VCOO."""
+    client_obj = crud.get_client_by_email(db, client_email)
+    return bool(client_obj and client_obj.vcoo_id and str(client_obj.vcoo_id) == vcoo_id)
 _VALID_AGENT_COMMANDS = {
     "verify-bootstrap", "verify-google", "verify-trello", "verify-email",
     "verify-github", "verify-vercel", "verify-supabase",
@@ -450,10 +461,10 @@ def client_me(client: dict = Depends(auth.get_client_from_token), db: Session = 
 
 # ── VCOO ──────────────────────────────────────────────────
 @application.post("/vcoo")
-def create_vcoo(payload: dict = {}, db: Session = Depends(get_db),
+def create_vcoo(payload: schemas.VCOOCreate = None, db: Session = Depends(get_db),
                 operator: dict = Depends(auth.verify_operator_jwt)):
-    name = payload.get("name") if payload else None
-    modules = payload.get("modules", ["core"]) if payload else ["core"]
+    name = payload.name if payload else None
+    modules = payload.modules if payload else ["core"]
     vcoo = crud.create_vcoo(db, name=name)
     # Create onboarding state with selected modules
     crud.get_or_create_onboarding_state(db, str(vcoo.id), modules)
@@ -531,8 +542,7 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
                 is_operator = True
             else:
                 client_email = payload.get("email", "")
-                client_obj = crud.get_client_by_email(db, client_email)
-                is_owner = client_obj and client_obj.vcoo_id and str(client_obj.vcoo_id) == vcoo_id
+                is_owner = _check_client_owns_vcoo(db, client_email, vcoo_id)
 
     if not is_operator and not is_owner:
         if authorization and authorization.lower().startswith('bearer '):
@@ -565,7 +575,7 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
         raw_token = crud.create_provision_for_vcoo(db, vcoo_id)
     else:
         raw_token = active_token_obj.token
-    install_cmd = f"curl -sSL {control_plane}/install.sh | CONTROL_PLANE={control_plane} PROVISION_TOKEN={raw_token} bash -"
+    install_cmd = _install_command(control_plane, raw_token)
     agent = crud.get_agent_by_vcoo(db, vcoo_id)
     agent_online = False
     providers: list = []
@@ -626,11 +636,8 @@ def trigger_step_verification(identifier: str, authorization: str = Header(None)
     vcoo_id = str(v.id)
     if not is_operator:
         client_email = token_payload.get("email", "")
-        client_obj = crud.get_client_by_email(db, client_email)
-        owns = client_obj and client_obj.vcoo_id and str(client_obj.vcoo_id) == vcoo_id
-        if not owns:
+        if not _check_client_owns_vcoo(db, client_email, vcoo_id):
             raise HTTPException(status_code=403, detail="not your VCOO")
-    vcoo_id = str(v.id)
     st = crud.get_onboarding_state(db, vcoo_id)
     if not st:
         raise HTTPException(status_code=404, detail="No hay datos de onboarding")
@@ -1304,9 +1311,7 @@ def setup_set_provider(identifier: str, payload: dict, authorization: str = Head
     is_operator = token_payload.get('role') == 'operador'
     if not is_operator:
         client_email = token_payload.get("email", "")
-        client_obj = crud.get_client_by_email(db, client_email)
-        owns = client_obj and client_obj.vcoo_id and str(client_obj.vcoo_id) == vcoo_id
-        if not owns:
+        if not _check_client_owns_vcoo(db, client_email, vcoo_id):
             raise HTTPException(status_code=403, detail="not your VCOO")
 
     provider = payload.get("provider", "").strip()
@@ -1356,9 +1361,7 @@ def setup_advance_step(identifier: str, authorization: str = Header(None), db: S
     is_operator = token_payload.get('role') == 'operador'
     if not is_operator:
         client_email = token_payload.get("email", "")
-        client_obj = crud.get_client_by_email(db, client_email)
-        owns = client_obj and client_obj.vcoo_id and str(client_obj.vcoo_id) == vcoo_id
-        if not owns:
+        if not _check_client_owns_vcoo(db, client_email, vcoo_id):
             raise HTTPException(status_code=403, detail="not your VCOO")
     st = crud.get_onboarding_state(db, vcoo_id)
     if not st:

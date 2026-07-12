@@ -4,9 +4,9 @@ sys.path.insert(0, '.')
 
 os.environ['POSTGRES_URL'] = 'sqlite:///./test.db'
 from fastapi.testclient import TestClient
-from main import app
+from main import application
 
-client = TestClient(app)
+client = TestClient(application)
 # Create VCOO
 resp = client.post('/vcoo', json={'name':'test-vcoo','modules':['core']})
 print('Create VCOO status:', resp.status_code)

@@ -1,15 +1,15 @@
 import os
 os.environ['POSTGRES_URL'] = 'sqlite:///./test.db'
-os.environ['MASTER_KEY'] = 'vcoo-test-master-key-supersecret-2026'
+os.environ.setdefault('MASTER_KEY', 'dev-key-only-for-local')
 os.environ['SECRET_KEY'] = 'testsecret'
 os.environ['FRONTEND_URL'] = 'https://vcoo-onboarding.vercel.app'
 os.environ['DASHBOARD_URL'] = 'https://vcoo-dashboard.vercel.app'
 os.environ['CONTROL_PLANE'] = 'https://vcoo-onboarding.vercel.app'
 import sys
 sys.path.insert(0, '.')
-from main import app
+from main import application
 from fastapi.testclient import TestClient
-client = TestClient(app)
+client = TestClient(application)
 resp = client.post('/vcoo', json={'name':'test-v2o', modules=['core'] if False else ['core'])
 # Actually we need correct dict
 # Let's just redo
