@@ -12,7 +12,6 @@ import db
 from db import engine, Base, SessionLocal
 import models, crud, auth, schemas, ratelimit
 from ws_routes import register_ws_routes
-import asyncio
 import json
 import os as _os
 
@@ -21,6 +20,20 @@ import os as _os
 
 _CONTROL_PLANE_PROD = "https://vcoo-onboarding.vercel.app"
 _DASHBOARD_PROD = "https://vcoo-dashboard.vercel.app"
+
+# Comandos de verificación válidos para agentes (compartido entre poll y tick)
+_VALID_AGENT_COMMANDS = {
+    "verify-bootstrap", "verify-google", "verify-trello", "verify-email",
+    "verify-github", "verify-vercel", "verify-supabase",
+    "save-creds", "finalize", "set-provider",
+}
+
+# Plantilla de error para token inválido (reutilizada en múltiples endpoints)
+_TOKEN_INVALID_ERROR = {
+    "error": "token_invalid",
+    "message": "El enlace de invitación ha caducado o es inválido. Por favor, solicite un nuevo enlace en el panel de control.",
+    "action": "solicitar_nuevo_enlace",
+}
 
 
 def _url(var: str, *, vercel_default: str, local_default: str) -> str:
@@ -38,18 +51,25 @@ def _url(var: str, *, vercel_default: str, local_default: str) -> str:
 
 application = FastAPI(title="VCOO Onboarding API v2")
 
-# Global exception handler to return details in production
+# Global exception handler — return detail but not traceback in production
 @application.exception_handler(Exception)
 async def global_exception_handler(request, exc):
-    import traceback
-    return JSONResponse(
-        status_code=500,
-        content={"detail": str(exc), "traceback": traceback.format_exc()},
-    )
+    content = {"detail": str(exc)}
+    if not _os.getenv("VERCEL_ENV"):
+        import traceback
+        content["traceback"] = traceback.format_exc()
+    return JSONResponse(status_code=500, content=content)
 
 application.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://vcoo-onboarding.vercel.app",
+        "https://vcoo-dashboard.vercel.app",
+        "http://localhost:3000",
+        "http://localhost:8000",
+        "http://10.0.0.1:3000",
+        "http://10.0.0.1:8000",
+    ],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -494,14 +514,11 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
     v = crud.get_vcoo(db, identifier)
     if not v:
         raise HTTPException(
-            status_code=400,
-            detail={
-                "error": "token_invalid",
-                "message": "El enlace de invitación ha caducado o es inválido. Por favor, solicite un nuevo enlace en el panel de control.",
-                "action": "solicitar_nuevo_enlace"
-            }
-        )
+                    status_code=400,
+                    detail=_TOKEN_INVALID_ERROR,
+                )
     vcoo_id = str(v.id)
+
 
     # Determine auth state
     is_operator = False
@@ -604,11 +621,7 @@ def trigger_step_verification(identifier: str, authorization: str = Header(None)
     if not v:
         raise HTTPException(
             status_code=400,
-            detail={
-                "error": "token_invalid",
-                "message": "El enlace de invitación ha caducado o es inválido. Por favor, solicite un nuevo enlace en el panel de control.",
-                "action": "solicitar_nuevo_enlace"
-            }
+            detail=_TOKEN_INVALID_ERROR,
         )
     vcoo_id = str(v.id)
     if not is_operator:
@@ -701,11 +714,7 @@ def get_auth_url(identifier: str, service: str = "", db: Session = Depends(get_d
     if not v:
         raise HTTPException(
             status_code=400,
-            detail={
-                "error": "token_invalid",
-                "message": "El enlace de invitación ha caducado o es inválido. Por favor, solicite un nuevo enlace en el panel de control.",
-                "action": "solicitar_nuevo_enlace"
-            }
+            detail=_TOKEN_INVALID_ERROR,
         )
     vcoo_id = str(v.id)
     service = service.lower().strip()
@@ -854,7 +863,7 @@ def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session
         "<h1 style=\"color:#533afd\">Autorizacion recibida</h1>"
         "<p>Vuelve al wizard para continuar.</p>"
         "<script>"
-        "try{if(window.opener){window.opener.postMessage('oauth-complete','*');}}catch(e){}"
+        "try{if(window.opener){window.opener.postMessage('oauth-complete','https://vcoo-dashboard.vercel.app');}}catch(e){}"
         "setTimeout(function(){window.close()},1500)"
         "</script></body></html>"
     )
@@ -869,11 +878,7 @@ def get_hermes_commands_endpoint(identifier: str, service: str = "", db: Session
     if not v:
         raise HTTPException(
             status_code=400,
-            detail={
-                "error": "token_invalid",
-                "message": "El enlace de invitación ha caducado o es inválido. Por favor, solicite un nuevo enlace en el panel de control.",
-                "action": "solicitar_nuevo_enlace"
-            }
+            detail=_TOKEN_INVALID_ERROR,
         )
     vcoo_id = str(v.id)
     service = service.lower().strip()
@@ -1061,15 +1066,9 @@ def agent_poll(agent_id: str, authorization: str = Header(None), db: Session = D
         raise HTTPException(status_code=404, detail="agent not found")
     crud.touch_agent(db, agent_id)
     pending = crud.get_pending_commands(db, agent_id)
-    # Solo servir comandos validos del COMMAND_MAP
-    VALID_COMMANDS = {
-        "verify-bootstrap", "verify-google", "verify-trello", "verify-email",
-        "verify-github", "verify-vercel", "verify-supabase",
-        "save-creds", "finalize", "set-provider",
-    }
     result = []
     for cmd in pending:
-        if cmd.command not in VALID_COMMANDS:
+        if cmd.command not in _VALID_AGENT_COMMANDS:
             crud.mark_command_done(db, cmd.id, result="BLOCKED: comando no reconocido, descartado")
             continue
         entry = {"cmd_id": str(cmd.id), "command": cmd.command, "step": cmd.step}
@@ -1494,14 +1493,9 @@ def agent_tick(agent_id: str, body: schemas.TickRequest, authorization: str = He
         crud.acknowledge_command(db, body.last_command_id)
 
     pending = crud.get_pending_commands(db, agent_id, body.last_command_id)
-    VALID_COMMANDS = {
-        "verify-bootstrap", "verify-google", "verify-trello", "verify-email",
-        "verify-github", "verify-vercel", "verify-supabase",
-        "save-creds", "finalize", "set-provider",
-    }
     cmd_dicts = []
     for cmd in pending:
-        if cmd.command not in VALID_COMMANDS:
+        if cmd.command not in _VALID_AGENT_COMMANDS:
             crud.mark_command_done(db, cmd.id, result="BLOCKED: comando no reconocido, descartado")
             continue
         entry = {"cmd_id": str(cmd.id), "command": cmd.command, "step": cmd.step}
@@ -1607,17 +1601,19 @@ def list_playbooks():
 
 @application.get('/playbooks/{name}')
 def get_playbook(name: str):
-    path = _os.path.join(_PLAYBOOKS_DIR, name)
+    safe_name = _os.path.basename(name)
+    path = _os.path.join(_PLAYBOOKS_DIR, safe_name)
     if not _os.path.isfile(path):
         raise HTTPException(status_code=404, detail='Playbook not found')
     content = open(path).read()
-    return {'name': name, 'script': content}
+    return {'name': safe_name, 'script': content}
 
 @application.get('/playbooks/{name}/raw')
 def get_playbook_raw(name: str):
     """Returns raw script content (for curl downloads from install.sh).
     Accepts optional Authorization header (provision token) to gate access."""
-    path = _os.path.join(_PLAYBOOKS_DIR, name)
+    safe_name = _os.path.basename(name)
+    path = _os.path.join(_PLAYBOOKS_DIR, safe_name)
     if not _os.path.isfile(path):
         raise HTTPException(status_code=404, detail='Playbook not found')
     content = open(path).read()
@@ -1634,7 +1630,8 @@ def get_vcoo_playbook(identifier: str, name: str, authorization: str = Header(No
     if not vcoo_id or str(vcoo_id) != identifier:
         raise HTTPException(status_code=403, detail='invalid token')
     from fastapi.responses import PlainTextResponse
-    path = _os.path.join(_PLAYBOOKS_DIR, name)
+    safe_name = _os.path.basename(name)
+    path = _os.path.join(_PLAYBOOKS_DIR, safe_name)
     if not _os.path.isfile(path):
         raise HTTPException(status_code=404, detail='Playbook not found')
     return PlainTextResponse(open(path).read(), media_type='text/x-python')

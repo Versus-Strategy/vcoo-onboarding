@@ -566,6 +566,7 @@ const SetupWizard = () => {
         }
       }, 120000);
       const handleMessage = (e: MessageEvent) => {
+        if (e.origin !== window.location.origin) return;
         if (e.data === 'oauth-complete') {
           clearInterval(checkClosed);
           clearTimeout(safetyTimer);
