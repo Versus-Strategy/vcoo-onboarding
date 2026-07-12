@@ -70,7 +70,7 @@ class RealtimeManager {
   }
 
   private handleWsOpen = () => {
-    console.log('WebSocket connected');
+    if (import.meta.env.DEV) console.log('WebSocket connected');
     this.reconnectAttempts = 0;
 
     usarAlmacen.setState((state) => ({
@@ -90,17 +90,17 @@ class RealtimeManager {
       const data: UpdateData = JSON.parse(event.data);
       this.processUpdates(data);
     } catch (error) {
-      console.error('Error parsing WebSocket message:', error);
+      if (import.meta.env.DEV) console.error('Error parsing WebSocket message:', error);
     }
   };
 
   private handleWsError = (_error: Event) => {
-    console.error('WebSocket error');
+    if (import.meta.env.DEV) console.error('WebSocket error');
     this.handleWsClose();
   };
 
   private handleWsClose = () => {
-    console.log('WebSocket disconnected');
+    if (import.meta.env.DEV) console.log('WebSocket disconnected');
 
     usarAlmacen.setState((state) => ({
       api: {
