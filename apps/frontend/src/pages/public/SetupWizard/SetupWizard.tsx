@@ -276,15 +276,34 @@ const SetupWizard = () => {
   }, [auth.estaAutenticado]);
 
   const fetchOnboarding = useCallback(async () => {
-    if (!token) return;
+    if (!token) {
+      setCargando(false);
+      setError('Token de acceso inválido. Revisa el enlace.');
+      return;
+    }
     try {
       const { data } = await apiClient.get(`/setup/${token}`);
+      if ((data as any).requires_registration) {
+        setOnboarding(null);
+        setError(null);
+        return;
+      }
       setOnboarding(data as OnboardingState);
       setError(null);
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : 'Error al cargar la configuración';
-      setError(msg);
+      const axiosErr = err as { response?: { status?: number; data?: { detail?: string } } };
+      const status = axiosErr?.response?.status;
+      const detail = axiosErr?.response?.data?.detail;
+      if (status === 403) {
+        setError('Tu sesión no tiene acceso a este VCOO. Puedes cerrar sesión e intentar con otra cuenta.');
+      } else if (status === 400 && typeof detail === 'object') {
+        setError((detail as any)?.message || 'El enlace ha caducado. Solicita uno nuevo.');
+      } else if (status === 401) {
+        setMostrarWizard(false);
+        return;
+      } else {
+        setError(err instanceof Error ? err.message : 'Error al cargar la configuración');
+      }
     } finally {
       setCargando(false);
     }
@@ -365,17 +384,25 @@ const SetupWizard = () => {
   // ── Error loading onboarding ──
 
   if (error && !onboarding) {
+    const esErrorAuth = error.includes('sesión') || error.includes('acceso');
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white border border-red-200 rounded-xl p-8 max-w-md w-full text-center shadow-sm">
           <ExclamationTriangleIcon className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <h1 className="text-xl font-bold text-gray-900 mb-2">
-            Error de conexión
+            {esErrorAuth ? 'Acceso denegado' : 'Error de conexión'}
           </h1>
           <p className="text-gray-500 mb-6">{error}</p>
-          <Button variant="primary" onClick={fetchOnboarding}>
-            Reintentar
-          </Button>
+          <div className="flex gap-3 justify-center">
+            <Button variant="primary" onClick={fetchOnboarding}>
+              Reintentar
+            </Button>
+            {esErrorAuth && (
+              <Button variant="secondary" onClick={() => { localStorage.removeItem('vcoo-auth'); window.location.reload(); }}>
+                Cerrar sesión
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -495,7 +522,7 @@ const SetupWizard = () => {
           setApiKeyValue('');
         }
       } else {
-        setError('El agente está procesando la configuración. Haz clic en "Verificar" más tarde.');
+        setError('El agente no confirmó la configuración. Asegúrate de que el agente esté instalado y funcionando, luego vuelve a intentar.');
       }
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
@@ -644,8 +671,17 @@ const SetupWizard = () => {
     const resto = raw.filter(p => p.id !== 'opencode-go' && !destacadosIds.has(p.id));
 
     if (modoSelectorModelo) {
+      if (!proveedorSeleccionado) {
+        setModoSelectorModelo(false);
+        return null;
+      }
       const prov = raw.find(p => p.id === proveedorSeleccionado);
-      const modelsRaw = (onboarding.models || {})[prov?.id || ''] || {};
+      if (!prov) {
+        setModoSelectorModelo(false);
+        setProveedorSeleccionado(null);
+        return null;
+      }
+      const modelsRaw = (onboarding.models || {})[prov.id] || {};
       const list: string[] = Array.isArray(modelsRaw) ? modelsRaw : ((modelsRaw.list || modelsRaw.models || []) as string[]);
       const recommended: string = Array.isArray(modelsRaw) ? '' : (modelsRaw.recommended || '');
       const rest = list.filter(m => m !== recommended);

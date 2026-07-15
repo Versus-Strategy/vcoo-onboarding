@@ -175,7 +175,6 @@ describe('progreso - calculo', () => {
 describe('finalizacion - checks', () => {
   it('todas las condiciones ok cuando todo configurado', () => {
     const agent_online = true;
-    const checks = { provider: 'ok' };
     const modules = ['core', 'office', 'developer'];
     const MODULE_CHECK_KEYS: Record<string, string[]> = {
       office: ['google'],
