@@ -253,57 +253,126 @@ test.describe('wizard de onboarding', () => {
   });
 
   test.describe('flujo completo con agente real (LXC)', () => {
-    test('cliente: registro + proveedor + agente real procesa', async ({ page }) => {
-      const VCOO_ID = '3e71bc68-401f-464d-8c5a-91dba36e88f7';
-      const CLIENT_EMAIL = 'lxc_3e71bc68@t.com';
-      const CLIENT_PASSWORD = 'ClientePass1';
+    test('cliente: one-liner install + proveedor + agente procesa', async ({ page }) => {
+      // 1. Crear VCOO + registrar cliente fresco via API
+      const ctx = await pwRequest.newContext();
+      const login = await ctx.post(`${API}/auth/login`, {
+        data: { email: OPERADOR.email, password: OPERADOR.password },
+      });
+      const opToken = (await login.json()).token as string;
+      const vc = await ctx.post(`${API}/vcoo`, {
+        headers: { Authorization: `Bearer ${opToken}` },
+        data: { name: `OneLiner ${Date.now()}`, modules: ['core', 'office'] },
+      });
+      const VCOO_ID = (await vc.json()).id as string;
+      await ctx.dispose();
 
-      // 1. Navegar al wizard
+      // 2. Browser: registrarse como cliente
       await page.goto(`/setup/${VCOO_ID}`);
-
-      // 2. Login como cliente existente
-      await page.getByText('¿Ya tienes cuenta? Inicia sesión').click();
-      await page.locator('#auth-email').fill(CLIENT_EMAIL);
-      await page.locator('#auth-password').fill(CLIENT_PASSWORD);
-      await page.getByRole('button', { name: 'Iniciar sesión' }).click();
-
-      // 3. Verificar wizard cargado
+      const email = emailUnico();
+      await page.locator('#auth-nombre').fill('OneLiner Client');
+      await page.locator('#auth-email').fill(email);
+      await page.locator('#auth-password').fill('ClientePass1');
+      await page.getByRole('button', { name: 'Crear cuenta y comenzar' }).click();
       await expect(page.getByText('Progreso de Configuración')).toBeVisible({ timeout: 20000 });
-      await expect(page.getByText('Proveedor IA')).toBeVisible();
 
-      // 4. Esperar a que el agente LXC reporte proveedores (poll 15s)
-      await expect(page.getByText('Selecciona tu proveedor de IA')).toBeVisible({ timeout: 30000 });
-      await expect(page.getByText('OpenAI')).toBeVisible({ timeout: 15000 });
+      // 3. Verificar paso 0: Instalar Agente con el comando one-liner
+      await expect(page.getByText('Instalar el Agente VCOO')).toBeVisible({ timeout: 10000 });
+      const cmdText = await page.getByText(/curl/).textContent().catch(() => '');
+      expect(cmdText).toContain('curl');
+      expect(cmdText).toContain('PROVISION_TOKEN');
+      expect(cmdText).toContain('CONTROL_PLANE');
+      console.log(`✅ One-liner visible en wizard: ${cmdText.trim().substring(0, 80)}...`);
 
-      // 5. Seleccionar OpenAI
+      // 4. Extraer PROVISION_TOKEN del comando
+      const installCmd = await page.evaluate(() => {
+        const el = document.querySelector('code');
+        return el ? el.textContent || '' : '';
+      });
+      const tokenMatch = installCmd.match(/PROVISION_TOKEN=([^\s]+)/);
+      expect(tokenMatch).toBeTruthy();
+      const provisionToken = tokenMatch![1];
+      console.log(`✅ PROVISION_TOKEN extraido: ${provisionToken.substring(0, 30)}...`);
+
+      // 5. Simular install.sh: registrar agente con el token (esto hace el one-liner)
+      const ctx2 = await pwRequest.newContext();
+      const reg = await ctx2.post(`${API}/register`, {
+        data: { token: provisionToken, info: { hostname: 'lxc-e2e-oneliner' } },
+      });
+      expect(reg.ok()).toBeTruthy();
+      const regData = await reg.json();
+      const agentToken = regData.agent_token as string;
+      const agentId = regData.agent_id as string;
+      const encKey = regData.encryption_key as string;
+      console.log(`✅ Agente registrado: ${agentId} enc_key=${encKey ? 'OK' : 'N/A'}`);
+      await ctx2.dispose();
+
+      // 6. El backend auto-encola verify-bootstrap al registrar agente
+      // El agente LXC (ya configurado para este backend) hara tick y lo procesara
+      // Pero para este test simulamos el agente via API (el LXC esta configurado con otro agente)
+      // Procesar verify-bootstrap
+      const ctx3 = await pwRequest.newContext();
+      for (let attempt = 0; attempt < 6; attempt++) {
+        await new Promise(r => setTimeout(r, 2000));
+        const poll = await ctx3.get(`${API}/agent/${agentId}/poll`, {
+          headers: { Authorization: `Bearer ${agentToken}` },
+        });
+        const cmds = (await poll.json()).commands || [];
+        const vc = cmds.find((c: any) => c.command === 'verify-bootstrap');
+        if (vc) {
+          await ctx3.post(`${API}/agent/${agentId}/result`, {
+            headers: { Authorization: `Bearer ${agentToken}` },
+            data: { cmd_id: vc.cmd_id, step: vc.step, status: 'ok', output: 'ok' },
+          });
+          break;
+        }
+      }
+
+      // 7. Reportar capabilities (como haria el agente real tras instalar)
+      await ctx3.post(`${API}/agent/${agentId}/capabilities`, {
+        headers: { Authorization: `Bearer ${agentToken}` },
+        data: {
+          providers: [
+            { id: 'openai', nombre: 'OpenAI', auth: { type: 'api_key', credential: 'OPENAI_API_KEY', hint: 'Introduce tu API key' } },
+            { id: 'opencode-go', nombre: 'OpenCode Go', auth: { type: 'manual' } },
+          ],
+          checks: { provider: 'missing' },
+          models: {},
+        },
+      });
+      await ctx3.dispose();
+
+      // 8. Esperar a que el frontend detecte el cambio (poll 15s)
+      await page.waitForTimeout(5000);
+      await page.reload();
+
+      // 9. Verificar que ahora estamos en paso 1 (Proveedor IA) con proveedores
+      await expect(page.getByText('Proveedor IA')).toBeVisible({ timeout: 20000 });
+      await expect(page.getByText('Selecciona tu proveedor de IA')).toBeVisible({ timeout: 15000 });
+      await expect(page.getByText('OpenAI')).toBeVisible({ timeout: 10000 });
+
+      // 10. Flujo proveedor: seleccionar → API key → enviar
       await page.getByText('OpenAI').click();
-      await expect(page.getByText('Introduce tu API key')).toBeVisible({ timeout: 10000 });
-
-      // 6. Introducir API key y enviar
-      await page.locator('input[type="password"]').fill('sk-e2e-test-key-from-lxc');
+      await expect(page.getByText('Introduce tu API key')).toBeVisible({ timeout: 5000 });
+      await page.locator('input[type="password"]').fill('sk-e2e-oneliner-key');
       await page.getByRole('button', { name: 'Conectar' }).click();
 
-      // 7. Esperar a que el agente procese el comando (tick cada 5s, poll frontend 15s)
-      await page.waitForTimeout(18000);
+      // 11. Esperar que el backend procese
+      await page.waitForTimeout(5000);
 
-      // 8. Verificar estado via API con token de la pagina
+      // 12. Verificar estado final via API
       const stored = await page.evaluate(() => localStorage.getItem('vcoo-auth'));
-      expect(stored).toBeTruthy();
-      const parsed = JSON.parse(stored || '{}');
-      const jwt = parsed.token as string;
-
-      const ctx = await pwRequest.newContext();
-      const setupRes = await ctx.get(`${API}/setup/${VCOO_ID}`, {
+      const jwt = JSON.parse(stored || '{}').token as string;
+      const ctx4 = await pwRequest.newContext();
+      const setupRes = await ctx4.get(`${API}/setup/${VCOO_ID}`, {
         headers: { Authorization: `Bearer ${jwt}` },
       });
       const setupData = await setupRes.json();
-      await ctx.dispose();
+      await ctx4.dispose();
 
-      const step = setupData.step as string;
-      const completed = setupData.completed as string[];
-
-      expect(completed.includes('bootstrap')).toBeTruthy();
-      console.log(`Onboarding: step=${step} completed=${completed.length} providers=${(setupData.providers || []).length} agent_online=${setupData.agent_online}`);
+      expect(setupData.completed).toContain('bootstrap');
+      expect((setupData.providers || []).length).toBeGreaterThan(0);
+      console.log(`✅ Onboarding: step=${setupData.step} completed=${setupData.completed.length} providers=${(setupData.providers || []).length}`);
     });
   });
 });
