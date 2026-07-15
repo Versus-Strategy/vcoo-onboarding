@@ -328,17 +328,15 @@ test.describe('wizard de onboarding', () => {
         }
       }
 
-      // 7. Reportar capabilities (como haria el agente real tras instalar)
+      // 7. Reportar capabilities con modelos (como haria el agente real tras instalar)
+      const PROVIDERS = [
+        { id: 'openai', nombre: 'OpenAI', auth: { type: 'api_key', credential: 'OPENAI_API_KEY', hint: 'Introduce tu API key' } },
+        { id: 'opencode-go', nombre: 'OpenCode Go', auth: { type: 'manual' } },
+      ];
+      const MODELS = { openai: { list: ['gpt-4', 'gpt-3.5-turbo'], recommended: 'gpt-4' } };
       await ctx3.post(`${API}/agent/${agentId}/capabilities`, {
         headers: { Authorization: `Bearer ${agentToken}` },
-        data: {
-          providers: [
-            { id: 'openai', nombre: 'OpenAI', auth: { type: 'api_key', credential: 'OPENAI_API_KEY', hint: 'Introduce tu API key' } },
-            { id: 'opencode-go', nombre: 'OpenCode Go', auth: { type: 'manual' } },
-          ],
-          checks: { provider: 'missing' },
-          models: {},
-        },
+        data: { providers: PROVIDERS, checks: { provider: 'missing' }, models: MODELS },
       });
       await ctx3.dispose();
 
@@ -346,33 +344,109 @@ test.describe('wizard de onboarding', () => {
       await page.waitForTimeout(5000);
       await page.reload();
 
-      // 9. Verificar que ahora estamos en paso 1 (Proveedor IA) con proveedores
+      // 9. Verificar paso 1 con proveedores
       await expect(page.getByText('Proveedor IA')).toBeVisible({ timeout: 20000 });
       await expect(page.getByText('Selecciona tu proveedor de IA')).toBeVisible({ timeout: 15000 });
       await expect(page.getByText('OpenAI')).toBeVisible({ timeout: 10000 });
 
-      // 10. Flujo proveedor: seleccionar → API key → enviar
+      // 10. Seleccionar OpenAI → escribir API key → enviar
       await page.getByText('OpenAI').click();
       await expect(page.getByText('Introduce tu API key')).toBeVisible({ timeout: 5000 });
       await page.locator('input[type="password"]').fill('sk-e2e-oneliner-key');
       await page.getByRole('button', { name: 'Conectar' }).click();
 
-      // 11. Esperar que el backend procese
-      await page.waitForTimeout(5000);
-
-      // 12. Verificar estado final via API
-      const stored = await page.evaluate(() => localStorage.getItem('vcoo-auth'));
-      const jwt = JSON.parse(stored || '{}').token as string;
+      // 11. Simular agente: procesa set-provider + reporta provider=ok + modelos
+      // (el frontend poll cada 5s, hay tiempo)
       const ctx4 = await pwRequest.newContext();
-      const setupRes = await ctx4.get(`${API}/setup/${VCOO_ID}`, {
+      for (let attempt = 0; attempt < 8; attempt++) {
+        await new Promise(r => setTimeout(r, 2000));
+        const poll = await ctx4.get(`${API}/agent/${agentId}/poll`, {
+          headers: { Authorization: `Bearer ${agentToken}` },
+        });
+        const spCmd = (await poll.json()).commands?.find((c: any) => c.command === 'set-provider');
+        if (spCmd) {
+          await ctx4.post(`${API}/agent/${agentId}/result`, {
+            headers: { Authorization: `Bearer ${agentToken}` },
+            data: { cmd_id: spCmd.cmd_id, step: spCmd.step || '', status: 'ok', output: 'configured' },
+          });
+          break;
+        }
+      }
+      await ctx4.post(`${API}/agent/${agentId}/capabilities`, {
+        headers: { Authorization: `Bearer ${agentToken}` },
+        data: { providers: PROVIDERS, checks: { provider: 'ok', model: 'missing' }, models: MODELS },
+      });
+      await ctx4.dispose();
+
+      // 12. Esperar a que el frontend polling detecte provider=ok + modelos
+      // El enviarApiKey poll cada 5s, max 60s para provider + 30s para modelos
+      // Como ya pusimos los datos, detectara en el proximo poll (~5s)
+      await expect(page.getByText('RECOMENDADO')).toBeVisible({ timeout: 30000 });
+      // Los nombres de modelo se muestran como texto en el selector
+      const modeloTexto = await page.getByText(/gpt/).first().textContent().catch(() => '');
+      expect(modeloTexto).toContain('gpt-4');
+      await expect(page.getByText('OTROS MODELOS')).toBeVisible();
+      await expect(page.getByText('gpt-3.5-turbo')).toBeVisible();
+
+      // 13. Seleccionar modelo recomendado
+      await page.getByRole('button', { name: 'Seleccionar' }).first().click();
+
+      // 14. Simular agente: procesa el segundo set-provider (modelo) + reporta model=ok
+      const ctx5 = await pwRequest.newContext();
+      for (let attempt = 0; attempt < 8; attempt++) {
+        await new Promise(r => setTimeout(r, 2000));
+        const poll = await ctx5.get(`${API}/agent/${agentId}/poll`, {
+          headers: { Authorization: `Bearer ${agentToken}` },
+        });
+        const cmds = (await poll.json()).commands || [];
+        const spCmd = cmds.find((c: any) => c.command === 'set-provider' && c.payload?.model);
+        if (spCmd) {
+          await ctx5.post(`${API}/agent/${agentId}/result`, {
+            headers: { Authorization: `Bearer ${agentToken}` },
+            data: { cmd_id: spCmd.cmd_id, step: spCmd.step || '', status: 'ok', output: 'model set' },
+          });
+          break;
+        }
+      }
+      await ctx5.post(`${API}/agent/${agentId}/capabilities`, {
+        headers: { Authorization: `Bearer ${agentToken}` },
+        data: { providers: PROVIDERS, checks: { provider: 'ok', model: 'ok' }, models: MODELS },
+      });
+      await ctx5.dispose();
+
+      // 15. El frontend detecta model=ok → llama a /advance automaticamente
+      // Esperar hasta 30s a que el avance se complete
+      await expect(async () => {
+        const stored = await page.evaluate(() => localStorage.getItem('vcoo-auth')).catch(() => '{}');
+        const jwt = JSON.parse(stored || '{}').token;
+        if (!jwt) throw new Error('no token');
+        const ctx6 = await pwRequest.newContext();
+        const setupRes = await ctx6.get(`${API}/setup/${VCOO_ID}`, {
+          headers: { Authorization: `Bearer ${jwt}` },
+        });
+        const d = await setupRes.json();
+        await ctx6.dispose();
+        // El paso debe avanzar mas alla de google-oauth
+        const advanced = d.step !== 'google-oauth';
+        if (!advanced) throw new Error(`step still ${d.step}`);
+        return d;
+      }).toPass({ timeout: 30000 });
+
+      // 16. Verificacion final
+      const stored = await page.evaluate(() => localStorage.getItem('vcoo-auth')).catch(() => '{}');
+      const jwt = JSON.parse(stored || '{}').token as string;
+      const ctx7 = await pwRequest.newContext();
+      const setupRes = await ctx7.get(`${API}/setup/${VCOO_ID}`, {
         headers: { Authorization: `Bearer ${jwt}` },
       });
       const setupData = await setupRes.json();
-      await ctx4.dispose();
+      await ctx7.dispose();
 
       expect(setupData.completed).toContain('bootstrap');
       expect((setupData.providers || []).length).toBeGreaterThan(0);
-      console.log(`✅ Onboarding: step=${setupData.step} completed=${setupData.completed.length} providers=${(setupData.providers || []).length}`);
+      expect(setupData.checks?.provider).toBe('ok');
+      expect(setupData.checks?.model).toBe('ok');
+      console.log(`✅ Onboarding completo: step=${setupData.step} wizard=${setupData.wizard_step} completed=${setupData.completed.length}`);
     });
   });
 });
