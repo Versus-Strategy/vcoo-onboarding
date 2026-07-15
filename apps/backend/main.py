@@ -1122,10 +1122,10 @@ def agent_poll(agent_id: str, authorization: str = Header(None), db: Session = D
     if agent.vcoo_id:
         st = crud.get_onboarding_state(db, str(agent.vcoo_id))
         if st:
-            from onboarding import get_agent_total_steps
+            from onboarding import get_agent_total_steps, has_agent_command
             modules = list(st.modules or ["core"])
             progress_data = {
-                "done": len([s for s in (st.completed or []) if onboarding.has_agent_command(s)]),
+                "done": len([s for s in (st.completed or []) if has_agent_command(s)]),
                 "total": get_agent_total_steps(modules),
             }
     return {

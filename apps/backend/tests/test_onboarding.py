@@ -4,6 +4,8 @@ Nota: /setup/{identifier} usa el UUID del VCOO como identificador (no el token).
 Es read-only y sin auth devuelve requires_registration.
 """
 
+import json
+
 
 class TestOnboarding:
     # ── /setup/{id} (read-only) ──
@@ -92,3 +94,133 @@ class TestOnboarding:
     def test_auth_url_invalid_identifier_400(self, client):
         r = client.get("/setup/nope/auth-url", params={"service": "github"})
         assert r.status_code == 400
+
+    # ── Flujo completo: set-provider → capabilities → advance ──
+
+    def test_full_provider_flow(self, client, make_vcoo, provision_token):
+        """Flujo completo de configuración de proveedor vía wizard.
+
+        Simula: crear VCOO → registrar agente → registrar cliente →
+        bootstrap (verify + result) → set-provider (cifrado) →
+        capabilities → advance → verificar estado final.
+        """
+        vid = make_vcoo("FullProv")
+        pt = provision_token(vid)
+
+        # 1. Registrar agente (obtener encryption_key)
+        r = client.post("/register", json={"token": pt, "info": {}})
+        assert r.status_code == 200
+        reg = r.json()
+        aid = reg["agent_id"]
+        atk = reg["agent_token"]
+        assert reg.get("encryption_key"), "encryption_key debe generarse"
+
+        # 2. Registrar cliente (usando UUID como fallback)
+        r = client.post("/auth/client/register", json={
+            "name": "ProvClient", "email": "prov@t.com", "password": "p",
+            "token": vid,  # UUID directo
+        })
+        assert r.status_code == 200
+        ct = r.json()["token"]
+
+        # 3. Verify bootstrap con token de operador (auto-avanza modo demo)
+        r = client.post(f"/setup/{vid}/verify",
+            headers={"Authorization": f"Bearer {ct}"})
+        assert r.status_code == 200
+
+        # 4. Simular que el agente procesa verify-bootstrap
+        poll = client.get(f"/agent/{aid}/poll",
+            headers={"Authorization": f"Bearer {atk}"}).json()
+        vcmds = [c for c in poll.get("commands", []) if c["command"] == "verify-bootstrap"]
+        if vcmds:
+            cmd = vcmds[0]
+            r = client.post(f"/agent/{aid}/result",
+                json={"cmd_id": cmd["cmd_id"], "step": cmd["step"],
+                      "status": "ok", "output": "bootstrap OK"},
+                headers={"Authorization": f"Bearer {atk}"})
+            assert r.status_code in (200, 201)
+
+        # 5. Reportar capabilities (proveedores disponibles)
+        caps_payload = {
+            "providers": [{"id": "openai", "name": "OpenAI",
+                          "auth": {"type": "api_key", "credential": "OPENAI_API_KEY"}}],
+            "checks": {},
+            "models": {},
+        }
+        r = client.post(f"/agent/{aid}/capabilities",
+            json=caps_payload,
+            headers={"Authorization": f"Bearer {atk}"})
+        assert r.status_code == 200
+
+        # 6. Obtener estado del onboarding (debe haber avanzado)
+        r = client.get(f"/setup/{vid}",
+            headers={"Authorization": f"Bearer {ct}"})
+        assert r.status_code == 200
+        state = r.json()
+        assert "step" in state
+        assert "wizard_step" in state
+
+        # 7. Llamar a set-provider con API key (debe cifrarse si hay encryption_key)
+        r = client.post(f"/setup/{vid}/set-provider",
+            json={"provider": "openai", "api_key": "sk-test-secret-98765"},
+            headers={"Authorization": f"Bearer {ct}"})
+        assert r.status_code == 200
+        d = r.json()
+        assert d["status"] == "command_sent"
+        assert d["cmd_id"]
+
+        # 8. Verificar que el comando tiene el formato correcto (cifrado o plano)
+        poll2 = client.get(f"/agent/{aid}/poll",
+            headers={"Authorization": f"Bearer {atk}"}).json()
+        sp_cmds = [c for c in poll2.get("commands", []) if c["command"] == "set-provider"]
+        if sp_cmds:
+            payload = sp_cmds[0].get("payload", {})
+            # Si hay encryption_key, el payload debe tener 'encrypted' (string)
+            # Si no, debe tener 'api_key' en texto plano
+            if reg.get("encryption_key"):
+                assert "encrypted" in payload, \
+                    f"Con encryption_key el payload debe ir cifrado, got: {payload}"
+                assert isinstance(payload["encrypted"], str), \
+                    f"encrypted debe ser string base64, got: {type(payload['encrypted'])}"
+                assert len(payload["encrypted"]) > 20
+            else:
+                assert payload.get("api_key") == "sk-test-secret-98765"
+
+        # 9. Simular que el agente procesa set-provider y reporta checks
+        if sp_cmds:
+            cmd = sp_cmds[0]
+            r = client.post(f"/agent/{aid}/result",
+                json={"cmd_id": cmd["cmd_id"], "step": cmd.get("step", ""),
+                      "status": "ok", "output": "provider configured"},
+                headers={"Authorization": f"Bearer {atk}"})
+            assert r.status_code in (200, 201)
+
+        # 10. Reportar capabilities actualizadas (checks.provider = ok)
+        caps_payload["checks"] = {"provider": "ok"}
+        r = client.post(f"/agent/{aid}/capabilities",
+            json=caps_payload,
+            headers={"Authorization": f"Bearer {atk}"})
+        assert r.status_code == 200
+
+        # 11. Verificar que el estado refleja el provider OK
+        r = client.get(f"/setup/{vid}",
+            headers={"Authorization": f"Bearer {ct}"})
+        state2 = r.json()
+        checks = state2.get("checks", {})
+        assert checks.get("provider") == "ok", \
+            f"Provider check debe ser 'ok', got: {checks.get('provider')}"
+
+        # 12. Avanzar paso vía advance (si ya está en finalize, skip)
+        r = client.post(f"/setup/{vid}/advance",
+            headers={"Authorization": f"Bearer {ct}"})
+        assert r.status_code == 200
+        adv_status = r.json().get("status", "")
+        assert adv_status in ("advanced", "already_done"), \
+            f"advance debe funcionar, got: {adv_status}"
+
+        # 13. Verificar estado final — debe tener al menos bootstrap completado
+        r = client.get(f"/setup/{vid}",
+            headers={"Authorization": f"Bearer {ct}"})
+        final = r.json()
+        assert "bootstrap" in final.get("completed", []), \
+            f"bootstrap debe estar completado, got: {final.get('completed')}"
