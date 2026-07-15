@@ -98,6 +98,7 @@ application.add_middleware(
         "https://vcoo-dashboard.vercel.app",
         "http://localhost:3000",
         "http://localhost:8000",
+        "http://localhost:4173",
         "http://10.0.0.1:3000",
         "http://10.0.0.1:8000",
     ],
