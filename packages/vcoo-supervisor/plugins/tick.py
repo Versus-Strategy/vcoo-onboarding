@@ -1,4 +1,4 @@
-import os, json, socket, subprocess, time, urllib.request
+import os, json, socket, subprocess, time, urllib.request, base64, hashlib
 
 COMMAND_MAP = {
     "verify-bootstrap": ["python3", os.path.expanduser("~/.hermes/scripts/vcoo/vcoo-bootstrap.py")],
@@ -20,6 +20,7 @@ class Plugin:
         self.agent_id = os.environ.get("AGENT_ID", config.get("agent_id", ""))
         self.agent_token = os.environ.get("AGENT_TOKEN", config.get("agent_token", ""))
         self.control_plane = os.environ.get("CONTROL_PLANE", config.get("control_plane", "http://localhost:8000"))
+        self.encryption_key = os.environ.get("ENCRYPTION_KEY", config.get("encryption_key", ""))
         self.last_command_id = None
         self.tick_interval = self.interval
         self._tick_count = 1
@@ -58,9 +59,49 @@ class Plugin:
             "template_version": os.environ.get("TEMPLATE_VERSION", ""),
         }
 
+    @staticmethod
+    def _crypto_decrypt(token_b64: str, encryption_key: str, agent_id: str) -> str:
+        """Decrypt an API key token (compatible with backend's encrypt_api_key)."""
+        padding = 4 - len(token_b64) % 4
+        if padding != 4:
+            token_b64 += "=" * padding
+        raw = base64.urlsafe_b64decode(token_b64)
+        if len(raw) < 48:
+            raise ValueError("token too short")
+        salt = raw[:16]
+        iv = raw[16:32]
+        ciphertext = raw[32:-32]
+        expected_hmac = raw[-32:]
+        seed = (encryption_key + ":" + agent_id).encode("utf-8")
+        key = hashlib.pbkdf2_hmac("sha256", seed, salt, 100000, dklen=32)
+        h = hashlib.sha256(key + iv + ciphertext).digest()
+        # constant-time compare
+        if len(h) != len(expected_hmac):
+            raise ValueError("HMAC mismatch")
+        result = 0
+        for x, y in zip(h, expected_hmac):
+            result |= x ^ y
+        if result:
+            raise ValueError("HMAC mismatch")
+        plain = bytearray()
+        for offset in range(0, len(ciphertext), 32):
+            keystream = hashlib.sha256(key + iv + bytes([offset // 32])).digest()
+            chunk = ciphertext[offset:offset + 32]
+            for i in range(len(chunk)):
+                plain.append(chunk[i] ^ keystream[i])
+        return bytes(plain).decode("utf-8")
+
     def _handle_set_provider(self, payload: dict) -> dict:
         provider = payload.get("provider", "")
-        api_key = payload.get("api_key") or payload.get("encrypted", "")
+        raw_key = payload.get("api_key") or payload.get("encrypted", "")
+        api_key = raw_key
+        if payload.get("encrypted") and not payload.get("api_key"):
+            enc_key = getattr(self, 'encryption_key', '')
+            if enc_key:
+                try:
+                    api_key = self._crypto_decrypt(raw_key, enc_key, self.agent_id)
+                except Exception as e:
+                    return {"status": "error", "output": f"decryption failed: {e}"}
         model = payload.get("model", "")
         if not provider:
             return {"status": "error", "output": "missing provider"}
