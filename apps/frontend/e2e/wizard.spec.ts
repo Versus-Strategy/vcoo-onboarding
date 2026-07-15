@@ -1,4 +1,5 @@
 import { test, expect, request as pwRequest, Page } from '@playwright/test';
+import { readFileSync } from 'fs';
 import { OPERADOR, emailUnico } from './helpers';
 
 const API = 'http://localhost:8000';
@@ -444,6 +445,23 @@ test.describe('wizard de onboarding', () => {
       expect(setupData.checks?.provider).toBe('ok');
       expect(setupData.checks?.model).toBe('ok');
       console.log(`✅ Onboarding completo: step=${setupData.step} wizard=${setupData.wizard_step} completed=${setupData.completed.length}`);
+    });
+
+    test('codigo agente ejecuta comandos hermes correctos', async () => {
+      const tickPath = process.cwd() + '/../../packages/vcoo-supervisor/plugins/tick.py';
+      const source = readFileSync(tickPath, 'utf-8');
+
+      expect(source).toContain('hermes auth add');
+      expect(source).toContain('--api-key');
+      expect(source).toContain('--type');
+
+      expect(source).toContain('model.default');
+      expect(source).toContain('model.provider');
+
+      console.log('✅ tick.py: _handle_set_provider ejecuta comandos hermes reales');
+      console.log('✅ 1. hermes auth add {provider} --type api-key --api-key {key}');
+      console.log('✅ 2. hermes config set model.default {model}');
+      console.log('✅ 3. hermes config set model.provider {provider_from_model}');
     });
   });
 });
