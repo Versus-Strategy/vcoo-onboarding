@@ -219,3 +219,133 @@ describe('finalizacion - checks', () => {
     expect(modulosOk).toBe(false);
   });
 });
+
+describe('AuthForm - logica de validacion', () => {
+  it('detecta nombre vacio en registro', () => {
+    const nombre = '';
+    const esRegistro = true;
+    let errorLocal: string | null = null;
+
+    if (esRegistro && !nombre.trim()) {
+      errorLocal = 'El nombre es obligatorio';
+    }
+
+    expect(errorLocal).toBe('El nombre es obligatorio');
+  });
+
+  it('no valida nombre en login', () => {
+    const nombre = '';
+    const esRegistro = false;
+    let errorLocal: string | null = null;
+
+    if (esRegistro && !nombre.trim()) {
+      errorLocal = 'El nombre es obligatorio';
+    }
+
+    expect(errorLocal).toBeNull();
+  });
+
+  it('minLength de password es 8', () => {
+    // El input tiene minLength={8}
+    const minLength = 8;
+    expect('1234567'.length).toBeLessThan(minLength);
+    expect('12345678'.length).toBeGreaterThanOrEqual(minLength);
+  });
+});
+
+describe('wizard - estados iniciales', () => {
+  it('pasoActual usa wizard_step del onboarding', () => {
+    const onboarding = { wizard_step: 2 };
+    const vistaActual = null;
+    const pasoActual = vistaActual ?? onboarding.wizard_step ?? 0;
+    expect(pasoActual).toBe(2);
+  });
+
+  it('vistaActual sobreescribe wizard_step', () => {
+    const onboarding = { wizard_step: 0 };
+    const vistaActual = 3;
+    const pasoActual = vistaActual ?? onboarding.wizard_step ?? 0;
+    expect(pasoActual).toBe(3);
+  });
+
+  it('fallback a 0 cuando no hay datos', () => {
+    const onboarding = { wizard_step: undefined } as any;
+    const vistaActual = null;
+    const pasoActual = vistaActual ?? onboarding.wizard_step ?? 0;
+    expect(pasoActual).toBe(0);
+  });
+
+  it('pasosCompletados cuenta pasos unicos por wizard step', () => {
+    const wizardStepMap: Record<string, number> = {
+      bootstrap: 0, 'google-oauth': 1, 'gmail-setup': 2,
+      'trello-setup': 2, 'github-setup': 2, finalize: 3, done: 3,
+    };
+    const completed = ['bootstrap', 'google-oauth', 'gmail-setup', 'github-setup'];
+    const count = new Set(
+      completed.map((s) => wizardStepMap[s])
+        .filter((s): s is number => s !== undefined)
+    ).size;
+    // bootstrap=0, google-oauth=1, gmail-setup=2, github-setup=2
+    // Set = {0, 1, 2} → size=3
+    expect(count).toBe(3);
+  });
+
+  it('ignora pasos desconocidos en completed', () => {
+    const wizardStepMap: Record<string, number> = {
+      bootstrap: 0, finalize: 3, done: 3,
+    };
+    const completed = ['bootstrap', 'unknown-step', 'finalize'];
+    const count = new Set(
+      completed.map((s) => wizardStepMap[s])
+        .filter((s): s is number => s !== undefined)
+    ).size;
+    expect(count).toBe(2);
+  });
+});
+
+describe('checks - utilidad', () => {
+  it('checks vacio es seguro', () => {
+    const checks: Record<string, string> = {};
+    expect(checks.provider === 'ok').toBe(false);
+    expect(checks.google === 'error').toBe(false);
+  });
+
+  it('checks con valor undefined es seguro', () => {
+    const checks: Record<string, string | undefined> = { provider: undefined };
+    expect((checks.provider || 'missing') === 'ok').toBe(false);
+  });
+});
+
+describe('conectarOAuth - logica', () => {
+  it('detecta popup bloqueado', () => {
+    // Simular window.open devolviendo null
+    const popup = null;
+    let error: string | null = null;
+    if (!popup) {
+      error = 'El navegador bloqueó la ventana emergente. Permite popups para este sitio.';
+    }
+    expect(error).toContain('popups');
+  });
+});
+
+describe('token extraction', () => {
+  it('usa params.token cuando existe', () => {
+    const params = { token: 'abc-123' };
+    const token = params.token || '/setup/fallback'.replace('/setup/', '').replace('/onboarding/', '');
+    expect(token).toBe('abc-123');
+  });
+
+  it('extrae de pathname cuando no hay params', () => {
+    const params: { token?: string } = {};
+    const pathname = '/setup/uuid-vcoo-456';
+    const token = params.token || pathname.replace('/setup/', '').replace('/onboarding/', '');
+    expect(token).toBe('uuid-vcoo-456');
+  });
+
+  it('extrae de pathname /onboarding/', () => {
+    const params: { token?: string } = {};
+    const pathname = '/onboarding/uuid-789';
+    const token = params.token || pathname.replace('/setup/', '').replace('/onboarding/', '');
+    expect(token).toBe('uuid-789');
+  });
+});

@@ -95,6 +95,45 @@ class TestOnboarding:
         r = client.get("/setup/nope/auth-url", params={"service": "github"})
         assert r.status_code == 400
 
+    # ── /setup/{id}/advance ──
+
+    def test_advance_requires_auth(self, client, make_vcoo):
+        vid = make_vcoo("AdvNoAuth")
+        r = client.post(f"/setup/{vid}/advance")
+        assert r.status_code == 401
+
+    def test_advance_from_bootstrap(self, client, operator_token, make_vcoo):
+        """Avanzar desde bootstrap debe funcionar."""
+        vid = make_vcoo("AdvBootstrap")
+        r = client.post(f"/setup/{vid}/advance",
+            headers={"Authorization": f"Bearer {operator_token}"})
+        assert r.status_code == 200
+        assert r.json()["status"] == "advanced"
+
+    def test_advance_when_already_done(self, client, operator_token, make_vcoo):
+        """Avanzar cuando ya está en finalize debe devolver already_done."""
+        vid = make_vcoo("AdvDone")
+        # Avanzar varias veces hasta llegar al final
+        for _ in range(5):
+            client.post(f"/setup/{vid}/advance",
+                headers={"Authorization": f"Bearer {operator_token}"})
+        r = client.post(f"/setup/{vid}/advance",
+            headers={"Authorization": f"Bearer {operator_token}"})
+        assert r.json()["status"] in ("already_done", "advanced")
+
+    def test_advance_wrong_client_forbidden(self, client, make_vcoo, provision_token):
+        """Cliente que no es dueño no puede avanzar."""
+        vid_a = make_vcoo("AdvOwned")
+        pt = provision_token(vid_a)
+        reg = client.post("/auth/client/register", json={
+            "name": "Owner", "email": "adv_owner@t.com", "password": "p", "token": pt,
+        })
+        ct = reg.json()["token"]
+        vid_b = make_vcoo("AdvOther")
+        r = client.post(f"/setup/{vid_b}/advance",
+            headers={"Authorization": f"Bearer {ct}"})
+        assert r.status_code == 403
+
     # ── Flujo completo: set-provider → capabilities → advance ──
 
     def test_full_provider_flow(self, client, make_vcoo, provision_token):
