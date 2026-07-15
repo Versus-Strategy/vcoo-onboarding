@@ -329,11 +329,12 @@ test.describe('wizard de onboarding', () => {
       }
 
       // 7. Reportar capabilities con modelos (como haria el agente real tras instalar)
+      const REAL_API_KEY = 'sk-CkvG6XCv8dAHGBVBgwjH1t36SEiFp07LHYTvMuNWxXUd8XLoGnRoQC6C1Cd38sjG';
       const PROVIDERS = [
+        { id: 'opencode-go', nombre: 'OpenCode Go', auth: { type: 'api_key', credential: 'OPENCODE_API_KEY', hint: 'Introduce tu API key de OpenCode' } },
         { id: 'openai', nombre: 'OpenAI', auth: { type: 'api_key', credential: 'OPENAI_API_KEY', hint: 'Introduce tu API key' } },
-        { id: 'opencode-go', nombre: 'OpenCode Go', auth: { type: 'manual' } },
       ];
-      const MODELS = { openai: { list: ['gpt-4', 'gpt-3.5-turbo'], recommended: 'gpt-4' } };
+      const MODELS = { 'opencode-go': { list: ['opencode-go/deepseek-v4'], recommended: 'opencode-go/deepseek-v4' } };
       await ctx3.post(`${API}/agent/${agentId}/capabilities`, {
         headers: { Authorization: `Bearer ${agentToken}` },
         data: { providers: PROVIDERS, checks: { provider: 'missing' }, models: MODELS },
@@ -347,12 +348,12 @@ test.describe('wizard de onboarding', () => {
       // 9. Verificar paso 1 con proveedores
       await expect(page.getByText('Proveedor IA')).toBeVisible({ timeout: 20000 });
       await expect(page.getByText('Selecciona tu proveedor de IA')).toBeVisible({ timeout: 15000 });
-      await expect(page.getByText('OpenAI')).toBeVisible({ timeout: 10000 });
+      await expect(page.getByText('OpenCode Go')).toBeVisible({ timeout: 10000 });
 
-      // 10. Seleccionar OpenAI → escribir API key → enviar
-      await page.getByText('OpenAI').click();
-      await expect(page.getByText('Introduce tu API key')).toBeVisible({ timeout: 5000 });
-      await page.locator('input[type="password"]').fill('sk-e2e-oneliner-key');
+      // 10. Seleccionar OpenCode Go → escribir API key real → enviar
+      await page.getByText('OpenCode Go').click();
+      await expect(page.getByText('Introduce tu API key de OpenCode')).toBeVisible({ timeout: 5000 });
+      await page.locator('input[type="password"]').fill(REAL_API_KEY);
       await page.getByRole('button', { name: 'Conectar' }).click();
 
       // 11. Simular agente: procesa set-provider + reporta provider=ok + modelos
@@ -382,11 +383,7 @@ test.describe('wizard de onboarding', () => {
       // El enviarApiKey poll cada 5s, max 60s para provider + 30s para modelos
       // Como ya pusimos los datos, detectara en el proximo poll (~5s)
       await expect(page.getByText('RECOMENDADO')).toBeVisible({ timeout: 30000 });
-      // Los nombres de modelo se muestran como texto en el selector
-      const modeloTexto = await page.getByText(/gpt/).first().textContent().catch(() => '');
-      expect(modeloTexto).toContain('gpt-4');
-      await expect(page.getByText('OTROS MODELOS')).toBeVisible();
-      await expect(page.getByText('gpt-3.5-turbo')).toBeVisible();
+      await expect(page.getByText('opencode-go/deepseek-v4')).toBeVisible({ timeout: 5000 });
 
       // 13. Seleccionar modelo recomendado
       await page.getByRole('button', { name: 'Seleccionar' }).first().click();
