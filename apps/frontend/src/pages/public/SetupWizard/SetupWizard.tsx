@@ -331,8 +331,16 @@ const SetupWizard = () => {
   // ── Polling: auto-refresh every 15s ──
   useEffect(() => {
     if (!mostrarWizard) return;
-    const interval = setInterval(fetchOnboarding, 15000);
+    const interval = setInterval(fetchOnboarding, 5000);
     return () => clearInterval(interval);
+  }, [mostrarWizard, fetchOnboarding]);
+
+  // Refresh when user returns to tab (browsers throttle setInterval in background)
+  useEffect(() => {
+    if (!mostrarWizard) return;
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchOnboarding(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, [mostrarWizard, fetchOnboarding]);
 
   // ── Timeout for provider loading ──
@@ -643,7 +651,7 @@ const SetupWizard = () => {
               {cmdText}
             </code>
             <button
-              onClick={() => navigator.clipboard.writeText(cmdText)}
+              onClick={() => { navigator.clipboard.writeText(cmdText); fetchOnboarding(); }}
               className="flex-shrink-0 text-gray-400 hover:text-primary-600 transition-colors"
               title="Copiar comando"
             >
