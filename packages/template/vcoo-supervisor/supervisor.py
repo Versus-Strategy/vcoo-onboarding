@@ -61,10 +61,10 @@ def load_config() -> dict:
     return {"plugins": {}}
 
 if __name__ == "__main__":
-    log_dir = Path("/opt/vcoo-supervisor")
-    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = Path(os.path.expanduser("~/.vcoo/supervisor.log"))
+    log_path.parent.mkdir(parents=True, exist_ok=True)
     file_handler = logging.handlers.RotatingFileHandler(
-        str(log_dir / "supervisor.log"), maxBytes=1024*1024, backupCount=5
+        str(log_path), maxBytes=1024*1024, backupCount=5
     )
     file_handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
     logging.getLogger().addHandler(file_handler)
