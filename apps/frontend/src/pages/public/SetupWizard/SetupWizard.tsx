@@ -682,7 +682,7 @@ const SetupWizard = () => {
     if (!modoSelectorModelo && !proveedorSeleccionado && onboarding?.checks?.provider === 'ok') {
       const configured = raw.find(p => p.id === 'opencode-go') || raw[0];
       if (configured) {
-        setProveedorSeleccionado(configured);
+        setProveedorSeleccionado(configured.id);
         setModoSelectorModelo(true);
         return null;
       }
