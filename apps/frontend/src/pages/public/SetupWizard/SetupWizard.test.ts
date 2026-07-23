@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const asModels = (m: any) => m as { list?: string[]; models?: string[]; recommended?: string };
+
 // NOTE: SetupWizard is 1184 lines and mixes rendering + logic + API calls.
 // These tests verify the DERIVED STATE logic that can be extracted/pure.
 // For full rendering tests, use the E2E Playwright suite.
@@ -74,7 +77,7 @@ describe('pasos degradados', () => {
 
   it('detecta modulo google degradado', () => {
     const completed = ['bootstrap', 'google-oauth', 'gmail-setup'];
-    const checks = { google: 'error' };
+    const checks: Record<string, string> = { google: 'error' };
     const modules = ['core', 'office'];
     const pasosDegradados: number[] = [];
     const checkToBackendStep: Record<string, { steps: string[]; mod: string }> = {
@@ -126,20 +129,20 @@ describe('modelos - extraccion', () => {
 
   it('extrae lista de objeto con .list', () => {
     const modelsRaw = { list: ['gpt-4', 'gpt-3.5'], recommended: 'gpt-4' };
-    const list: string[] = Array.isArray(modelsRaw) ? modelsRaw : ((modelsRaw.list || modelsRaw.models || []) as string[]);
+    const list: string[] = Array.isArray(modelsRaw) ? modelsRaw : ((asModels(modelsRaw).list || asModels(modelsRaw).models || []) as string[]);
     expect(list).toEqual(['gpt-4', 'gpt-3.5']);
   });
 
   it('extrae recommended de objeto', () => {
     const modelsRaw = { list: ['gpt-4', 'gpt-3.5'], recommended: 'gpt-4' };
-    const recommended: string = Array.isArray(modelsRaw) ? '' : (modelsRaw.recommended || '');
+    const recommended: string = Array.isArray(modelsRaw) ? '' : (asModels(modelsRaw).recommended || '');
     expect(recommended).toBe('gpt-4');
   });
 
   it('separa recommended del resto', () => {
     const modelsRaw = { list: ['gpt-4', 'gpt-3.5', 'claude-3'], recommended: 'gpt-4' };
-    const list: string[] = Array.isArray(modelsRaw) ? modelsRaw : ((modelsRaw.list || modelsRaw.models || []) as string[]);
-    const recommended: string = Array.isArray(modelsRaw) ? '' : (modelsRaw.recommended || '');
+    const list: string[] = Array.isArray(modelsRaw) ? modelsRaw : ((asModels(modelsRaw).list || asModels(modelsRaw).models || []) as string[]);
+    const recommended: string = Array.isArray(modelsRaw) ? '' : (asModels(modelsRaw).recommended || '');
     const rest = list.filter(m => m !== recommended);
 
     expect(rest).toEqual(['gpt-3.5', 'claude-3']);
@@ -147,7 +150,7 @@ describe('modelos - extraccion', () => {
 
   it('retorna vacio si no hay modelos', () => {
     const modelsRaw = {};
-    const list: string[] = Array.isArray(modelsRaw) ? modelsRaw : ((modelsRaw.list || modelsRaw.models || []) as string[]);
+    const list: string[] = Array.isArray(modelsRaw) ? modelsRaw : ((asModels(modelsRaw).list || asModels(modelsRaw).models || []) as string[]);
     expect(list).toEqual([]);
   });
 });
