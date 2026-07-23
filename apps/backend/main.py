@@ -1735,13 +1735,8 @@ def get_crypto_module():
 
 
 @application.get("/admin/vcoo/{vcoo_id}/debug")
-def admin_vcoo_debug(vcoo_id: str, authorization: str = Header(None), db: Session = Depends(get_db)):
+def admin_vcoo_debug(vcoo_id: str, token_payload: dict = Depends(auth.verify_operator_jwt), db: Session = Depends(get_db)):
     """Operator-only: raw VCOO state for debugging onboarding issues."""
-    if not authorization or not authorization.lower().startswith('bearer '):
-        raise HTTPException(status_code=401, detail="auth required")
-    token_payload = auth.verify_operator_token(authorization.split(None, 1)[1])
-    if not token_payload:
-        raise HTTPException(status_code=401, detail="invalid token")
 
     v = crud.get_vcoo(db, vcoo_id)
     if not v:
@@ -1753,7 +1748,6 @@ def admin_vcoo_debug(vcoo_id: str, authorization: str = Header(None), db: Sessio
     result: dict[str, Any] = {
         "vcoo_id": str(v.id),
         "vcoo_name": v.name,
-        "vcoo_modules": list(v.modules or []),
         "created_at": str(v.created_at) if v.created_at else None,
     }
 
