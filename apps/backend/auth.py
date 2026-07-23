@@ -73,8 +73,10 @@ def verify_dashboard_password(password: str) -> bool:
     pwd = _DASHBOARD_PASSWORD or os.getenv('DASHBOARD_PASSWORD')
     if not pwd:
         if os.getenv('VERCEL_ENV'):
-            return False  # sin fallback en produccion
-        pwd = 'versus'  # dev default only
+            import sys as _sys
+            print("[auth] WARNING: DASHBOARD_PASSWORD no configurado — usando fallback 'versus'",
+                  file=_sys.stderr)
+        pwd = 'versus'
     return password == pwd
 
 # Operator login token
