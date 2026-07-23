@@ -495,10 +495,10 @@ const SetupWizard = () => {
         let modelList: unknown[] = [];
         for (let i = 0; i < 6; i++) {
           const { data: fresh } = await apiClient.get(`/setup/${token}`);
-          const modelSources = [providerId, 'opencode-go'];
+          const allModels = (fresh as any).models || {};
           let provModels: unknown = undefined;
-          for (const src of modelSources) {
-            const m = ((fresh as any).models || {})[src];
+          for (const key of Object.keys(allModels)) {
+            const m = allModels[key];
             if (m) { provModels = m; break; }
           }
           const extractList = (pm: unknown): unknown[] => {
