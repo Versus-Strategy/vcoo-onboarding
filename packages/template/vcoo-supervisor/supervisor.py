@@ -2,6 +2,7 @@
 """VCOO Supervisor — modular agent health reporter, watchdog, and updater."""
 
 import os, sys, time, importlib, logging, signal, json
+import logging.handlers
 from pathlib import Path
 
 CONFIG_PATHS = [
@@ -38,6 +39,7 @@ class Supervisor:
                 if now - self.last_tick[plugin.name] >= plugin.interval:
                     try:
                         plugin.tick()
+                        logging.info(f"[{plugin.name}] tick ok")
                     except Exception as e:
                         logging.error(f"[{plugin.name}] Error: {e}")
                     self.last_tick[plugin.name] = now
@@ -59,6 +61,13 @@ def load_config() -> dict:
     return {"plugins": {}}
 
 if __name__ == "__main__":
+    log_dir = Path("/opt/vcoo-supervisor")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    file_handler = logging.handlers.RotatingFileHandler(
+        str(log_dir / "supervisor.log"), maxBytes=1024*1024, backupCount=5
+    )
+    file_handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
+    logging.getLogger().addHandler(file_handler)
     logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
     config = load_config()
     sup = Supervisor(config)
