@@ -42,7 +42,38 @@ echo -e "${BLUE}║     by VERSUS Strategy SL                ║${NC}"
 echo -e "${BLUE}╚══════════════════════════════════════════╝${NC}"
 echo ""
 
-# ── 0. Dependencias ─────────────────────────────────────────
+# ── 0. Validar PROVISION_TOKEN Y REGISTRAR AGENTE (inmediato) ──
+PROVISION_TOKEN="${PROVISION_TOKEN:-}"
+AGENT_ID=""
+VCOO_ID=""
+AGENT_TOKEN=""
+ENCRYPTION_KEY=""
+
+if [ -n "$PROVISION_TOKEN" ]; then
+    info "Conectando con el panel de control..."
+    RESP=$(curl -sS -w "\n%{http_code}" "${CONTROL_PLANE}/register" \
+      -H "Content-Type: application/json" \
+      -d "{\"token\": \"$PROVISION_TOKEN\", \"info\": {\"hostname\": \"$(hostname)\", \"platform\": \"linux\", \"installer\": \"unified-v1\"}}")
+    HTTP_CODE=$(echo "$RESP" | tail -1)
+    BODY=$(echo "$RESP" | sed '$d')
+
+    if [ "$HTTP_CODE" != "200" ]; then
+        err "Token inválido o expirado (HTTP $HTTP_CODE).\n  Verifica tu token en el panel de control (${CONTROL_PLANE})."
+    fi
+
+    AGENT_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['agent_id'])" 2>/dev/null || echo "")
+    VCOO_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['vcoo_id'])" 2>/dev/null || echo "")
+    AGENT_TOKEN=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['agent_token'])" 2>/dev/null || echo "")
+    ENCRYPTION_KEY=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('encryption_key',''))" 2>/dev/null || echo "")
+    ok "¡Conectado! Agente registrado (ID: ${AGENT_ID})"
+    info "Instalando componentes en segundo plano..."
+else
+    warn "No se proporcionó PROVISION_TOKEN — instalación manual."
+    warn "El agente no se registrará automáticamente en el control plane."
+    echo ""
+fi
+
+# ── 1. Dependencias ─────────────────────────────────────────
 info "Verificando dependencias del sistema..."
 
 # Detectar gestor de paquetes
@@ -114,7 +145,6 @@ if ! $PYTHON_OK; then
         info "Instalando Python 3.11..."
         $INSTALL_CMD python3.11 python3.11-venv 2>/dev/null || true
         if command -v python3.11 &>/dev/null; then
-            # Hacer que python3 apunte a 3.11 (para que el template lo use)
             ln -sf /usr/bin/python3.11 /usr/local/bin/python3
             hash -r
             PYTHON_OK=true
@@ -133,34 +163,6 @@ if ! command -v python3 &>/dev/null; then
 fi
 
 ok "Dependencias listas"
-
-# ── 1. Validar PROVISION_TOKEN (opcional) ──
-PROVISION_TOKEN="${PROVISION_TOKEN:-}"
-AGENT_ID=""
-VCOO_ID=""
-AGENT_TOKEN=""
-
-if [ -n "$PROVISION_TOKEN" ]; then
-    info "Validando provision token..."
-    RESP=$(curl -sS -w "\n%{http_code}" "${CONTROL_PLANE}/register" \
-      -H "Content-Type: application/json" \
-      -d "{\"token\": \"$PROVISION_TOKEN\", \"info\": {\"hostname\": \"$(hostname)\", \"platform\": \"linux\", \"installer\": \"unified-v1\"}}")
-    HTTP_CODE=$(echo "$RESP" | tail -1)
-    BODY=$(echo "$RESP" | sed '$d')
-
-    if [ "$HTTP_CODE" != "200" ]; then
-        err "Token inválido o expirado (HTTP $HTTP_CODE).\n  Verifica tu token en el panel de control (${CONTROL_PLANE})."
-    fi
-
-    AGENT_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['agent_id'])" 2>/dev/null || echo "")
-    VCOO_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['vcoo_id'])" 2>/dev/null || echo "")
-    AGENT_TOKEN=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['agent_token'])" 2>/dev/null || echo "")
-    ok "Token válido. Agente registrado (ID: ${AGENT_ID})"
-else
-    warn "No se proporcionó PROVISION_TOKEN — instalación manual."
-    warn "El agente no se registrará automáticamente en el control plane."
-    echo ""
-fi
 
 # ── 2. Descargar template VCOO ──
 TEMPLATE_DIR="${VCOO_HOME}/template"
