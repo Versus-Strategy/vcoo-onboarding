@@ -3,6 +3,9 @@ _sys_path = _os.path.dirname(__file__)
 if _sys_path not in sys.path:
     sys.path.insert(0, _sys_path)
 
+from dotenv import load_dotenv
+load_dotenv(_os.path.join(_sys_path, '.env'))
+
 from datetime import datetime
 from fastapi import FastAPI, HTTPException, Depends, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,6 +14,7 @@ from sqlalchemy.orm import Session
 import db
 from db import engine, Base, SessionLocal
 import models, crud, auth, schemas, ratelimit
+from typing import Any
 from ws_routes import register_ws_routes
 import json
 import os as _os
@@ -91,17 +95,27 @@ async def global_exception_handler(request, exc):
         content["traceback"] = traceback.format_exc()
     return JSONResponse(status_code=500, content=content)
 
+_cors_origins = [
+    "https://vcoo-onboarding.vercel.app",
+    "https://vcoo-dashboard.vercel.app",
+    "http://localhost:3000",
+    "http://localhost:8000",
+    "http://localhost:4173",
+]
+frontend_url = _os.getenv("FRONTEND_URL", "").strip()
+dashboard_url = _os.getenv("DASHBOARD_URL", "").strip()
+control_plane = _os.getenv("CONTROL_PLANE", "").strip()
+for url in [frontend_url, dashboard_url, control_plane]:
+    if url and url not in _cors_origins:
+        _cors_origins.append(url)
+        if ":3000" in url:
+            _cors_origins.append(url.replace(":3000", ":4173"))
+        elif ":4173" in url:
+            _cors_origins.append(url.replace(":4173", ":3000"))
+
 application.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://vcoo-onboarding.vercel.app",
-        "https://vcoo-dashboard.vercel.app",
-        "http://localhost:3000",
-        "http://localhost:8000",
-        "http://localhost:4173",
-        "http://10.0.0.1:3000",
-        "http://10.0.0.1:8000",
-    ],
+    allow_origins=_cors_origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -1718,3 +1732,76 @@ def get_crypto_module():
         raise HTTPException(status_code=404, detail='Not found')
     from fastapi.responses import PlainTextResponse
     return PlainTextResponse(open(path).read(), media_type='text/x-python')
+
+
+@application.get("/admin/vcoo/{vcoo_id}/debug")
+def admin_vcoo_debug(vcoo_id: str, authorization: str = Header(None), db: Session = Depends(get_db)):
+    """Operator-only: raw VCOO state for debugging onboarding issues."""
+    if not authorization or not authorization.lower().startswith('bearer '):
+        raise HTTPException(status_code=401, detail="auth required")
+    token_payload = auth.verify_operator_token(authorization.split(None, 1)[1])
+    if not token_payload:
+        raise HTTPException(status_code=401, detail="invalid token")
+
+    v = crud.get_vcoo(db, vcoo_id)
+    if not v:
+        raise HTTPException(status_code=404, detail="vcoo not found")
+
+    state = crud.get_onboarding_state(db, str(v.id))
+    agent = crud.get_agent_by_vcoo(db, str(v.id))
+
+    result: dict[str, Any] = {
+        "vcoo_id": str(v.id),
+        "vcoo_name": v.name,
+        "vcoo_modules": list(v.modules or []),
+        "created_at": str(v.created_at) if v.created_at else None,
+    }
+
+    if state:
+        result["onboarding"] = {
+            "step": state.step,
+            "status": state.status,
+            "completed": state.completed or [],
+            "errors": state.errors or {},
+            "retry_count": state.retry_count or {},
+        }
+
+    if agent:
+        caps = {}
+        if agent.capabilities:
+            try:
+                caps = json.loads(agent.capabilities)
+            except Exception:
+                caps = {"parse_error": True}
+
+        last_seen_ago = None
+        if agent.last_seen:
+            import datetime as dt
+            last_seen_ago = (dt.datetime.utcnow() - agent.last_seen.replace(tzinfo=None)).total_seconds()
+
+        pending_cmds = []
+        try:
+            pending_cmds = [
+                {"id": str(c.id), "command": c.command, "created_at": str(c.created_at)}
+                for c in db.query(models.Command)
+                    .filter(models.Command.agent_id == agent.id, models.Command.status == "pending")
+                    .all()
+            ]
+        except Exception:
+            pass
+
+        result["agent"] = {
+            "id": str(agent.id),
+            "online": last_seen_ago is not None and last_seen_ago < 120,
+            "last_seen_seconds_ago": last_seen_ago,
+            "has_encryption_key": bool(agent.encryption_key),
+            "capabilities_summary": {
+                "providers_count": len(caps.get("providers", [])),
+                "models_keys": list(caps.get("models", {}).keys()),
+                "checks": caps.get("checks", {}),
+                "current_provider": caps.get("current_provider"),
+            },
+            "pending_commands": pending_cmds,
+        }
+
+    return result
