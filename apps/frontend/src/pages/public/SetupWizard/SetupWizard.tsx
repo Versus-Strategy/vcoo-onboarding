@@ -670,6 +670,16 @@ const SetupWizard = () => {
     const destacados = raw.filter(p => p.id !== 'opencode-go' && destacadosIds.has(p.id));
     const resto = raw.filter(p => p.id !== 'opencode-go' && !destacadosIds.has(p.id));
 
+    // If provider already configured (after reload), skip API key form
+    if (!modoSelectorModelo && !proveedorSeleccionado && onboarding?.checks?.provider === 'ok') {
+      const configured = raw.find(p => p.id === 'opencode-go') || raw[0];
+      if (configured) {
+        setProveedorSeleccionado(configured);
+        setModoSelectorModelo(true);
+        return null;
+      }
+    }
+
     if (modoSelectorModelo) {
       if (!proveedorSeleccionado) {
         setModoSelectorModelo(false);
