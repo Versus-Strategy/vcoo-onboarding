@@ -4,9 +4,7 @@ const fs = require('fs');
 
 const HERMES_HOME = process.env.HERMES_HOME || path.join(require('os').homedir(), '.hermes');
 const BRIDGE_DIR = path.join(HERMES_HOME, 'hermes-agent', 'scripts', 'whatsapp-bridge');
-const BAIL_EYS_DIR = path.join(BRIDGE_DIR, 'node_modules', '@whiskeysockets', 'baileys');
-
-// Use a fresh session per pairing attempt
+const BAIL_EYS = path.join(BRIDGE_DIR, 'node_modules', '@whiskeysockets', 'baileys');
 const SESSION_DIR = path.join(HERMES_HOME, 'whatsapp-session', 'pair-' + Date.now().toString(36));
 
 function emit(ev) {
@@ -16,9 +14,11 @@ function emit(ev) {
 const args = process.argv.slice(2);
 const phoneIdx = args.indexOf('--phone');
 const phoneNumber = phoneIdx >= 0 ? args[phoneIdx + 1] : null;
+const timeoutIdx = args.indexOf('--timeout');
+const scriptTimeout = (timeoutIdx >= 0 ? parseInt(args[timeoutIdx + 1]) : 60) * 1000;
 
 async function main() {
-  if (!fs.existsSync(path.join(BAIL_EYS_DIR, 'package.json'))) {
+  if (!fs.existsSync(path.join(BAIL_EYS, 'package.json'))) {
     emit({ event: 'installing' });
     const { execSync } = require('child_process');
     execSync('npm install --no-audit --no-fund --loglevel=error', {
@@ -44,6 +44,12 @@ async function main() {
 
   let paired = false;
   let qrEmitted = false;
+  let timeout = setTimeout(() => {
+    if (!paired) {
+      emit({ event: 'error', error: 'timeout' });
+      process.exit(1);
+    }
+  }, scriptTimeout);
 
   sock.ev.on('creds.update', saveCreds);
 
@@ -52,29 +58,39 @@ async function main() {
 
     if (qr && !paired && !qrEmitted) {
       qrEmitted = true;
+      clearTimeout(timeout);
       if (!phoneNumber) {
         emit({ event: 'qr', qr });
+        // Keep connection alive for pairing
       } else {
-        // Pairing code mode: request code when socket is ready
         const cleanPhone = phoneNumber.replace(/[^0-9]/g, '');
         if (cleanPhone.length < 7) {
-          emit({ event: 'error', error: 'invalid_phone', message: 'Phone number too short. Use international format, e.g. 521234567890' });
+          emit({ event: 'error', error: 'invalid_phone' });
+          process.exit(1);
           return;
         }
         try {
           const code = await sock.requestPairingCode(cleanPhone);
           emit({ event: 'pairing_code', code, phone: phoneNumber });
+          // Don't exit — wait for connection
+          timeout = setTimeout(() => {
+            if (!paired) {
+              emit({ event: 'error', error: 'pairing_timeout' });
+              process.exit(1);
+            }
+          }, 120000);
         } catch (err) {
           emit({ event: 'error', error: 'pairing_code_failed', message: err.message });
+          process.exit(1);
         }
       }
     }
 
     if (connection === 'open') {
       paired = true;
+      clearTimeout(timeout);
       const user = sock.authState.creds.me;
       emit({ event: 'connected', user });
-      setTimeout(() => process.exit(0), 500);
     }
 
     if (connection === 'close') {

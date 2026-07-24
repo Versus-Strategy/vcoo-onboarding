@@ -24,7 +24,12 @@ class Plugin:
         self.control_plane = os.environ.get("CONTROL_PLANE", config.get("control_plane", "http://localhost:8000"))
         self.encryption_key = os.environ.get("ENCRYPTION_KEY", config.get("encryption_key", ""))
         self.last_command_id = None
-        self.tick_interval = self.interval
+        cfg_interval = config.get("interval")
+        if cfg_interval and isinstance(cfg_interval, (int, float)) and cfg_interval > 0:
+            self.interval = int(cfg_interval)
+            self.tick_interval = self.interval
+        else:
+            self.tick_interval = self.interval
         self._tick_count = 1
         self._checks: dict[str, str] = {}
         if self.agent_id:

@@ -1629,7 +1629,7 @@ def agent_tick(agent_id: str, body: schemas.TickRequest, authorization: str = He
             crud.mark_command_done(db, cmd.id, result="BLOCKED: comando no reconocido, descartado")
             continue
         entry = {"cmd_id": str(cmd.id), "command": cmd.command, "step": cmd.step}
-        if cmd.command in ("save-creds", "set-provider") and cmd.result:
+        if cmd.command in ("save-creds", "set-provider", "pair-whatsapp") and cmd.result:
             try:
                 entry["payload"] = json.loads(cmd.result)
             except Exception:
@@ -1638,7 +1638,7 @@ def agent_tick(agent_id: str, body: schemas.TickRequest, authorization: str = He
         crud.mark_command_sent(db, cmd.id)
 
     has_commands = len(cmd_dicts) > 0
-    tick_interval = 5 if has_commands else 60
+    tick_interval = 5 if has_commands else 0  # 0 = let agent use its own interval
 
     vcoo = crud.get_vcoo_by_agent(db, agent_id)
     progress = crud.get_tick_progress(db, str(vcoo.id)) if vcoo else None
