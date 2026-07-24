@@ -17,7 +17,7 @@ from onboarding import (
 class TestOnboardingLogic:
     def test_get_steps_for_modules_core_only(self):
         steps = get_steps_for_modules(["core"])
-        assert steps == ["bootstrap", "finalize"]
+        assert steps == ["bootstrap", "whatsapp-setup", "finalize"]
 
     def test_get_steps_for_modules_office(self):
         steps = get_steps_for_modules(["core", "office"])
@@ -35,12 +35,12 @@ class TestOnboardingLogic:
 
     def test_get_steps_for_modules_all(self):
         steps = get_steps_for_modules(["core", "office", "mail", "planner", "developer"])
-        assert len(steps) == 8  # bootstrap + google-oauth + gmail-setup + trello-setup + github-setup + vercel-setup + supabase-setup + finalize
+        assert len(steps) == 9  # bootstrap + whatsapp-setup + google-oauth + gmail-setup + trello-setup + github-setup + vercel-setup + supabase-setup + finalize
 
     def test_get_total_steps(self):
-        assert get_total_steps(["core"]) == 2
-        assert get_total_steps(["core", "office"]) == 3
-        assert get_total_steps(["core", "developer"]) == 5
+        assert get_total_steps(["core"]) == 3  # bootstrap + whatsapp-setup + finalize
+        assert get_total_steps(["core", "office"]) == 4  # + google-oauth
+        assert get_total_steps(["core", "developer"]) == 6  # + github + vercel + supabase
 
     def test_can_advance_to_bootstrap(self):
         """Bootstrap no tiene dependencias, siempre se puede avanzar."""
@@ -70,7 +70,8 @@ class TestOnboardingLogic:
     def test_can_advance_to_finalize_requires_all(self):
         """Finalize requiere todos los pasos contratados."""
         assert not can_advance_to("finalize", ["bootstrap"], ["core", "office"])
-        assert can_advance_to("finalize", ["bootstrap", "google-oauth"], ["core", "office"])
+        assert not can_advance_to("finalize", ["bootstrap", "google-oauth"], ["core", "office"])  # falta whatsapp-setup
+        assert can_advance_to("finalize", ["bootstrap", "whatsapp-setup", "google-oauth"], ["core", "office"])
 
     def test_can_advance_to_finalize_with_developer(self):
         steps = get_steps_for_modules(["core", "developer"])
@@ -123,8 +124,8 @@ class TestOnboardingLogic:
         assert not has_agent_command("nonexistent")
 
     def test_get_agent_total_steps(self):
-        assert get_agent_total_steps(["core"]) == 2  # bootstrap + finalize
-        assert get_agent_total_steps(["core", "office"]) == 3
+        assert get_agent_total_steps(["core"]) == 3  # bootstrap + whatsapp-setup + finalize
+        assert get_agent_total_steps(["core", "office"]) == 4  # + google-oauth
 
     def test_get_steps_order_is_canonical(self):
         """Los pasos deben devolverse en orden canónico, no en orden de módulos."""

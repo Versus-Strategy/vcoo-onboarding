@@ -918,15 +918,30 @@ def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session
         )
 
     frontend_origin = _url('DASHBOARD_URL', vercel_default=_DASHBOARD_PROD, local_default='http://localhost:3000')
-    return HTMLResponse(
-        "<html><body style=\"background:#0a0a0f;color:#e2e8f0;font-family:sans-serif;text-align:center;padding:40px\">"
-        "<h1 style=\"color:#533afd\">Autorizacion recibida</h1>"
-        "<p>Vuelve al wizard para continuar.</p>"
-        "<script>"
-        "try{if(window.opener){window.opener.postMessage('oauth-complete','" + frontend_origin + "');}}catch(e){}"
-        "setTimeout(function(){window.close()},1500)"
-        "</script></body></html>"
-    )
+    oauth_error = locals().get('_oauth_error', '')
+    error_html = ""
+    if oauth_error:
+        error_html = f"<p style=\"color:#fbbf24;font-size:12px;margin-top:20px;word-break:break-all\">Debug: {oauth_error}</p>"
+    if access_token:
+        return HTMLResponse(
+            "<html><body style=\"background:#0a0a0f;color:#e2e8f0;font-family:sans-serif;text-align:center;padding:40px\">"
+            "<h1 style=\"color:#533afd\">Autorizacion recibida</h1>"
+            "<p>Vuelve al wizard para continuar.</p>"
+            + error_html +
+            "<script>"
+            "try{if(window.opener){window.opener.postMessage('oauth-complete','" + frontend_origin + "');}}catch(e){}"
+            "setTimeout(function(){window.close()},1500)"
+            "</script></body></html>"
+        )
+    else:
+        return HTMLResponse(
+            "<html><body style=\"background:#0a0a0f;color:#e2e8f0;font-family:sans-serif;text-align:center;padding:40px\">"
+            "<h1 style=\"color:#ef4444\">Error de autenticacion</h1>"
+            "<p>No se pudo obtener el token de acceso de Google.</p>"
+            + error_html +
+            "<p style=\"margin-top:20px\"><a href=\"javascript:window.close()\" style=\"color:#533afd\">Cerrar ventana</a></p>"
+            "</body></html>"
+        )
 
 
 # ── Hermes CLI commands (dynamic) ──────────────────────
