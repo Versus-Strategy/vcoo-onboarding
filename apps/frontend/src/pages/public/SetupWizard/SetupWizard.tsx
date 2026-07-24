@@ -250,6 +250,8 @@ const SetupWizard = () => {
   const [modoSelectorModelo, setModoSelectorModelo] = useState(false);
   const [moduloSeleccionado, setModuloSeleccionado] = useState<string | null>(null);
   const [vistaActual, setVistaActual] = useState<number | null>(null);
+  const [waQr, setWaQr] = useState<string | null>(null);
+  const [waStatus, setWaStatus] = useState<string>('idle');
 
   // Check localStorage directly on mount for existing auth
   useEffect(() => {
@@ -561,9 +563,9 @@ const SetupWizard = () => {
       '3. Ejecuta: hermes config set trello.api_token TU_TOKEN',
     ]},
     whatsapp: { pasos: [
-      '1. Ejecuta en tu VPS: hermes whatsapp',
-      '2. Escanea el código QR con WhatsApp',
-      '3. Verifica que el canal esté activo: hermes gateway list',
+      '1. Haz clic en "Conectar WhatsApp" para iniciar el emparejamiento',
+      '2. Escanea el código QR con la app de WhatsApp en tu teléfono',
+      '3. La conexión se establecerá automáticamente',
     ]},
     developer: { pasos: [
       '1. GitHub: gh auth login',
@@ -1046,6 +1048,87 @@ const SetupWizard = () => {
                     <Button variant="primary" size="lg" onClick={() => conectarOAuth(oauthConfig.service)}
                       loading={conectando === oauthConfig.service}>
                       {conectando === oauthConfig.service ? 'Conectando...' : 'Conectar con Google'}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ) : moduloSeleccionado === 'whatsapp' ? (
+              <div className="flex flex-col items-center text-center py-4">
+                {waStatus === 'paired' || checks.whatsapp === 'ok' ? (
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center">
+                      <svg className="w-7 h-7 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <p className="text-green-700 font-medium">WhatsApp conectado</p>
+                  </div>
+                ) : waQr ? (
+                  <div className="flex flex-col items-center gap-3">
+                    <p className="text-sm font-medium text-gray-700 mb-1">Escanea con WhatsApp</p>
+                    <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                      <img src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(waQr)}`}
+                        alt="WhatsApp QR" className="w-64 h-64" />
+                    </div>
+                    <p className="text-xs text-gray-400">Abre WhatsApp en tu teléfono → Escanea este código</p>
+                  </div>
+                ) : waStatus === 'pairing' ? (
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+                    <p className="text-sm text-gray-600">Iniciando emparejamiento...</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-3">
+                    <p className="text-sm text-gray-600 mb-2">
+                      Conecta WhatsApp para recibir y enviar mensajes desde VCOO.
+                    </p>
+                    <Button variant="primary" size="lg" onClick={async () => {
+                      setWaStatus('pairing');
+                      setError(null);
+                      try {
+                        await apiClient.post(`/setup/${token}/start-pair-whatsapp`);
+                        // Poll for QR
+                        const pollQr = setInterval(async () => {
+                          try {
+                            const { data } = await apiClient.get(`/setup/${token}/whatsapp-qr`);
+                            if (data.status === 'qr' && data.qr) {
+                              setWaQr(data.qr);
+                              setWaStatus('qr_ready');
+                              clearInterval(pollQr);
+                              // Keep polling for completion
+                              const pollDone = setInterval(async () => {
+                                try {
+                                  const { data: d2 } = await apiClient.get(`/setup/${token}/whatsapp-qr`);
+                                  if (d2.status === 'done' || d2.status === 'paired') {
+                                    setWaStatus('paired');
+                                    setWaQr(null);
+                                    clearInterval(pollDone);
+                                    fetchOnboarding();
+                                  } else if (d2.status === 'error') {
+                                    setError('Error al emparejar WhatsApp');
+                                    setWaStatus('idle');
+                                    setWaQr(null);
+                                    clearInterval(pollDone);
+                                  }
+                                } catch { /* retry */ }
+                              }, 3000);
+                            } else if (data.status === 'done' || data.status === 'paired') {
+                              setWaStatus('paired');
+                              clearInterval(pollQr);
+                              fetchOnboarding();
+                            } else if (data.status === 'error') {
+                              setError('Error al emparejar WhatsApp');
+                              setWaStatus('idle');
+                              clearInterval(pollQr);
+                            }
+                          } catch { /* retry */ }
+                        }, 2000);
+                      } catch {
+                        setError('Error al iniciar emparejamiento');
+                        setWaStatus('idle');
+                      }
+                    }}>
+                      Conectar WhatsApp
                     </Button>
                   </div>
                 )}

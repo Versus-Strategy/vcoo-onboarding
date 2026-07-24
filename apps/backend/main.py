@@ -50,7 +50,7 @@ def _check_client_owns_vcoo(db: Session, client_email: str, vcoo_id: str) -> boo
 _VALID_AGENT_COMMANDS = {
     "verify-bootstrap", "verify-google", "verify-trello", "verify-email",
     "verify-github", "verify-vercel", "verify-supabase", "verify-whatsapp",
-    "save-creds", "finalize", "set-provider",
+    "save-creds", "finalize", "set-provider", "pair-whatsapp",
 }
 
 # Plantilla de error para token inválido (reutilizada en múltiples endpoints)
@@ -1416,6 +1416,71 @@ def setup_advance_step(identifier: str, authorization: str = Header(None), db: S
         return {"status": "already_done", "step": st.step}
     crud.advance_onboarding_step(db, vcoo_id, st.step)
     return {"status": "advanced", "step": st.step}
+
+
+@application.post("/setup/{identifier}/start-pair-whatsapp")
+def setup_start_pair_whatsapp(identifier: str, authorization: str = Header(None), db: Session = Depends(get_db)):
+    """Enqueue a pair-whatsapp command for the agent."""
+    if not authorization or not authorization.lower().startswith('bearer '):
+        raise HTTPException(status_code=401, detail="auth required")
+    token_payload = auth.verify_client_token(authorization.split(None, 1)[1])
+    if not token_payload:
+        raise HTTPException(status_code=401, detail="invalid token")
+    v = crud.get_vcoo(db, identifier)
+    if not v:
+        raise HTTPException(status_code=400, detail="invalid identifier")
+    vcoo_id = str(v.id)
+    is_operator = token_payload.get('role') == 'operador'
+    if not is_operator:
+        client_email = token_payload.get("email", "")
+        if not _check_client_owns_vcoo(db, client_email, vcoo_id):
+            raise HTTPException(status_code=403, detail="not your VCOO")
+    agent = crud.get_agent_by_vcoo(db, vcoo_id)
+    if not agent:
+        raise HTTPException(status_code=400, detail="agent not installed yet")
+    cmd = crud.create_command(db, agent_id=str(agent.id), command="pair-whatsapp")
+    return {"status": "command_sent", "cmd_id": str(cmd.id)}
+
+
+@application.get("/setup/{identifier}/whatsapp-qr")
+def setup_get_whatsapp_qr(identifier: str, authorization: str = Header(None), db: Session = Depends(get_db)):
+    """Return the latest WhatsApp QR code from the agent's command result."""
+    if not authorization or not authorization.lower().startswith('bearer '):
+        raise HTTPException(status_code=401, detail="auth required")
+    token_payload = auth.verify_client_token(authorization.split(None, 1)[1])
+    if not token_payload:
+        raise HTTPException(status_code=401, detail="invalid token")
+    v = crud.get_vcoo(db, identifier)
+    if not v:
+        raise HTTPException(status_code=400, detail="invalid identifier")
+    vcoo_id = str(v.id)
+    is_operator = token_payload.get('role') == 'operador'
+    if not is_operator:
+        client_email = token_payload.get("email", "")
+        if not _check_client_owns_vcoo(db, client_email, vcoo_id):
+            raise HTTPException(status_code=403, detail="not your VCOO")
+    agent = crud.get_agent_by_vcoo(db, vcoo_id)
+    if not agent:
+        return {"status": "no_agent"}
+    # Find the latest pair-whatsapp command result
+    cmd = db.query(models.Command).filter(
+        models.Command.agent_id == agent.id,
+        models.Command.command == "pair-whatsapp",
+    ).order_by(models.Command.created_at.desc()).first()
+    if not cmd:
+        return {"status": "no_command"}
+    if cmd.status == "pending":
+        return {"status": "pending"}
+    if cmd.status == "done":
+        import json as _json
+        try:
+            result = _json.loads(cmd.result) if cmd.result else {}
+            if isinstance(result, str):
+                return {"status": "qr", "qr": result}
+            return {"status": "qr", "qr": result.get("output", "")}
+        except Exception:
+            return {"status": "qr", "qr": cmd.result or ""}
+    return {"status": cmd.status, "result": cmd.result}
 
 
 # ── VCOO Logs ────────────────────────────────────────────
