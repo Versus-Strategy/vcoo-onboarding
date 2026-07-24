@@ -210,7 +210,7 @@ if [ -d "${VCOO_DIR}/skills" ]; then
         req_mod=$(skill_requires_module "$skill_name")
         if [ -n "$req_mod" ]; then
             # Solo instalar si el módulo está contratado
-            echo "$MODULES" | grep -qw "$req_mod" || continue
+            echo "${MODULES:-}" | grep -qw "$req_mod" || continue
         fi
         target="${HERMES_SKILLS}/versus-multiagent-orchestration/${skill_name}"
         if [ -d "$skill_dir" ]; then
@@ -424,21 +424,15 @@ echo -e "${GREEN}╚════════════════════
 echo ""
 echo "   Próximos pasos:"
 echo ""
-echo "   1. Configura las integraciones:"
-echo "      bash provision/configure-oauth.sh"
+echo "   1. Verifica el estado de los servicios:"
+echo "      systemctl status vcoo-supervisor"
+echo "      systemctl status vcoo-hermes-gateway"
 echo ""
 echo "   2. Edita tu configuración:"
 echo "      hermes config edit"
 echo ""
-echo \"   3. Verifica el estado de los servicios:\"
-echo \"      systemctl status vcoo-supervisor\"
-echo \"      systemctl status vcoo-hermes-gateway\"
-echo ""
-echo "   4. Configura las integraciones:"
+echo "   3. Configura las integraciones:"
 echo "      bash provision/configure-oauth.sh"
 echo ""
-echo "   5. Edita tu configuración:"
-echo "      hermes config edit"
-echo ""
-echo "   6. Envía un mensaje a MAGI desde Discord o Telegram"
+echo "   4. Envía un mensaje a MAGI desde Discord o Telegram"
 echo ""
