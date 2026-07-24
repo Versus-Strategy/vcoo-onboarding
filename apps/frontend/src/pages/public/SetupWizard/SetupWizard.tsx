@@ -252,6 +252,9 @@ const SetupWizard = () => {
   const [vistaActual, setVistaActual] = useState<number | null>(null);
   const [waQr, setWaQr] = useState<string | null>(null);
   const [waStatus, setWaStatus] = useState<string>('idle');
+  const [waPairingCode, setWaPairingCode] = useState<string | null>(null);
+  const [waPhone, setWaPhone] = useState<string>('');
+  const [waPhoneInput, setWaPhoneInput] = useState<string>('');
 
   // Check localStorage directly on mount for existing auth
   useEffect(() => {
@@ -1237,11 +1240,91 @@ const SetupWizard = () => {
                   alt="WhatsApp QR" className="w-64 h-64" />
               </div>
               <p className="text-xs text-gray-400 mt-3">Abre WhatsApp en tu teléfono → Escanea este código</p>
+              <button onClick={() => { setWaQr(null); setWaStatus('idle'); }}
+                className="mt-3 text-sm text-primary-600 hover:text-primary-700">Cancelar</button>
+            </div>
+          ) : waPairingCode ? (
+            <div className="flex flex-col items-center text-center py-4">
+              <p className="text-sm font-medium text-gray-700 mb-1">Código de emparejamiento</p>
+              <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl px-8 py-5 my-3">
+                <p className="text-3xl font-mono font-bold tracking-widest text-gray-900 select-all">
+                  {waPairingCode.match(/.{1,4}/g)?.join(' ') || waPairingCode}
+                </p>
+              </div>
+              <p className="text-xs text-gray-500 max-w-xs">
+                Abre WhatsApp en tu teléfono → Ajustes → Dispositivos vinculados → Vincular un dispositivo →
+                Introduce este código
+              </p>
+              <p className="text-xs text-gray-400 mt-2">O usa el número <strong>{waPhone}</strong> en WhatsApp</p>
+              <button onClick={() => { setWaPairingCode(null); setWaStatus('idle'); }}
+                className="mt-3 text-sm text-primary-600 hover:text-primary-700">Cancelar</button>
             </div>
           ) : waStatus === 'pairing' ? (
             <div className="flex flex-col items-center gap-3 py-4">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
               <p className="text-sm text-gray-600">Iniciando emparejamiento...</p>
+            </div>
+          ) : waStatus === 'input_phone' ? (
+            <div className="flex flex-col items-center gap-3 py-2">
+              <p className="text-sm text-gray-600 mb-1">Introduce tu número de teléfono de WhatsApp:</p>
+              <input type="tel" defaultValue={waPhoneInput}
+                onChange={(e) => setWaPhoneInput(e.target.value)}
+                placeholder="+1234567890"
+                className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg text-center text-lg font-mono focus:outline-none focus:ring-2 focus:ring-primary-500" />
+              <div className="flex gap-2">
+                <Button variant="secondary" size="sm" onClick={() => setWaStatus('idle')}>Cancelar</Button>
+                <Button variant="primary" size="sm" onClick={async () => {
+                  const phone = (document.querySelector('input[type="tel"]') as HTMLInputElement)?.value?.trim();
+                  if (!phone) { setError('Introduce un número de teléfono'); return; }
+                  setWaPhoneInput(phone);
+                  setWaStatus('pairing');
+                  setError(null);
+                  try {
+                    await apiClient.post(`/setup/${token}/start-pair-whatsapp`, { phone });
+                    const pollPair = setInterval(async () => {
+                      try {
+                        const { data } = await apiClient.get(`/setup/${token}/whatsapp-qr`);
+                        if (data.status === 'pairing_code' && data.code) {
+                          setWaPairingCode(data.code);
+                          setWaPhone(data.phone || phone);
+                          setWaStatus('code_ready');
+                          clearInterval(pollPair);
+                          const pollDone = setInterval(async () => {
+                            try {
+                              const { data: d2 } = await apiClient.get(`/setup/${token}/whatsapp-qr`);
+                              if (d2.status === 'done' || d2.status === 'paired' || d2.status === 'connected') {
+                                setWaStatus('paired');
+                                setWaPairingCode(null);
+                                clearInterval(pollDone);
+                                fetchOnboarding();
+                              } else if (d2.status === 'error') {
+                                setError('Error al emparejar WhatsApp');
+                                setWaStatus('idle');
+                                setWaPairingCode(null);
+                                clearInterval(pollDone);
+                              }
+                            } catch { /* retry */ }
+                          }, 3000);
+                        } else if (data.status === 'done' || data.status === 'paired' || data.status === 'connected') {
+                          setWaStatus('paired');
+                          setWaPairingCode(null);
+                          clearInterval(pollPair);
+                          fetchOnboarding();
+                        } else if (data.status === 'error') {
+                          setError('Error al emparejar WhatsApp');
+                          setWaStatus('idle');
+                          clearInterval(pollPair);
+                        }
+                      } catch { /* retry */ }
+                    }, 2000);
+                  } catch {
+                    setError('Error al iniciar emparejamiento');
+                    setWaStatus('idle');
+                  }
+                }}>
+                  Obtener código
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="flex items-center justify-between p-3 border border-gray-100 rounded-lg">
@@ -1254,52 +1337,57 @@ const SetupWizard = () => {
                   <p className="text-xs text-gray-500">Recibe y envía mensajes</p>
                 </div>
               </div>
-              <Button variant="primary" size="sm" onClick={async () => {
-                setWaStatus('pairing');
-                setError(null);
-                try {
-                  await apiClient.post(`/setup/${token}/start-pair-whatsapp`);
-                  const pollQr = setInterval(async () => {
-                    try {
-                      const { data } = await apiClient.get(`/setup/${token}/whatsapp-qr`);
-                      if (data.status === 'qr' && data.qr) {
-                        setWaQr(data.qr);
-                        setWaStatus('qr_ready');
-                        clearInterval(pollQr);
-                        const pollDone = setInterval(async () => {
-                          try {
-                            const { data: d2 } = await apiClient.get(`/setup/${token}/whatsapp-qr`);
-                            if (d2.status === 'done' || d2.status === 'paired' || d2.status === 'connected') {
-                              setWaStatus('paired');
-                              setWaQr(null);
-                              clearInterval(pollDone);
-                              fetchOnboarding();
-                            } else if (d2.status === 'error') {
-                              setError('Error al emparejar WhatsApp');
-                              setWaStatus('idle');
-                              setWaQr(null);
-                              clearInterval(pollDone);
-                            }
-                          } catch { /* retry */ }
-                        }, 3000);
-                      } else if (data.status === 'done' || data.status === 'paired' || data.status === 'connected') {
-                        setWaStatus('paired');
-                        clearInterval(pollQr);
-                        fetchOnboarding();
-                      } else if (data.status === 'error') {
-                        setError('Error al emparejar WhatsApp');
-                        setWaStatus('idle');
-                        clearInterval(pollQr);
-                      }
-                    } catch { /* retry */ }
-                  }, 2000);
-                } catch {
-                  setError('Error al iniciar emparejamiento');
-                  setWaStatus('idle');
-                }
-              }}>
-                Conectar
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="secondary" size="sm" onClick={() => setWaStatus('input_phone')}>
+                  Usar código
+                </Button>
+                <Button variant="primary" size="sm" onClick={async () => {
+                  setWaStatus('pairing');
+                  setError(null);
+                  try {
+                    await apiClient.post(`/setup/${token}/start-pair-whatsapp`);
+                    const pollQr = setInterval(async () => {
+                      try {
+                        const { data } = await apiClient.get(`/setup/${token}/whatsapp-qr`);
+                        if (data.status === 'qr' && data.qr) {
+                          setWaQr(data.qr);
+                          setWaStatus('qr_ready');
+                          clearInterval(pollQr);
+                          const pollDone = setInterval(async () => {
+                            try {
+                              const { data: d2 } = await apiClient.get(`/setup/${token}/whatsapp-qr`);
+                              if (d2.status === 'done' || d2.status === 'paired' || d2.status === 'connected') {
+                                setWaStatus('paired');
+                                setWaQr(null);
+                                clearInterval(pollDone);
+                                fetchOnboarding();
+                              } else if (d2.status === 'error') {
+                                setError('Error al emparejar WhatsApp');
+                                setWaStatus('idle');
+                                setWaQr(null);
+                                clearInterval(pollDone);
+                              }
+                            } catch { /* retry */ }
+                          }, 3000);
+                        } else if (data.status === 'done' || data.status === 'paired' || data.status === 'connected') {
+                          setWaStatus('paired');
+                          clearInterval(pollQr);
+                          fetchOnboarding();
+                        } else if (data.status === 'error') {
+                          setError('Error al emparejar WhatsApp');
+                          setWaStatus('idle');
+                          clearInterval(pollQr);
+                        }
+                      } catch { /* retry */ }
+                    }, 2000);
+                  } catch {
+                    setError('Error al iniciar emparejamiento');
+                    setWaStatus('idle');
+                  }
+                }}>
+                  Escanear QR
+                </Button>
+              </div>
             </div>
           )}
         </div>

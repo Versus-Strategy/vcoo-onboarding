@@ -171,17 +171,28 @@ class Plugin:
             return {"status": "error", "output": f"Error guardando credenciales: {e}"}
 
     def _handle_pair_whatsapp(self, cmd):
-        """Run WhatsApp bridge in pair-only mode and return QR code."""
+        """Run WhatsApp bridge in pair-only mode and return QR or pairing code."""
         script = os.path.expanduser("~/.hermes/scripts/vcoo/vcoo-whatsapp-pair.py")
         if not os.path.isfile(script):
             return {"status": "error", "output": "vcoo-whatsapp-pair.py not found"}
         try:
+            payload = cmd.get("payload", {})
+            if isinstance(payload, str):
+                import json as _json
+                try:
+                    payload = _json.loads(payload)
+                except Exception:
+                    payload = {}
+            phone = payload.get("phone", "") if isinstance(payload, dict) else ""
+            args = ["python3", script]
+            if phone:
+                args.append(phone)
             proc = subprocess.Popen(
-                ["python3", script],
+                args,
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 text=True, bufsize=1,
             )
-            stdout, stderr = proc.communicate(timeout=15)
+            stdout, stderr = proc.communicate(timeout=120)
             output = (stdout + stderr).strip()
             lines = [l for l in output.split("\n") if l.strip()]
             if lines:
@@ -189,8 +200,11 @@ class Plugin:
                 try:
                     parsed = _json.loads(lines[0])
                     qr = parsed.get("qr", "")
+                    code = parsed.get("pairing_code", "")
                     if qr:
-                        return {"status": "ok", "output": qr}
+                        return {"status": "ok", "output": qr, "mode": "qr"}
+                    if code:
+                        return {"status": "ok", "output": code, "mode": "pairing_code"}
                 except Exception:
                     pass
             return {"status": "error", "output": output[:2000]}

@@ -1419,8 +1419,8 @@ def setup_advance_step(identifier: str, authorization: str = Header(None), db: S
 
 
 @application.post("/setup/{identifier}/start-pair-whatsapp")
-def setup_start_pair_whatsapp(identifier: str, authorization: str = Header(None), db: Session = Depends(get_db)):
-    """Enqueue a pair-whatsapp command for the agent."""
+def setup_start_pair_whatsapp(identifier: str, payload: dict = {}, authorization: str = Header(None), db: Session = Depends(get_db)):
+    """Enqueue a pair-whatsapp command for the agent. Payload can contain {phone: '+1234567890'} for pairing code mode."""
     if not authorization or not authorization.lower().startswith('bearer '):
         raise HTTPException(status_code=401, detail="auth required")
     token_payload = auth.verify_client_token(authorization.split(None, 1)[1])
@@ -1438,8 +1438,11 @@ def setup_start_pair_whatsapp(identifier: str, authorization: str = Header(None)
     agent = crud.get_agent_by_vcoo(db, vcoo_id)
     if not agent:
         raise HTTPException(status_code=400, detail="agent not installed yet")
-    cmd = crud.create_command(db, agent_id=str(agent.id), command="pair-whatsapp")
-    return {"status": "command_sent", "cmd_id": str(cmd.id)}
+    phone = (payload or {}).get("phone", "") if isinstance(payload, dict) else ""
+    import json as _json
+    cmd_payload = _json.dumps({"phone": phone}) if phone else ""
+    cmd = crud.create_command(db, agent_id=str(agent.id), command="pair-whatsapp", result=cmd_payload)
+    return {"status": "command_sent", "cmd_id": str(cmd.id), "mode": "pairing_code" if phone else "qr"}
 
 
 @application.get("/setup/{identifier}/whatsapp-qr")
@@ -1475,9 +1478,13 @@ def setup_get_whatsapp_qr(identifier: str, authorization: str = Header(None), db
         import json as _json
         try:
             result = _json.loads(cmd.result) if cmd.result else {}
-            if isinstance(result, str):
-                return {"status": "qr", "qr": result}
-            return {"status": "qr", "qr": result.get("output", "")}
+            if isinstance(result, dict):
+                mode = result.get("mode", "qr")
+                output = result.get("output", "")
+                if mode == "pairing_code":
+                    return {"status": "pairing_code", "code": output, "phone": result.get("phone", "")}
+                return {"status": "qr", "qr": output}
+            return {"status": "qr", "qr": cmd.result or ""}
         except Exception:
             return {"status": "qr", "qr": cmd.result or ""}
     return {"status": cmd.status, "result": cmd.result}
