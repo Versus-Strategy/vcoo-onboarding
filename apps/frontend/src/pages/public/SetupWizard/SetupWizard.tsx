@@ -559,6 +559,10 @@ const SetupWizard = () => {
       '2. Ejecuta: hermes config set trello.api_key TU_API_KEY',
       '3. Ejecuta: hermes config set trello.api_token TU_TOKEN',
     ]},
+    whatsapp: { pasos: [
+      '1. Próximamente: integración con WhatsApp Business API',
+      '2. Configura un webhook en tu panel de WhatsApp',
+    ]},
     developer: { pasos: [
       '1. GitHub: gh auth login',
       '2. Ejecuta: hermes config set github.token $(gh auth token)',
@@ -589,7 +593,8 @@ const SetupWizard = () => {
         if (popup.closed) {
           clearInterval(checkClosed);
           setConectando(null);
-          fetchOnboarding();
+          // Small delay to let backend process the OAuth callback and advance step
+          setTimeout(fetchOnboarding, 2000);
         }
       }, 500);
       // Timeout de seguridad: si después de 120s no se cierra, avisar al usuario
@@ -601,7 +606,6 @@ const SetupWizard = () => {
         }
       }, 120000);
       const handleMessage = (e: MessageEvent) => {
-        if (e.origin !== window.location.origin) return;
         if (e.data === 'oauth-complete') {
           clearInterval(checkClosed);
           clearTimeout(safetyTimer);
@@ -661,6 +665,14 @@ const SetupWizard = () => {
             </button>
           </div>
         </div>
+
+        {onboarding?.agent_online && !(onboarding.completed || []).includes('bootstrap') && (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
+            <p className="text-blue-700 font-medium">Agente conectado</p>
+            <p className="text-sm text-blue-500 mt-1">Instalando componentes en el servidor...</p>
+          </div>
+        )}
 
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
@@ -944,7 +956,7 @@ const SetupWizard = () => {
   };
 
   const renderPasoModulos = () => {
-    const modulosDisponibles = onboarding.modules || [];
+    const modulosDisponibles = (onboarding.modules || []).filter(m => m !== 'core');
 
     const modulosInfo: Record<
       string,
@@ -969,6 +981,11 @@ const SetupWizard = () => {
         nombre: onboarding.module_labels?.developer?.label || 'Developer',
         descripcion: onboarding.module_labels?.developer?.description || 'GitHub, Vercel, Supabase y herramientas para desarrolladores',
         icono: <CodeBracketIcon className="w-7 h-7 text-gray-600" />,
+      },
+      whatsapp: {
+        nombre: 'WhatsApp',
+        descripcion: 'Canal de comunicación con clientes vía WhatsApp',
+        icono: <ClockIcon className="w-7 h-7 text-green-600" />,
       },
     };
 
@@ -1119,6 +1136,7 @@ const SetupWizard = () => {
       mail: ['google'],
       planner: ['trello'],
       developer: ['github', 'vercel', 'supabase'],
+      whatsapp: [],
     };
     const items: { label: string; ok: boolean }[] = [
       { label: 'Agente instalado y activo', ok: onboarding.agent_online === true },

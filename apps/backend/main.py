@@ -908,12 +908,13 @@ def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session
             result=json.dumps(creds_data),
         )
 
+    frontend_origin = _url('DASHBOARD_URL', vercel_default=_DASHBOARD_PROD, local_default='http://localhost:3000')
     return HTMLResponse(
         "<html><body style=\"background:#0a0a0f;color:#e2e8f0;font-family:sans-serif;text-align:center;padding:40px\">"
         "<h1 style=\"color:#533afd\">Autorizacion recibida</h1>"
         "<p>Vuelve al wizard para continuar.</p>"
         "<script>"
-        "try{if(window.opener){window.opener.postMessage('oauth-complete','https://vcoo-dashboard.vercel.app');}}catch(e){}"
+        "try{if(window.opener){window.opener.postMessage('oauth-complete','" + frontend_origin + "');}}catch(e){}"
         "setTimeout(function(){window.close()},1500)"
         "</script></body></html>"
     )
