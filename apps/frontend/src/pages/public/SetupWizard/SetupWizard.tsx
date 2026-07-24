@@ -1411,7 +1411,7 @@ const SetupWizard = () => {
           m === 'core' || (MODULE_CHECK_KEYS[m] || []).every(k => checks[k] === 'ok')
         ),
       },
-      { label: 'WhatsApp', ok: checks.whatsapp === 'ok' },
+      { label: 'Canal de comunicación', ok: checks.whatsapp === 'ok' },
     ];
     const allOk = items.every(i => i.ok);
     return (

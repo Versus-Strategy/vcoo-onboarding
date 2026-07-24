@@ -8,30 +8,27 @@
 const path = require('path');
 const fs = require('fs');
 
-// Determine bridge directory (relative to Hermes home)
 const HERMES_HOME = process.env.HERMES_HOME || path.join(require('os').homedir(), '.hermes');
 const BRIDGE_DIR = path.join(HERMES_HOME, 'hermes-agent', 'scripts', 'whatsapp-bridge');
-const SESSION_DIR = process.env.SESSION_DIR || path.join(HERMES_HOME, 'whatsapp-session', 'main');
+const SESSION_DIR = path.join(HERMES_HOME, 'whatsapp-session', 'main');
 const BAIL_EYS = path.join(BRIDGE_DIR, 'node_modules', '@whiskeysockets', 'baileys');
 
 function emit(ev) {
   process.stdout.write(JSON.stringify({ ts: Date.now(), ...ev }) + '\n');
 }
 
-// Parse args
 const args = process.argv.slice(2);
 const phoneIdx = args.indexOf('--phone');
 const phoneNumber = phoneIdx >= 0 ? args[phoneIdx + 1] : null;
 
 async function main() {
-  // Ensure Baileys is installed
   if (!fs.existsSync(path.join(BAIL_EYS, 'package.json'))) {
     emit({ event: 'installing' });
     const { execSync } = require('child_process');
     execSync('npm install --no-audit --no-fund --loglevel=error', {
       cwd: BRIDGE_DIR,
       stdio: 'pipe',
-      timeout: 120000,
+      timeout: 180000,
     });
   }
 
@@ -52,14 +49,29 @@ async function main() {
   });
 
   let paired = false;
+  let qrEmitted = false;
 
   sock.ev.on('creds.update', saveCreds);
 
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update;
 
-    if (qr && !paired && !phoneNumber) {
-      emit({ event: 'qr', qr });
+    if (qr && !paired && !qrEmitted) {
+      qrEmitted = true;
+      if (!phoneNumber) {
+        emit({ event: 'qr', qr });
+      } else {
+        // In pairing code mode, call requestPairingCode when QR would appear
+        try {
+          // requestPairingCode is available on the socket in Baileys v7
+          const code = typeof sock.requestPairingCode === 'function'
+            ? await sock.requestPairingCode(phoneNumber)
+            : await Baileys.requestPairingCode(sock, phoneNumber);
+          emit({ event: 'pairing_code', code, phone: phoneNumber });
+        } catch (err) {
+          emit({ event: 'error', error: 'pairing_code_failed', message: err.message });
+        }
+      }
     }
 
     if (connection === 'open') {
@@ -79,18 +91,6 @@ async function main() {
       process.exit(paired ? 0 : 1);
     }
   });
-
-  // If phone number provided, request pairing code
-  if (phoneNumber) {
-    // Wait a moment for socket to initialize
-    await new Promise(r => setTimeout(r, 2000));
-    try {
-      const code = await sock.requestPairingCode(phoneNumber);
-      emit({ event: 'pairing_code', code, phone: phoneNumber });
-    } catch (err) {
-      emit({ event: 'error', error: 'pairing_code_failed', message: err.message });
-    }
-  }
 }
 
 main().catch((err) => {

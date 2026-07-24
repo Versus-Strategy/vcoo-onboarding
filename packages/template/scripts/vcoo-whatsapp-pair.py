@@ -1,49 +1,76 @@
 #!/usr/bin/env python3
-"""VCOO WhatsApp pairing — runs Node.js script and outputs QR or pairing code."""
+"""VCOO WhatsApp pairing — runs bridge.js --pair-only or vcoo-whatsapp-pair.js."""
 import json, os, subprocess, sys, time
 
 HERMES_HOME = os.path.expanduser("~/.hermes")
 BRIDGE_DIR = os.path.join(HERMES_HOME, "hermes-agent", "scripts", "whatsapp-bridge")
-NODE_SCRIPT = os.path.join(HERMES_HOME, "scripts", "vcoo", "vcoo-whatsapp-pair.js")
-QR_FILE = os.path.join(HERMES_HOME, "whatsapp-qr.json")
-PAIRING_FILE = os.path.join(HERMES_HOME, "whatsapp-pairing.json")
-CONNECTED_FILE = os.path.join(HERMES_HOME, "whatsapp-connected.json")
 
-# Accept phone number as argument
 phone = sys.argv[1] if len(sys.argv) > 1 else None
 
-if not os.path.isfile(NODE_SCRIPT):
-    # Fallback: use bridge.js installed by Hermes
-    BRIDGE_JS = os.path.join(BRIDGE_DIR, "bridge.js")
-    if not os.path.isfile(BRIDGE_JS):
-        print(json.dumps({"error": "WhatsApp bridge not found"}))
-        sys.exit(1)
-    SESSION_DIR = os.path.join(HERMES_HOME, "whatsapp-session", "main")
-    os.makedirs(SESSION_DIR, exist_ok=True)
+NODE_SCRIPT = os.path.join(HERMES_HOME, "scripts", "vcoo", "vcoo-whatsapp-pair.js")
+BRIDGE_JS = os.path.join(BRIDGE_DIR, "bridge.js")
+
+if os.path.isfile(NODE_SCRIPT):
+    cmd = ["node", NODE_SCRIPT]
+    if phone:
+        cmd += ["--phone", phone]
+elif os.path.isfile(BRIDGE_JS):
+    BRIDGE_NM = os.path.join(BRIDGE_DIR, "node_modules")
+    if not os.path.isdir(BRIDGE_NM):
+        print(json.dumps({"status": "installing_whatsapp"}))
+        sys.stdout.flush()
+        subprocess.run(["npm", "install", "--no-audit", "--no-fund", "--loglevel=error"],
+                       cwd=BRIDGE_DIR, capture_output=True, timeout=180)
     env = os.environ.copy()
     env.update({"WHATSAPP_MODE": "bot", "WHATSAPP_ALLOWED_USERS": "*"})
+    if phone:
+        env["WHATSAPP_ALLOWED_USERS"] = phone
     cmd = ["node", BRIDGE_JS, "--pair-only", "--pair-json"]
+    env_cmd = cmd
     try:
-        proc = subprocess.Popen(cmd, cwd=BRIDGE_DIR, stdout=subprocess.PIPE,
+        proc = subprocess.Popen(env_cmd, cwd=BRIDGE_DIR, stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE, text=True, bufsize=1, env=env)
     except FileNotFoundError:
         print(json.dumps({"error": "node not found"}))
         sys.exit(1)
+    for line in proc.stdout:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        ev = event.get("event", "")
+        if ev == "qr":
+            print(json.dumps({"qr": event.get("qr", ""), "status": "waiting"}))
+            sys.stdout.flush()
+        elif ev == "connected":
+            print(json.dumps({"status": "connected", "user": event.get("user", {})}))
+            sys.stdout.flush()
+            proc.terminate()
+            sys.exit(0)
+        elif ev == "error":
+            print(json.dumps({"status": "error", "error": event.get("error", "")}))
+            sys.stdout.flush()
+            proc.terminate()
+            sys.exit(1)
+    proc.wait()
+    sys.exit(0)
 else:
-    cmd = ["node", NODE_SCRIPT]
-    if phone:
-        cmd += ["--phone", phone]
-    try:
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE, text=True, bufsize=1)
-    except FileNotFoundError:
-        print(json.dumps({"error": "node not found"}))
-        sys.exit(1)
+    print(json.dumps({"error": "WhatsApp bridge not found. Install Hermes first."}))
+    sys.exit(1)
 
-qr_sent = False
-code_sent = False
+try:
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, text=True, bufsize=1)
+except FileNotFoundError:
+    print(json.dumps({"error": "node not found"}))
+    sys.exit(1)
+
+waiting_for = "pairing_code" if phone else "qr"
+found = False
 start_time = time.time()
-timeout = 120
 
 for line in proc.stdout:
     line = line.strip()
@@ -56,35 +83,22 @@ for line in proc.stdout:
 
     ev = event.get("event", "")
 
-    if ev == "qr" and not qr_sent:
-        qr_data = event.get("qr", "")
-        output = {"qr": qr_data, "status": "waiting"}
+    if ev == "qr" and not phone:
+        output = {"qr": event.get("qr", ""), "status": "waiting"}
         print(json.dumps(output))
         sys.stdout.flush()
-        qr_sent = True
-        with open(QR_FILE, "w") as f:
-            json.dump(output, f)
+        found = True
 
-    elif ev == "pairing_code" and not code_sent:
-        code = event.get("code", "")
-        phone = event.get("phone", "")
-        output = {"pairing_code": code, "phone": phone, "status": "waiting"}
+    elif ev == "pairing_code":
+        output = {"pairing_code": event.get("code", ""), "phone": event.get("phone", ""), "status": "waiting"}
         print(json.dumps(output))
         sys.stdout.flush()
-        code_sent = True
-        with open(PAIRING_FILE, "w") as f:
-            json.dump(output, f)
+        found = True
 
     elif ev == "connected":
-        user = event.get("user", {})
-        output = {"status": "connected", "user": user}
+        output = {"status": "connected", "user": event.get("user", {})}
         print(json.dumps(output))
         sys.stdout.flush()
-        with open(CONNECTED_FILE, "w") as f:
-            json.dump(output, f)
-        for f in [QR_FILE, PAIRING_FILE]:
-            if os.path.isfile(f):
-                os.remove(f)
         proc.terminate()
         sys.exit(0)
 
@@ -93,16 +107,12 @@ for line in proc.stdout:
         sys.stdout.flush()
 
     elif ev == "error":
-        error_msg = event.get("error", "unknown error")
-        print(json.dumps({"status": "error", "error": error_msg}))
+        print(json.dumps({"status": "error", "error": event.get("error", ""), "message": event.get("message", "")}))
         sys.stdout.flush()
         proc.terminate()
         sys.exit(1)
 
-    if time.time() - start_time > timeout:
-        print(json.dumps({"status": "timeout"}))
-        sys.stdout.flush()
-        proc.terminate()
-        sys.exit(1)
+    if found and time.time() - start_time > 120:
+        break
 
-proc.wait()
+proc.wait(timeout=60)

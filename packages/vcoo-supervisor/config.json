@@ -6,7 +6,7 @@
     },
     "tick": {
       "enabled": true,
-      "interval": 60
+      "interval": 15
     },
     "watchdog": {
       "enabled": true,
