@@ -986,11 +986,6 @@ const SetupWizard = () => {
         descripcion: onboarding.module_labels?.developer?.description || 'GitHub, Vercel, Supabase y herramientas para desarrolladores',
         icono: <CodeBracketIcon className="w-7 h-7 text-gray-600" />,
       },
-      whatsapp: {
-        nombre: 'WhatsApp',
-        descripcion: 'Canal de comunicación con clientes vía WhatsApp',
-        icono: <svg className="w-7 h-7 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>,
-      },
     };
 
     if (moduloSeleccionado) {
@@ -1211,6 +1206,103 @@ const SetupWizard = () => {
             })}
           </div>
         )}
+
+        {/* ── Canales de comunicación ── */}
+        <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+          <div className="flex items-center gap-3 mb-4">
+            <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            <h3 className="text-lg font-bold text-gray-900">Canales de comunicación</h3>
+          </div>
+          <p className="text-sm text-gray-500 mb-4">Conecta canales para que VCOO pueda comunicarse con tus clientes.</p>
+
+          {checks.whatsapp === 'ok' ? (
+            <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
+              <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
+                <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-green-700">WhatsApp conectado</p>
+                <p className="text-xs text-green-500">El canal está activo y funcionando</p>
+              </div>
+            </div>
+          ) : waQr ? (
+            <div className="flex flex-col items-center text-center py-4">
+              <p className="text-sm font-medium text-gray-700 mb-3">Escanea con WhatsApp</p>
+              <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                <img src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(waQr)}`}
+                  alt="WhatsApp QR" className="w-64 h-64" />
+              </div>
+              <p className="text-xs text-gray-400 mt-3">Abre WhatsApp en tu teléfono → Escanea este código</p>
+            </div>
+          ) : waStatus === 'pairing' ? (
+            <div className="flex flex-col items-center gap-3 py-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+              <p className="text-sm text-gray-600">Iniciando emparejamiento...</p>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between p-3 border border-gray-100 rounded-lg">
+              <div className="flex items-center gap-3">
+                <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">WhatsApp</p>
+                  <p className="text-xs text-gray-500">Recibe y envía mensajes</p>
+                </div>
+              </div>
+              <Button variant="primary" size="sm" onClick={async () => {
+                setWaStatus('pairing');
+                setError(null);
+                try {
+                  await apiClient.post(`/setup/${token}/start-pair-whatsapp`);
+                  const pollQr = setInterval(async () => {
+                    try {
+                      const { data } = await apiClient.get(`/setup/${token}/whatsapp-qr`);
+                      if (data.status === 'qr' && data.qr) {
+                        setWaQr(data.qr);
+                        setWaStatus('qr_ready');
+                        clearInterval(pollQr);
+                        const pollDone = setInterval(async () => {
+                          try {
+                            const { data: d2 } = await apiClient.get(`/setup/${token}/whatsapp-qr`);
+                            if (d2.status === 'done' || d2.status === 'paired' || d2.status === 'connected') {
+                              setWaStatus('paired');
+                              setWaQr(null);
+                              clearInterval(pollDone);
+                              fetchOnboarding();
+                            } else if (d2.status === 'error') {
+                              setError('Error al emparejar WhatsApp');
+                              setWaStatus('idle');
+                              setWaQr(null);
+                              clearInterval(pollDone);
+                            }
+                          } catch { /* retry */ }
+                        }, 3000);
+                      } else if (data.status === 'done' || data.status === 'paired' || data.status === 'connected') {
+                        setWaStatus('paired');
+                        clearInterval(pollQr);
+                        fetchOnboarding();
+                      } else if (data.status === 'error') {
+                        setError('Error al emparejar WhatsApp');
+                        setWaStatus('idle');
+                        clearInterval(pollQr);
+                      }
+                    } catch { /* retry */ }
+                  }, 2000);
+                } catch {
+                  setError('Error al iniciar emparejamiento');
+                  setWaStatus('idle');
+                }
+              }}>
+                Conectar
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
     );
   };
@@ -1221,7 +1313,6 @@ const SetupWizard = () => {
       mail: ['google'],
       planner: ['trello'],
       developer: ['github', 'vercel', 'supabase'],
-      whatsapp: ['whatsapp'],
     };
     const items: { label: string; ok: boolean }[] = [
       { label: 'Agente instalado y activo', ok: onboarding.agent_online === true },
@@ -1232,6 +1323,7 @@ const SetupWizard = () => {
           m === 'core' || (MODULE_CHECK_KEYS[m] || []).every(k => checks[k] === 'ok')
         ),
       },
+      { label: 'WhatsApp', ok: checks.whatsapp === 'ok' },
     ];
     const allOk = items.every(i => i.ok);
     return (

@@ -21,12 +21,11 @@ STEP_DEPENDENCIES: dict[str, list[str]] = {
 
 # Mapeo módulo → pasos que añade
 MODULE_STEPS: dict[str, list[str]] = {
-    "core":      ["bootstrap"],
+    "core":      ["bootstrap", "whatsapp-setup"],
     "office":    ["google-oauth"],
     "mail":      ["gmail-setup"],
     "planner":   ["trello-setup"],
     "developer": ["github-setup", "vercel-setup", "supabase-setup"],
-    "whatsapp":  ["whatsapp-setup"],
 }
 
 # Etiquetas descriptivas para mostrar en el frontend
@@ -35,7 +34,6 @@ MODULE_LABELS: dict[str, str] = {
     "mail":      "Gmail",
     "planner":   "Calendar + Trello",
     "developer": "Developer",
-    "whatsapp":  "WhatsApp",
 }
 
 MODULE_DESCRIPTIONS: dict[str, str] = {
@@ -43,7 +41,6 @@ MODULE_DESCRIPTIONS: dict[str, str] = {
     "mail":      "Correo electrónico y bandeja de entrada inteligente",
     "planner":   "Calendario, tareas y organización del trabajo",
     "developer": "GitHub, Vercel, Supabase y herramientas para desarrolladores",
-    "whatsapp":  "Canal de comunicación con clientes vía WhatsApp",
 }
 
 
