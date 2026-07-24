@@ -1,17 +1,13 @@
 #!/usr/bin/env node
-/* VCOO WhatsApp pairing — supports QR code and pairing code modes.
- * Usage:
- *   node vcoo-whatsapp-pair.js                          # QR mode (default)
- *   node vcoo-whatsapp-pair.js --phone +1234567890      # Pairing code mode
- * Outputs JSON lines: {event, qr?, code?, error?}
- */
 const path = require('path');
 const fs = require('fs');
 
 const HERMES_HOME = process.env.HERMES_HOME || path.join(require('os').homedir(), '.hermes');
 const BRIDGE_DIR = path.join(HERMES_HOME, 'hermes-agent', 'scripts', 'whatsapp-bridge');
-const SESSION_DIR = path.join(HERMES_HOME, 'whatsapp-session', 'main');
-const BAIL_EYS = path.join(BRIDGE_DIR, 'node_modules', '@whiskeysockets', 'baileys');
+const BAIL_EYS_DIR = path.join(BRIDGE_DIR, 'node_modules', '@whiskeysockets', 'baileys');
+
+// Use a fresh session per pairing attempt
+const SESSION_DIR = path.join(HERMES_HOME, 'whatsapp-session', 'pair-' + Date.now().toString(36));
 
 function emit(ev) {
   process.stdout.write(JSON.stringify({ ts: Date.now(), ...ev }) + '\n');
@@ -22,13 +18,11 @@ const phoneIdx = args.indexOf('--phone');
 const phoneNumber = phoneIdx >= 0 ? args[phoneIdx + 1] : null;
 
 async function main() {
-  if (!fs.existsSync(path.join(BAIL_EYS, 'package.json'))) {
+  if (!fs.existsSync(path.join(BAIL_EYS_DIR, 'package.json'))) {
     emit({ event: 'installing' });
     const { execSync } = require('child_process');
     execSync('npm install --no-audit --no-fund --loglevel=error', {
-      cwd: BRIDGE_DIR,
-      stdio: 'pipe',
-      timeout: 180000,
+      cwd: BRIDGE_DIR, stdio: 'pipe', timeout: 180000,
     });
   }
 
@@ -61,12 +55,14 @@ async function main() {
       if (!phoneNumber) {
         emit({ event: 'qr', qr });
       } else {
-        // In pairing code mode, call requestPairingCode when QR would appear
+        // Pairing code mode: request code when socket is ready
+        const cleanPhone = phoneNumber.replace(/[^0-9]/g, '');
+        if (cleanPhone.length < 7) {
+          emit({ event: 'error', error: 'invalid_phone', message: 'Phone number too short. Use international format, e.g. 521234567890' });
+          return;
+        }
         try {
-          // requestPairingCode is available on the socket in Baileys v7
-          const code = typeof sock.requestPairingCode === 'function'
-            ? await sock.requestPairingCode(phoneNumber)
-            : await Baileys.requestPairingCode(sock, phoneNumber);
+          const code = await sock.requestPairingCode(cleanPhone);
           emit({ event: 'pairing_code', code, phone: phoneNumber });
         } catch (err) {
           emit({ event: 'error', error: 'pairing_code_failed', message: err.message });

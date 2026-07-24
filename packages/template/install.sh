@@ -152,6 +152,17 @@ if ! command -v hermes &>/dev/null; then
     else
         ok "Hermes Agent $(hermes --version 2>/dev/null || echo 'presente')"
     fi
+    # Pre-install WhatsApp bridge dependencies for faster onboarding
+    WA_BRIDGE="${HERMES_HOME}/hermes-agent/scripts/whatsapp-bridge"
+    if [ -d "$WA_BRIDGE" ] && [ ! -d "$WA_BRIDGE/node_modules/@whiskeysockets/baileys" ]; then
+        info "Pre-instalando dependencias de WhatsApp bridge..."
+        if command -v node &>/dev/null; then
+            (cd "$WA_BRIDGE" && npm install --no-audit --no-fund --loglevel=error) && \
+            ok "WhatsApp bridge listo" || warn "No se pudieron instalar dependencias de WhatsApp"
+        else
+            warn "Node.js no encontrado — WhatsApp bridge se instalará bajo demanda"
+        fi
+    fi
 else
     ok "Hermes Agent $(hermes --version 2>/dev/null || echo 'presente')"
 fi

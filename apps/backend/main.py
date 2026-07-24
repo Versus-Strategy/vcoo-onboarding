@@ -864,10 +864,19 @@ def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session
                     token_resp = json.loads(resp.read())
                     access_token = token_resp.get("access_token", "")
                     refresh_token = token_resp.get("refresh_token", "")
-                    print(f"[oauth] Google token exchange OK, access_token={access_token[:20]}...", file=sys.stderr)
+                    print(f"[oauth] Google token exchange OK, access_token={'ok' if access_token else 'EMPTY'}, refresh_token={'ok' if refresh_token else 'EMPTY'}", file=sys.stderr)
+            except urllib.error.HTTPError as e:
+                error_body = e.read().decode()
+                print(f"[oauth] HTTP {e.code} from token endpoint: {error_body[:200]}", file=sys.stderr)
+                print(f"[oauth] redirect_uri used: {redirect_uri}", file=sys.stderr)
+                # Store error for debugging
+                _oauth_error = error_body[:200]
             except Exception as e:
                 print(f"[oauth] Token exchange failed: {e}", file=sys.stderr)
-                # Continue — store the code as fallback so the agent can retry
+                print(f"[oauth] redirect_uri: {redirect_uri}", file=sys.stderr)
+                _oauth_error = str(e)
+                import traceback
+                traceback.print_exc(file=sys.stderr)
 
     # Map service to the correct onboarding step and advance it NOW
     step_map: dict[str, str] = {
