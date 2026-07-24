@@ -918,10 +918,17 @@ def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session
         )
 
     frontend_origin = _url('DASHBOARD_URL', vercel_default=_DASHBOARD_PROD, local_default='http://localhost:3000')
-    oauth_error = locals().get('_oauth_error', '')
+    _oauth_error = locals().get('_oauth_error', '')
+    if not _oauth_error and not access_token:
+        if not _os.getenv("GOOGLE_CLIENT_ID"):
+            _oauth_error = "GOOGLE_CLIENT_ID no configurado"
+        elif not _os.getenv("GOOGLE_CLIENT_SECRET"):
+            _oauth_error = "GOOGLE_CLIENT_SECRET no configurado"
+        else:
+            _oauth_error = "Error desconocido en el intercambio de tokens"
     error_html = ""
-    if oauth_error:
-        error_html = f"<p style=\"color:#fbbf24;font-size:12px;margin-top:20px;word-break:break-all\">Debug: {oauth_error}</p>"
+    if _oauth_error:
+        error_html = f"<p style=\"color:#fbbf24;font-size:12px;margin-top:20px;word-break:break-all\">Debug: {_oauth_error}</p>"
     if access_token:
         return HTMLResponse(
             "<html><body style=\"background:#0a0a0f;color:#e2e8f0;font-family:sans-serif;text-align:center;padding:40px\">"
@@ -1500,17 +1507,19 @@ def setup_get_whatsapp_qr(identifier: str, authorization: str = Header(None), db
         return {"status": "pending"}
     if cmd.status == "done":
         import json as _json
+        raw = cmd.result or ""
+        result = None
         try:
-            result = _json.loads(cmd.result) if cmd.result else {}
-            if isinstance(result, dict):
-                mode = result.get("mode", "qr")
-                output = result.get("output", "")
-                if mode == "pairing_code":
-                    return {"status": "pairing_code", "code": output, "phone": result.get("phone", "")}
-                return {"status": "qr", "qr": output}
-            return {"status": "qr", "qr": cmd.result or ""}
-        except Exception:
-            return {"status": "qr", "qr": cmd.result or ""}
+            result = _json.loads(raw) if raw else {}
+        except (json.JSONDecodeError, ValueError):
+            result = {"output": raw, "mode": "qr"}  # plain string = fallback
+        if isinstance(result, dict):
+            mode = result.get("mode", "qr")
+            output = result.get("output", "")
+            if mode == "pairing_code":
+                return {"status": "pairing_code", "code": output, "phone": result.get("phone", "")}
+            return {"status": "qr", "qr": output}
+        return {"status": "qr", "qr": str(result)}
     return {"status": cmd.status, "result": cmd.result}
 
 
