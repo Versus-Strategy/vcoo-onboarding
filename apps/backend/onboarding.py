@@ -15,6 +15,7 @@ STEP_DEPENDENCIES: dict[str, list[str]] = {
     "github-setup":   ["bootstrap"],
     "vercel-setup":   ["bootstrap", "github-setup"],
     "supabase-setup": ["bootstrap", "github-setup"],
+    "whatsapp-setup": ["bootstrap"],
     "finalize":       [],  # especial: requiere todos los contratados
 }
 
@@ -25,6 +26,7 @@ MODULE_STEPS: dict[str, list[str]] = {
     "mail":      ["gmail-setup"],
     "planner":   ["trello-setup"],
     "developer": ["github-setup", "vercel-setup", "supabase-setup"],
+    "whatsapp":  ["whatsapp-setup"],
 }
 
 # Etiquetas descriptivas para mostrar en el frontend
@@ -33,6 +35,7 @@ MODULE_LABELS: dict[str, str] = {
     "mail":      "Gmail",
     "planner":   "Calendar + Trello",
     "developer": "Developer",
+    "whatsapp":  "WhatsApp",
 }
 
 MODULE_DESCRIPTIONS: dict[str, str] = {
@@ -40,6 +43,7 @@ MODULE_DESCRIPTIONS: dict[str, str] = {
     "mail":      "Correo electrónico y bandeja de entrada inteligente",
     "planner":   "Calendario, tareas y organización del trabajo",
     "developer": "GitHub, Vercel, Supabase y herramientas para desarrolladores",
+    "whatsapp":  "Canal de comunicación con clientes vía WhatsApp",
 }
 
 
@@ -61,7 +65,7 @@ def get_steps_for_modules(modules: list[str]) -> list[str]:
     canonical = [
         "bootstrap", "google-oauth", "gmail-setup",
         "trello-setup", "github-setup", "vercel-setup",
-        "supabase-setup", "finalize",
+        "supabase-setup", "whatsapp-setup", "finalize",
     ]
     step_modules: dict[str, str] = {}
     for mod, steps in MODULE_STEPS.items():
@@ -116,6 +120,7 @@ WIZARD_STEP_MAP: dict[str, int] = {
     "github-setup":   2,
     "vercel-setup":   2,
     "supabase-setup": 2,
+    "whatsapp-setup": 2,
     "finalize":       3,
     "done":           3,
 }
@@ -143,6 +148,7 @@ def get_step_command(step: str) -> str:
         "github-setup":   "verify-github",
         "vercel-setup":   "verify-vercel",
         "supabase-setup": "verify-supabase",
+        "whatsapp-setup": "verify-whatsapp",
         "finalize":       "finalize",
     }
     return mapping.get(step, step)
@@ -151,7 +157,8 @@ def get_step_command(step: str) -> str:
 def has_agent_command(step: str) -> bool:
     """Returns True if this step has a corresponding agent command."""
     return step in {"bootstrap", "google-oauth", "gmail-setup", "trello-setup",
-                    "github-setup", "vercel-setup", "supabase-setup", "finalize"}
+                    "github-setup", "vercel-setup", "supabase-setup",
+                    "whatsapp-setup", "finalize"}
 
 
 def get_agent_total_steps(modules: list[str]) -> int:

@@ -455,13 +455,14 @@ const SetupWizard = () => {
   }
   // Chequeos de módulos OAuth: el paso backend correspondiente debe estar completado
   // y el módulo debe estar habilitado para este VCOO.
-  const checkToBackendStep: Record<string, { steps: string[]; mod: string }> = {
-    google: { steps: ['gmail-setup'], mod: 'office' },
-    trello: { steps: ['trello-setup'], mod: 'planner' },
-    github: { steps: ['github-setup'], mod: 'developer' },
-    vercel: { steps: ['vercel-setup'], mod: 'developer' },
-    supabase: { steps: ['supabase-setup'], mod: 'developer' },
-  };
+    const checkToBackendStep: Record<string, { steps: string[]; mod: string }> = {
+      google: { steps: ['gmail-setup'], mod: 'office' },
+      trello: { steps: ['trello-setup'], mod: 'planner' },
+      github: { steps: ['github-setup'], mod: 'developer' },
+      vercel: { steps: ['vercel-setup'], mod: 'developer' },
+      supabase: { steps: ['supabase-setup'], mod: 'developer' },
+      whatsapp: { steps: ['whatsapp-setup'], mod: 'whatsapp' },
+    };
   for (const [check, cfg] of Object.entries(checkToBackendStep)) {
     const val = checks[check];
     if ((val === "missing" || val === "error") && modules.includes(cfg.mod) && cfg.steps.some(s => completed.includes(s))) {
@@ -560,8 +561,9 @@ const SetupWizard = () => {
       '3. Ejecuta: hermes config set trello.api_token TU_TOKEN',
     ]},
     whatsapp: { pasos: [
-      '1. Próximamente: integración con WhatsApp Business API',
-      '2. Configura un webhook en tu panel de WhatsApp',
+      '1. Ejecuta en tu VPS: hermes whatsapp',
+      '2. Escanea el código QR con WhatsApp',
+      '3. Verifica que el canal esté activo: hermes gateway list',
     ]},
     developer: { pasos: [
       '1. GitHub: gh auth login',
@@ -985,7 +987,7 @@ const SetupWizard = () => {
       whatsapp: {
         nombre: 'WhatsApp',
         descripcion: 'Canal de comunicación con clientes vía WhatsApp',
-        icono: <ClockIcon className="w-7 h-7 text-green-600" />,
+        icono: <svg className="w-7 h-7 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>,
       },
     };
 
@@ -1136,7 +1138,7 @@ const SetupWizard = () => {
       mail: ['google'],
       planner: ['trello'],
       developer: ['github', 'vercel', 'supabase'],
-      whatsapp: [],
+      whatsapp: ['whatsapp'],
     };
     const items: { label: string; ok: boolean }[] = [
       { label: 'Agente instalado y activo', ok: onboarding.agent_online === true },

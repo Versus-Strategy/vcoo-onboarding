@@ -49,7 +49,7 @@ def _check_client_owns_vcoo(db: Session, client_email: str, vcoo_id: str) -> boo
     return bool(client_obj and client_obj.vcoo_id and str(client_obj.vcoo_id) == vcoo_id)
 _VALID_AGENT_COMMANDS = {
     "verify-bootstrap", "verify-google", "verify-trello", "verify-email",
-    "verify-github", "verify-vercel", "verify-supabase",
+    "verify-github", "verify-vercel", "verify-supabase", "verify-whatsapp",
     "save-creds", "finalize", "set-provider",
 }
 
@@ -939,6 +939,7 @@ def get_hermes_commands_endpoint(identifier: str, service: str = "", db: Session
         "github": ["gh auth login", "hermes config set github.token $(gh auth token)"],
         "vercel": ["vercel login", "hermes config set vercel.token TU_TOKEN"],
         "supabase": ["supabase login", "hermes config set supabase.access_token TU_ACCESS_TOKEN"],
+        "whatsapp": ["hermes whatsapp"],
         "opencode": ["hermes config set model.provider opencode", "hermes config set model.default opencode/claude-sonnet-4"],
         "anthropic": ["export ANTHROPIC_API_KEY=sk-ant-tu-clave", "hermes config set model.provider anthropic"],
         "openai": ["export OPENAI_API_KEY=sk-tu-clave", "hermes config set model.provider openai"],

@@ -8,6 +8,7 @@ COMMAND_MAP = {
     "verify-github":    ["gh", "repo", "list", "--limit", "3"],
     "verify-vercel":    ["vercel", "projects", "ls", "--limit", "3"],
     "verify-supabase":  ["supabase", "status"],
+    "verify-whatsapp":  ["hermes", "whatsapp", "--check"],
     "save-creds":       None,
     "finalize":         None,
 }
@@ -443,6 +444,18 @@ class Plugin:
         result["vercel"] = "ok" if "vercel.token" in config_text else "missing"
         # Check Supabase (developer module)
         result["supabase"] = "ok" if "supabase.access_token" in config_text else "missing"
+        # Check WhatsApp (communication channel)
+        gateway_state = os.path.expanduser("~/.hermes/gateway_state.json")
+        wa_ok = False
+        if os.path.isfile(gateway_state):
+            try:
+                with open(gateway_state) as f:
+                    gs = json.load(f)
+                platforms = gs.get("platforms", {})
+                wa_ok = "whatsapp" in platforms
+            except Exception:
+                pass
+        result["whatsapp"] = "ok" if wa_ok else "missing"
         self._checks = result
 
     def _report_capabilities(self):
