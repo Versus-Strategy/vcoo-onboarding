@@ -1194,7 +1194,7 @@ def agent_poll(agent_id: str, authorization: str = Header(None), db: Session = D
             continue
         entry = {"cmd_id": str(cmd.id), "command": cmd.command, "step": cmd.step}
         # Include payload for data-carrying commands
-        if cmd.command in ("save-creds", "set-provider") and cmd.result:
+        if cmd.command in ("save-creds", "set-provider", "pair-whatsapp") and cmd.result:
             try:
                 entry["payload"] = json.loads(cmd.result)
             except Exception:
