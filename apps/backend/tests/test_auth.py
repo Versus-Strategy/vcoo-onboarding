@@ -238,13 +238,16 @@ class TestAuth:
         from db import SessionLocal
         db = SessionLocal()
         pt = crud.get_active_token_for_vcoo(db, v_id).token
-        db.close()
 
         r = self.client.post('/register', json={'token': pt, 'info': {}})
         assert r.status_code == 200
 
+        # After register, a new provision token is created
+        pt2 = crud.get_active_token_for_vcoo(db, v_id).token
+        db.close()
+
         r = self.client.post('/auth/client/register', json={
-            'name': 'C', 'email': 'multi@t.com', 'password': 'p', 'token': pt,
+            'name': 'C', 'email': 'multi@t.com', 'password': 'p', 'token': pt2,
         })
         assert r.status_code == 200
 

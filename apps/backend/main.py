@@ -17,6 +17,7 @@ import models, crud, auth, schemas, ratelimit
 from typing import Any
 from ws_routes import register_ws_routes
 import json
+from urllib.parse import urlencode, quote
 import os as _os
 
 
@@ -47,6 +48,41 @@ def _check_client_owns_vcoo(db: Session, client_email: str, vcoo_id: str) -> boo
     """Verifica que un cliente sea dueño del VCOO."""
     client_obj = crud.get_client_by_email(db, client_email)
     return bool(client_obj and client_obj.vcoo_id and str(client_obj.vcoo_id) == vcoo_id)
+
+
+def _get_current_client(
+    identifier: str,
+    authorization: str = None,
+    db: Session = None,
+) -> dict:
+    """Shared auth dependency for /setup/{identifier} endpoints.
+    Returns dict with vcoo_id, email, is_operator, vcoo_name or raises HTTPException."""
+    if not authorization or not authorization.lower().startswith('bearer '):
+        raise HTTPException(status_code=401, detail="auth required")
+    bearer = authorization.split(None, 1)[1]
+    token_payload = auth.verify_client_token(bearer)
+    if not token_payload:
+        raise HTTPException(status_code=401, detail="invalid token")
+
+    v = crud.get_vcoo(db, identifier)
+    if not v:
+        raise HTTPException(status_code=400, detail=_TOKEN_INVALID_ERROR)
+
+    is_operator = token_payload.get('role') == 'operador'
+    vcoo_id = str(v.id)
+    if not is_operator:
+        client_email = token_payload.get("email", "")
+        if not _check_client_owns_vcoo(db, client_email, vcoo_id):
+            raise HTTPException(status_code=403, detail="No tienes acceso a este VCOO")
+
+    return {
+        "vcoo_id": vcoo_id,
+        "email": token_payload.get("email", ""),
+        "is_operator": is_operator,
+        "vcoo_name": v.name,
+    }
+
+
 _VALID_AGENT_COMMANDS = {
     "verify-bootstrap", "verify-google", "verify-trello", "verify-email",
     "verify-github", "verify-vercel", "verify-supabase", "verify-whatsapp",
@@ -556,7 +592,7 @@ def list_vcoos(db: Session = Depends(get_db), operator: dict = Depends(auth.veri
 # ── Setup wizard (SPEC v2 §4.2) ───────────────────────────
 
 @application.get("/setup/{identifier}")
-def get_setup_info(identifier: str, authorization: str = Header(None), db: Session = Depends(get_db)):
+def get_setup_info(identifier: str, authorization: str = Header(None), db: Session = Depends(get_db)) -> dict:
     """Returns onboarding state for the wizard frontend.
     Accepts VCOO UUID (preferred) or legacy JWT provision token as {identifier}.
     Access:
@@ -659,7 +695,7 @@ def get_setup_info(identifier: str, authorization: str = Header(None), db: Sessi
 
 
 @application.post("/setup/{identifier}/verify")
-def trigger_step_verification(identifier: str, authorization: str = Header(None), db: Session = Depends(get_db)):
+def trigger_step_verification(identifier: str, authorization: str = Header(None), db: Session = Depends(get_db)) -> dict:
     """Client clicks 'Verificar' in the wizard — enqueues the verification command.
     Waits up to 10s for the agent to register (race condition fix).
     If no agent is connected, auto-advances the step for dev/demo mode."""
@@ -749,8 +785,8 @@ def trigger_step_verification(identifier: str, authorization: str = Header(None)
 # ── Google OAuth scopes per service ─────────────────────
 
 _GOOGLE_SCOPES_MAP: dict[str, str] = {
-    "google-drive": "https://www.googleapis.com/auth/drive+https://www.googleapis.com/auth/documents+https://www.googleapis.com/auth/spreadsheets+https://www.googleapis.com/auth/presentations",
-    "google": "https://www.googleapis.com/auth/drive+https://www.googleapis.com/auth/documents+https://www.googleapis.com/auth/spreadsheets+https://www.googleapis.com/auth/presentations",
+    "google-drive": "https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/presentations",
+    "google": "https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/presentations",
     "gmail": "https://www.googleapis.com/auth/gmail.readonly",
 }
 
@@ -758,7 +794,7 @@ _GOOGLE_SCOPES_MAP: dict[str, str] = {
 # ── Auth URL generation (dynamic OAuth tabs) ────────────
 
 @ application.get("/setup/{identifier}/auth-url")
-def get_auth_url(identifier: str, service: str = "", db: Session = Depends(get_db)):
+def get_auth_url(identifier: str, service: str = "", db: Session = Depends(get_db)) -> dict:
     """Generates an OAuth authorization URL for the given service."""
     v = crud.get_vcoo(db, identifier)
     if not v:
@@ -775,18 +811,25 @@ def get_auth_url(identifier: str, service: str = "", db: Session = Depends(get_d
         if not client_id:
             raise HTTPException(status_code=400, detail="GOOGLE_CLIENT_ID no configurado. Contacta al administrador.")
         scopes = _GOOGLE_SCOPES_MAP[service]
-        url = ("https://accounts.google.com/o/oauth2/v2/auth"
-               f"?client_id={client_id}&redirect_uri={redirect}"
-               f"&response_type=code&scope={scopes}"
-               "&access_type=offline&prompt=consent"
-               f"&state={state}")
+        params = {
+            "client_id": client_id,
+            "redirect_uri": redirect,
+            "response_type": "code",
+            "scope": scopes,
+            "access_type": "offline",
+            "prompt": "consent",
+            "state": state,
+        }
+        url = "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params)
         return {"url": url, "service": service}
     elif service == "trello":
         api_key = _os.getenv("TRELLO_API_KEY", "")
         if not api_key:
             raise HTTPException(status_code=400, detail="TRELLO_API_KEY no configurado. Contacta al administrador.")
         control_plane_oauth = _url('CONTROL_PLANE', vercel_default=_CONTROL_PLANE_PROD, local_default='http://localhost:8000')
-        url = "https://trello.com/1/authorize?expiration=never&name=VCOO&scope=read,write&response_type=token&key={}&return_url={}".format(api_key, f"{control_plane_oauth}/auth/callback?service=trello")
+        url = "https://trello.com/1/authorize?expiration=never&name=VCOO&scope=read,write&response_type=token&key={}&return_url={}".format(
+            quote(api_key), quote(f"{control_plane_oauth}/auth/callback?service=trello")
+        )
         return {"url": url, "service": "trello"}
     elif service == "github":
         return {"url": "https://cli.github.com/manual/gh_auth_login", "service": "github", "instructions": "Ejecuta 'gh auth login' en tu VPS."}
@@ -801,7 +844,7 @@ def get_auth_url(identifier: str, service: str = "", db: Session = Depends(get_d
 # ── OAuth callback ─────────────────────────────────────
 
 @application.get("/auth/callback")
-def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session = Depends(get_db)):
+def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session = Depends(get_db)) -> HTMLResponse:
     """Receives OAuth callback from Google. Exchanges code for tokens, queues save-creds."""
     # Handle user denial / errors
     if error:
@@ -894,10 +937,7 @@ def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session
             # Enqueue next command if the agent is connected (mirrors process_agent_result auto-trigger)
             st = crud.get_onboarding_state(db, vcoo_id)
             if st and agent and st.step not in ("done",):
-                from onboarding import get_step_command
-                cmd_name = get_step_command(st.step)
-                if cmd_name:
-                    crud.create_command(db, agent_id=str(agent.id), command=cmd_name, step=st.step)
+                crud.auto_enqueue_next(db, str(agent.id), vcoo_id)
         except Exception:
             pass  # best-effort — command queue is the fallback
 
@@ -910,7 +950,7 @@ def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session
             "client_id": _os.getenv("GOOGLE_CLIENT_ID", ""),
             "client_secret": _os.getenv("GOOGLE_CLIENT_SECRET", ""),
             "token_uri": "https://oauth2.googleapis.com/token",
-            "scopes": _GOOGLE_SCOPES_MAP.get(service, "").split("+"),
+            "scopes": _GOOGLE_SCOPES_MAP.get(service, "").split(),
         }
         crud.create_command(
             db, agent_id=str(agent.id), command="save-creds", step=mapped_step,
@@ -1054,10 +1094,11 @@ def delete_vcoo(vcoo_id: str, db: Session = Depends(get_db),
 # ── Agent registration & auth ─────────────────────────────
 
 @application.post("/register")
-def register_agent(payload: dict, db: Session = Depends(get_db)):
+def register_agent(payload: dict, request: Request, db: Session = Depends(get_db)) -> dict:
+    ratelimit._register_limiter.check_and_record(request.client.host if request else "unknown")
     token = payload.get("token")
     info = payload.get("info", {})
-    vcoo_id = crud.validate_provision_token(db, token)
+    vcoo_id = crud.validate_provision_token(db, token, mark_used=True)
     if not vcoo_id:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
     v = crud.get_vcoo(db, vcoo_id)
@@ -1083,10 +1124,7 @@ def register_agent(payload: dict, db: Session = Depends(get_db)):
     # ── Auto-trigger: encolar primer comando si hay onboarding pendiente ──
     st = crud.get_onboarding_state(db, vcoo_id)
     if st and st.status not in ("blocked", "completed") and st.step != "done":
-        from onboarding import get_step_command
-        cmd_name = get_step_command(st.step)
-        if cmd_name:
-            crud.create_command(db, agent_id=str(agent.id), command=cmd_name, step=st.step)
+        crud.auto_enqueue_next(db, str(agent.id), vcoo_id)
     # ────────────────────────────────────────────────────────────────
 
     crud.create_provision_for_vcoo(db, vcoo_id)
@@ -1137,7 +1175,7 @@ def revoke_agent_token(agent_id: str, authorization: str = Header(None), db: Ses
 # ── Agent polling & logs ──────────────────────────────────
 
 @application.get("/agent/{agent_id}/poll")
-def agent_poll(agent_id: str, authorization: str = Header(None), db: Session = Depends(get_db)):
+def agent_poll(agent_id: str, authorization: str = Header(None), db: Session = Depends(get_db)) -> JSONResponse:
     if not authorization or not authorization.lower().startswith('bearer '):
         raise HTTPException(status_code=401, detail="missing auth")
     token = authorization.split(None, 1)[1]
@@ -1176,17 +1214,30 @@ def agent_poll(agent_id: str, authorization: str = Header(None), db: Session = D
                 "done": len([s for s in (st.completed or []) if has_agent_command(s)]),
                 "total": get_agent_total_steps(modules),
             }
-    return {
-        "commands": result,
-        "progress": progress_data,
-        "step": st.step if st else "",
-        "onboarding_status": st.status if st else "unknown",
-    }
+    return JSONResponse(
+        content={
+            "commands": result,
+            "progress": progress_data,
+            "step": st.step if st else "",
+            "onboarding_status": st.status if st else "unknown",
+        },
+        headers={
+            "Deprecation": "true",
+            "Sunset": "Sat, 31 Jan 2027 00:00:00 GMT",
+            "Link": "</agent/{agent_id}/tick>; rel=\"successor-version\"",
+        },
+    )
 
 @application.post("/agent/{agent_id}/complete")
-def agent_setup_complete(agent_id: str, db: Session = Depends(get_db)):
+def agent_setup_complete(agent_id: str, authorization: str = Header(None), db: Session = Depends(get_db)):
     """Agent calls this when onboarding setup finishes.
     Marks the VCOO as completed and revokes its token."""
+    if not authorization or not authorization.lower().startswith('bearer '):
+        raise HTTPException(status_code=401, detail="auth required")
+    token = authorization.split(None, 1)[1]
+    payload = auth.decode_agent_token(token)
+    if not payload or payload.get('agent_id') != agent_id:
+        raise HTTPException(status_code=401, detail="invalid agent token")
     agent = crud.get_agent(db, agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="agent not found")
@@ -1194,7 +1245,13 @@ def agent_setup_complete(agent_id: str, db: Session = Depends(get_db)):
     return {"status": "ok", "vcoo_completed": True}
 
 @application.post('/agent/{agent_id}/logs')
-def agent_logs(agent_id: str, payload: dict, db: Session = Depends(get_db)):
+def agent_logs(agent_id: str, payload: dict, authorization: str = Header(None), db: Session = Depends(get_db)):
+    if not authorization or not authorization.lower().startswith('bearer '):
+        raise HTTPException(status_code=401, detail="auth required")
+    token = authorization.split(None, 1)[1]
+    token_payload = auth.decode_agent_token(token)
+    if not token_payload or token_payload.get('agent_id') != agent_id:
+        raise HTTPException(status_code=401, detail="invalid agent token")
     cmd_id = payload.get('cmd_id')
     chunk = payload.get('chunk', '')
     stream = payload.get('stream', 'stdout')
@@ -1204,8 +1261,14 @@ def agent_logs(agent_id: str, payload: dict, db: Session = Depends(get_db)):
     return {'status': 'ok'}
 
 @application.get('/agent/{agent_id}/logs')
-def get_command_logs(agent_id: str, cmd_id: str = "", db: Session = Depends(get_db)):
+def get_command_logs(agent_id: str, cmd_id: str = "", authorization: str = Header(None), db: Session = Depends(get_db)):
     """Retrieve command logs for a specific cmd_id (or all recent)."""
+    if not authorization or not authorization.lower().startswith('bearer '):
+        raise HTTPException(status_code=401, detail="auth required")
+    token = authorization.split(None, 1)[1]
+    payload = auth.decode_agent_token(token)
+    if not payload or payload.get('agent_id') != agent_id:
+        raise HTTPException(status_code=401, detail="invalid agent token")
     if cmd_id:
         logs = crud.get_command_logs(db, cmd_id)
         return {"cmd_id": cmd_id, "logs": logs}
@@ -1268,7 +1331,18 @@ def set_provider(vcoo_id: str, payload: dict, db: Session = Depends(get_db),
 # ── Commands ──────────────────────────────────────────────
 
 @application.post("/vcoo/{vcoo_id}/commands")
-def enqueue_command(vcoo_id: str, payload: dict, db: Session = Depends(get_db)):
+def enqueue_command(vcoo_id: str, payload: dict, authorization: str = Header(None), db: Session = Depends(get_db)):
+    if not authorization or not authorization.lower().startswith('bearer '):
+        raise HTTPException(status_code=401, detail="auth required")
+    bearer = authorization.split(None, 1)[1]
+    token_payload = auth.verify_client_token(bearer)
+    if not token_payload:
+        raise HTTPException(status_code=401, detail="invalid token")
+    is_operator = token_payload.get('role') == 'operador'
+    if not is_operator:
+        client_email = token_payload.get("email", "")
+        if not _check_client_owns_vcoo(db, client_email, vcoo_id):
+            raise HTTPException(status_code=403, detail="No tienes acceso a este VCOO")
     command_text = payload.get("command")
     if not command_text:
         raise HTTPException(status_code=400, detail="command missing")
@@ -1280,7 +1354,18 @@ def enqueue_command(vcoo_id: str, payload: dict, db: Session = Depends(get_db)):
     return {"cmd_id": str(cmd.id)}
 
 @application.post("/vcoo/{vcoo_id}/commands/{cmd_id}/result")
-def command_result(vcoo_id: str, cmd_id: str, payload: dict, db: Session = Depends(get_db)):
+def command_result(vcoo_id: str, cmd_id: str, payload: dict, authorization: str = Header(None), db: Session = Depends(get_db)):
+    if not authorization or not authorization.lower().startswith('bearer '):
+        raise HTTPException(status_code=401, detail="auth required")
+    bearer = authorization.split(None, 1)[1]
+    token_payload = auth.verify_client_token(bearer)
+    if not token_payload:
+        raise HTTPException(status_code=401, detail="invalid token")
+    is_operator = token_payload.get('role') == 'operador'
+    if not is_operator:
+        client_email = token_payload.get("email", "")
+        if not _check_client_owns_vcoo(db, client_email, vcoo_id):
+            raise HTTPException(status_code=403, detail="No tienes acceso a este VCOO")
     result = payload.get('result', '')
     crud.mark_command_done(db, cmd_id, result=result)
     return {"status": "ok"}
@@ -1368,27 +1453,12 @@ def agent_report_result(agent_id: str, payload: dict, authorization: str = Heade
 
 
 @application.post("/setup/{identifier}/set-provider")
-def setup_set_provider(identifier: str, payload: dict, authorization: str = Header(None), db: Session = Depends(get_db)):
+def setup_set_provider(identifier: str, payload: dict, authorization: str = Header(None), db: Session = Depends(get_db)) -> dict:
     """Client sets provider credentials from onboarding wizard.
     Payload: {provider, api_key}
     """
-    if not authorization or not authorization.lower().startswith('bearer '):
-        raise HTTPException(status_code=401, detail="auth required")
-    bearer = authorization.split(None, 1)[1]
-    token_payload = auth.verify_client_token(bearer)
-    if not token_payload:
-        raise HTTPException(status_code=401, detail="invalid token")
-
-    v = crud.get_vcoo(db, identifier)
-    if not v:
-        raise HTTPException(status_code=400, detail="invalid identifier")
-    vcoo_id = str(v.id)
-
-    is_operator = token_payload.get('role') == 'operador'
-    if not is_operator:
-        client_email = token_payload.get("email", "")
-        if not _check_client_owns_vcoo(db, client_email, vcoo_id):
-            raise HTTPException(status_code=403, detail="not your VCOO")
+    client_info = _get_current_client(identifier, authorization, db)
+    vcoo_id = client_info["vcoo_id"]
 
     provider = payload.get("provider", "").strip()
     api_key = payload.get("api_key", "").strip()
@@ -1423,23 +1493,10 @@ def setup_set_provider(identifier: str, payload: dict, authorization: str = Head
 
 
 @application.post("/setup/{identifier}/advance")
-def setup_advance_step(identifier: str, authorization: str = Header(None), db: Session = Depends(get_db)):
+def setup_advance_step(identifier: str, authorization: str = Header(None), db: Session = Depends(get_db)) -> dict:
     """Advance onboarding step to next phase (after provider+model configured)."""
-    if not authorization or not authorization.lower().startswith('bearer '):
-        raise HTTPException(status_code=401, detail="auth required")
-    bearer = authorization.split(None, 1)[1]
-    token_payload = auth.verify_client_token(bearer)
-    if not token_payload:
-        raise HTTPException(status_code=401, detail="invalid token")
-    v = crud.get_vcoo(db, identifier)
-    if not v:
-        raise HTTPException(status_code=400, detail="invalid identifier")
-    vcoo_id = str(v.id)
-    is_operator = token_payload.get('role') == 'operador'
-    if not is_operator:
-        client_email = token_payload.get("email", "")
-        if not _check_client_owns_vcoo(db, client_email, vcoo_id):
-            raise HTTPException(status_code=403, detail="not your VCOO")
+    client_info = _get_current_client(identifier, authorization, db)
+    vcoo_id = client_info["vcoo_id"]
     st = crud.get_onboarding_state(db, vcoo_id)
     if not st:
         raise HTTPException(status_code=404, detail="no onboarding state")
@@ -1450,22 +1507,11 @@ def setup_advance_step(identifier: str, authorization: str = Header(None), db: S
 
 
 @application.post("/setup/{identifier}/start-pair-whatsapp")
-def setup_start_pair_whatsapp(identifier: str, payload: dict = {}, authorization: str = Header(None), db: Session = Depends(get_db)):
+def setup_start_pair_whatsapp(identifier: str, payload: dict = {}, authorization: str = Header(None), db: Session = Depends(get_db)) -> dict:
     """Enqueue a pair-whatsapp command for the agent. Payload can contain {phone: '+1234567890'} for pairing code mode."""
-    if not authorization or not authorization.lower().startswith('bearer '):
-        raise HTTPException(status_code=401, detail="auth required")
-    token_payload = auth.verify_client_token(authorization.split(None, 1)[1])
-    if not token_payload:
-        raise HTTPException(status_code=401, detail="invalid token")
-    v = crud.get_vcoo(db, identifier)
-    if not v:
-        raise HTTPException(status_code=400, detail="invalid identifier")
-    vcoo_id = str(v.id)
-    is_operator = token_payload.get('role') == 'operador'
-    if not is_operator:
-        client_email = token_payload.get("email", "")
-        if not _check_client_owns_vcoo(db, client_email, vcoo_id):
-            raise HTTPException(status_code=403, detail="not your VCOO")
+    client_info = _get_current_client(identifier, authorization, db)
+    vcoo_id = client_info["vcoo_id"]
+    is_operator = client_info["is_operator"]
     agent = crud.get_agent_by_vcoo(db, vcoo_id)
     if not agent:
         raise HTTPException(status_code=400, detail="agent not installed yet")
@@ -1477,22 +1523,11 @@ def setup_start_pair_whatsapp(identifier: str, payload: dict = {}, authorization
 
 
 @application.get("/setup/{identifier}/whatsapp-qr")
-def setup_get_whatsapp_qr(identifier: str, authorization: str = Header(None), db: Session = Depends(get_db)):
+def setup_get_whatsapp_qr(identifier: str, authorization: str = Header(None), db: Session = Depends(get_db)) -> dict:
     """Return the latest WhatsApp QR code from the agent's command result."""
-    if not authorization or not authorization.lower().startswith('bearer '):
-        raise HTTPException(status_code=401, detail="auth required")
-    token_payload = auth.verify_client_token(authorization.split(None, 1)[1])
-    if not token_payload:
-        raise HTTPException(status_code=401, detail="invalid token")
-    v = crud.get_vcoo(db, identifier)
-    if not v:
-        raise HTTPException(status_code=400, detail="invalid identifier")
-    vcoo_id = str(v.id)
-    is_operator = token_payload.get('role') == 'operador'
-    if not is_operator:
-        client_email = token_payload.get("email", "")
-        if not _check_client_owns_vcoo(db, client_email, vcoo_id):
-            raise HTTPException(status_code=403, detail="not your VCOO")
+    client_info = _get_current_client(identifier, authorization, db)
+    vcoo_id = client_info["vcoo_id"]
+    is_operator = client_info["is_operator"]
     agent = crud.get_agent_by_vcoo(db, vcoo_id)
     if not agent:
         return {"status": "no_agent"}
@@ -1521,6 +1556,47 @@ def setup_get_whatsapp_qr(identifier: str, authorization: str = Header(None), db
             return {"status": "qr", "qr": output}
         return {"status": "qr", "qr": str(result)}
     return {"status": cmd.status, "result": cmd.result}
+
+
+@application.post("/setup/{identifier}/encrypt-creds")
+def setup_encrypt_creds(identifier: str, payload: dict, authorization: str = Header(None), db: Session = Depends(get_db)) -> dict:
+    """Encrypt and store credentials for a service using the agent's encryption key."""
+    client_info = _get_current_client(identifier, authorization, db)
+    vcoo_id = client_info["vcoo_id"]
+
+    agent = crud.get_agent_by_vcoo(db, vcoo_id)
+    if not agent:
+        raise HTTPException(status_code=400, detail="agent not installed yet")
+    if not agent.encryption_key:
+        raise HTTPException(status_code=400, detail="agent has no encryption key")
+
+    service = payload.get("service", "").strip()
+    creds = payload.get("credentials", {})
+    if not service or not creds:
+        raise HTTPException(status_code=400, detail="service and credentials required")
+
+    from crypto import encrypt_api_key
+    encrypted = {}
+    for key, value in creds.items():
+        if isinstance(value, str):
+            encrypted[key] = encrypt_api_key(value, agent.encryption_key, str(agent.id))
+        else:
+            encrypted[key] = value
+
+    v = crud.get_vcoo(db, vcoo_id)
+    existing = {}
+    if v and v.integrations:
+        import json as _json
+        try:
+            existing = _json.loads(v.integrations)
+        except Exception:
+            pass
+    existing[service] = encrypted
+    if v:
+        v.integrations = json.dumps(existing)
+        db.commit()
+
+    return {"status": "ok", "service": service, "encrypted_fields": list(encrypted.keys())}
 
 
 # ── VCOO Logs ────────────────────────────────────────────
@@ -1575,16 +1651,30 @@ def agent_heartbeat_endpoint(payload: dict, db: Session = Depends(get_db)):
     if not agent_id:
         raise HTTPException(status_code=400, detail="agent_id missing")
     crud.agent_heartbeat(db, agent_id)
-    return {"ack": True}
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        content={"ack": True},
+        headers={
+            "Deprecation": "true",
+            "Sunset": "Sat, 31 Jan 2027 00:00:00 GMT",
+            "Link": "</agent/{id}/tick>; rel=\"successor-version\"",
+        },
+    )
 
 
 # ── Agent health report ────────────────────────────────────
 
 @application.post("/agent/{agent_id}/health")
-def agent_health_report(agent_id: str, payload: dict = {}, db: Session = Depends(get_db)):
+def agent_health_report(agent_id: str, payload: dict = {}, authorization: str = Header(None), db: Session = Depends(get_db)):
     """Receive health ping from agent's health reporter.
     Stores health data (hostname, uptime, disk, hermes_running).
     """
+    if not authorization or not authorization.lower().startswith('bearer '):
+        raise HTTPException(status_code=401, detail="auth required")
+    token = authorization.split(None, 1)[1]
+    token_payload = auth.decode_agent_token(token)
+    if not token_payload or token_payload.get('agent_id') != agent_id:
+        raise HTTPException(status_code=401, detail="invalid agent token")
     try:
         ok = crud.update_agent_health(db, agent_id, payload)
         if not ok:
@@ -1625,7 +1715,7 @@ def agent_capabilities_endpoint(agent_id: str, payload: dict, authorization: str
 # ── Agent tick (unified health + command poll) ─────────────
 
 @application.post("/agent/{agent_id}/tick")
-def agent_tick(agent_id: str, body: schemas.TickRequest, authorization: str = Header(None), db: Session = Depends(get_db)):
+def agent_tick(agent_id: str, body: schemas.TickRequest, authorization: str = Header(None), db: Session = Depends(get_db)) -> schemas.TickResponse:
     """Unified tick: agent sends health + last_command_id, receives commands + tick_interval."""
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="missing auth")
@@ -1683,10 +1773,21 @@ def agent_tick(agent_id: str, body: schemas.TickRequest, authorization: str = He
 # ── VCOO Secrets (for installer) ───────────────────────────
 
 @application.get("/vcoo/{vcoo_id}/secrets")
-def get_vcoo_secrets_endpoint(vcoo_id: str, db: Session = Depends(get_db)):
+def get_vcoo_secrets_endpoint(vcoo_id: str, authorization: str = Header(None), db: Session = Depends(get_db)):
     """Return stored secrets for installer to configure .env.
     Used by the unified one-liner install.sh after agent registration.
     """
+    if not authorization or not authorization.lower().startswith('bearer '):
+        raise HTTPException(status_code=401, detail="auth required")
+    bearer = authorization.split(None, 1)[1]
+    token_payload = auth.verify_client_token(bearer)
+    if not token_payload:
+        raise HTTPException(status_code=401, detail="invalid token")
+    is_operator = token_payload.get('role') == 'operador'
+    if not is_operator:
+        client_email = token_payload.get("email", "")
+        if not _check_client_owns_vcoo(db, client_email, vcoo_id):
+            raise HTTPException(status_code=403, detail="No tienes acceso a este VCOO")
     try:
         v = crud.get_vcoo(db, vcoo_id)
         if not v:
@@ -1705,7 +1806,7 @@ def get_vcoo_secrets_endpoint(vcoo_id: str, db: Session = Depends(get_db)):
 
 @application.post("/vcoo/{vcoo_id}/onboarding/retry")
 def retry_onboarding_step(vcoo_id: str, payload: dict, db: Session = Depends(get_db),
-                          operator: dict = Depends(auth.verify_operator_jwt)):
+                          operator: dict = Depends(auth.verify_operator_jwt)) -> dict:
     """Operator manually retries a blocked/failed step."""
     step = payload.get("step")
     if not step:
@@ -1726,7 +1827,7 @@ def retry_onboarding_step(vcoo_id: str, payload: dict, db: Session = Depends(get
 
 @application.post("/vcoo/{vcoo_id}/onboarding/skip")
 def skip_onboarding_step(vcoo_id: str, payload: dict, db: Session = Depends(get_db),
-                         operator: dict = Depends(auth.verify_operator_jwt)):
+                         operator: dict = Depends(auth.verify_operator_jwt)) -> dict:
     """Operator skips a blocked/impossible step."""
     step = payload.get("step")
     if not step:

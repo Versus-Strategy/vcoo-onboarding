@@ -64,3 +64,22 @@ Docker (from `infra/`): `docker compose up -d --build backend` (Postgres + backe
 `main.py` (~1600 lines) holds all routes. `crud.py` = DB ops, `models.py` = SQLAlchemy tables, `schemas.py` = Pydantic, `auth.py` = JWT + bcrypt, `crypto.py` = Fernet agent-config encryption, `onboarding.py` = the step/module state machine and step→command map, `ratelimit.py` = login limiter, `ws_*.py` = local-only WebSockets.
 
 Provision-token semantics matter and don't fully match the README. The `/setup/{identifier}` wizard endpoints accept a **VCOO UUID** (preferred) and read state read-only via `crud.get_vcoo` — they no longer consume a JWT token. Registration (`/register`, `/auth/client/register`) calls `crud.validate_provision_token()`, which consumes (`used=True`). There is no `lookup_provision_token()` in the code despite the README mentioning it. See `DESIGN_DECISIONS.md` for the onboarding/token rationale.
+
+## Onboarding — Shared auth helper
+
+The function `_get_current_client(identifier, authorization, db)` in `main.py`
+replaces ~20 lines of boilerplate auth for `/setup/{identifier}` endpoints.
+Returns `{"vcoo_id", "email", "is_operator", "vcoo_name"}` or raises
+`HTTPException`. Used by: `/verify`, `/advance`, `/set-provider`,
+`/start-pair-whatsapp`, `/whatsapp-qr`.
+
+## Onboarding — Auto-enqueue helper
+
+`crud.auto_enqueue_next(db, agent_id, vcoo_id)` encues the next verification
+command if onboarding is pending. Replaces inline blocks in
+`process_agent_result`, `oauth_callback`, and `/register`.
+
+## Module aliases
+
+Module IDs accept aliases: `office`/`google-drive`, `mail`/`gmail`,
+`planner`/`trello`. Both forms work in the `modules` list.

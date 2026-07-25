@@ -72,42 +72,24 @@ describe('apiClient — response interceptor', () => {
     expect(calls).toBe(1); // no reintento
   });
 
-  it('renueva el token en 401 y reintenta la petición original', async () => {
+  it('redirige a login en 401 y limpia localStorage', async () => {
     localStorage.setItem(
       'vcoo-auth',
-      JSON.stringify({ token: 'old', refreshToken: 'refresh-1' })
+      JSON.stringify({ token: 'old' })
     );
 
-    let phase = 0;
+    let calls = 0;
     setAdapter(async (config) => {
-      const url = config.url || '';
-      if (url.includes('/auth/refresh')) {
-        // El refresh devuelve un token nuevo
-        return {
-          data: { token: 'new-token' },
-          status: 200,
-          statusText: 'OK',
-          headers: {},
-          config,
-        };
-      }
-      // Primera llamada al recurso: 401. Segunda (tras refresh): 200.
-      phase += 1;
-      if (phase === 1) {
-        return Promise.reject({
-          config,
-          response: { status: 401, data: {}, statusText: 'Unauthorized', headers: {} },
-        });
-      }
-      return { data: { ok: true }, status: 200, statusText: 'OK', headers: {}, config };
+      calls += 1;
+      return Promise.reject({
+        config,
+        response: { status: 401, data: {}, statusText: 'Unauthorized', headers: {} },
+      });
     });
 
-    const res = await apiClient.get('/protegido');
-    expect(res.status).toBe(200);
-    expect(res.data).toEqual({ ok: true });
-
-    // El nuevo token se persistió en localStorage
-    const stored = JSON.parse(localStorage.getItem('vcoo-auth') || '{}');
-    expect(stored.token).toBe('new-token');
+    await expect(apiClient.get('/protegido')).rejects.toBeDefined();
+    expect(calls).toBe(1); // no reintento
+    // localStorage se limpió
+    expect(localStorage.getItem('vcoo-auth')).toBeNull();
   });
 });

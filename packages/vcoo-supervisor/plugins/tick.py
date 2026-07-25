@@ -118,8 +118,9 @@ class Plugin:
         try:
             # Only run auth add if api_key provided (model-only calls skip this)
             if api_key:
+                # TODO: use temp file or stdin for security (avoids secret in ps aux)
                 r = subprocess.run(
-                    [hermes_bin, "auth", "add", provider, "--type", "api-key", "--api-key", api_key],
+                    [hermes_bin, "auth", "add", provider, "--type", "api-key", "--api-key-value", api_key],
                     capture_output=True, text=True, timeout=30
                 )
                 if r.returncode != 0:
@@ -166,6 +167,7 @@ class Plugin:
                 json.dump(cred_data, f, indent=2)
             client_id = payload.get("client_id", "")
             if client_id:
+                # TODO: use temp file or stdin for security (avoids secret in ps aux)
                 subprocess.run(
                     ["hermes", "config", "set", "google.client_id", client_id],
                     capture_output=True, timeout=15

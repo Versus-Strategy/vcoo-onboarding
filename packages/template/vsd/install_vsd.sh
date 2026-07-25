@@ -18,7 +18,7 @@ INSTALL_DIR="/opt/vsd"
 LOG_DIR="/var/log"
 VERSUS="versusd"
 TOKENS="tokens"
-TOKENS_DIR="\\"
+TOKENS_DIR="/etc/$VERSUS/$TOKENS"
 PROVISION_ID_FILE="/etc/$VERSUS/provision_id"
 
 # -------------------------------------------------
@@ -57,7 +57,7 @@ chown "$INSTALL_USER:$INSTALL_USER" "$LOG_DIR/versusd.log" "$LOG_DIR/hermes-gate
 # 6. Almacenar el token de provisión (uno por producto)
 # -------------------------------------------------
 if [ -n "${PROVISION_TOKEN:-}" ] && [ -n "${PROVISION_ID:-}" ]; then
-    TOKEN_FILE="$TOK..."
+    TOKEN_FILE="$TOKENS_DIR/$PROVISION_ID.token"
     echo "Guardando token de provisión para el producto '$PROVISION_ID'…"
     echo "$PROVISION_TOKEN" > "$TOKEN_FILE"
     chmod 600 "$TOKEN_FILE"

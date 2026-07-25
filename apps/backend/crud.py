@@ -391,7 +391,7 @@ def get_agent_commands(db: Session, agent_id: str, limit: int = 20):
 
 def get_or_create_onboarding_state(
     db: Session, vcoo_id: str, modules: list[str] | None = None
-):
+) -> models.OnboardingState:
     """Get existing onboarding state or create one."""
     st = db.query(models.OnboardingState).filter(
         models.OnboardingState.vcoo_id == vcoo_id
@@ -412,13 +412,13 @@ def get_or_create_onboarding_state(
     return st
 
 
-def get_onboarding_state(db: Session, vcoo_id: str):
+def get_onboarding_state(db: Session, vcoo_id: str) -> models.OnboardingState | None:
     return db.query(models.OnboardingState).filter(
         models.OnboardingState.vcoo_id == vcoo_id
     ).first()
 
 
-def advance_onboarding_step(db: Session, vcoo_id: str, step_completed: str):
+def advance_onboarding_step(db: Session, vcoo_id: str, step_completed: str) -> models.OnboardingState | None:
     """Mark a step as completed and advance to the next one."""
     st = get_onboarding_state(db, vcoo_id)
     if not st:
@@ -442,7 +442,7 @@ def advance_onboarding_step(db: Session, vcoo_id: str, step_completed: str):
     return st
 
 
-def add_onboarding_error(db: Session, vcoo_id: str, step: str, error_msg: str):
+def add_onboarding_error(db: Session, vcoo_id: str, step: str, error_msg: str) -> models.OnboardingState | None:
     """Record an error and increment retry count."""
     st = get_onboarding_state(db, vcoo_id)
     if not st:
@@ -546,10 +546,21 @@ def get_vcoo_secrets(db: Session, vcoo_id: str) -> dict:
 
 # ── Agent result (SPEC v2 §4.4) ─────────────────────────
 
+def auto_enqueue_next(db: Session, agent_id: str, vcoo_id: str) -> str | None:
+    from onboarding import get_step_command
+    st = get_onboarding_state(db, vcoo_id)
+    if not st or st.status in ("blocked", "completed") or st.step == "done":
+        return None
+    cmd_name = get_step_command(st.step)
+    if not cmd_name:
+        return None
+    cmd = create_command(db, agent_id=agent_id, command=cmd_name, step=st.step)
+    return str(cmd.id)
+
 def process_agent_result(
     db: Session, agent_id: str, cmd_id: str,
     step: str, status: str, output: str,
-):
+) -> tuple[models.Command | None, bool, str | None, int]:
     """Process an agent command result with ACK semantics.
     Returns (cmd, acked, next_step, status_code).
     """
@@ -580,10 +591,7 @@ def process_agent_result(
         if is_verification_step:
             st = advance_onboarding_step(db, vcoo_id, step)
             if st and st.step not in ("done", step):
-                from onboarding import get_step_command
-                cmd_name = get_step_command(st.step)
-                if cmd_name:
-                    create_command(db, agent_id=agent_id, command=cmd_name, step=st.step)
+                auto_enqueue_next(db, agent_id, vcoo_id)
             next_step = st.step if st and st.step != "done" else None
         else:
             next_step = None
@@ -594,9 +602,7 @@ def process_agent_result(
             if st and st.status == "blocked":
                 return cmd, True, None, 201
             if st and st.status != "blocked":
-                from onboarding import get_step_command
-                cmd_name = get_step_command(step)
-                create_command(db, agent_id=agent_id, command=cmd_name, step=step)
+                auto_enqueue_next(db, agent_id, vcoo_id)
             return cmd, True, step, 201
         return cmd, True, None, 201
 

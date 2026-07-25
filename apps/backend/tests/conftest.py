@@ -77,8 +77,9 @@ def reset_db():
     db.commit()
     db.close()
 
-    from ratelimit import _login_limiter
+    from ratelimit import _login_limiter, _register_limiter
     _login_limiter._attempts.clear()
+    _register_limiter._attempts.clear()
     from auth import _reset_jti_cache
     _reset_jti_cache()
     yield

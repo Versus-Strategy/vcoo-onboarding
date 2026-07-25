@@ -3,8 +3,6 @@ onboarding.py — Onboarding step logic + dependency enforcement.
 SPEC v2 §7: Módulos y Pasos del Onboarding.
 """
 
-from typing import Optional
-
 # ── Constantes del SPEC §7 ──
 
 STEP_DEPENDENCIES: dict[str, list[str]] = {
@@ -21,28 +19,36 @@ STEP_DEPENDENCIES: dict[str, list[str]] = {
 
 # Mapeo módulo → pasos que añade
 MODULE_STEPS: dict[str, list[str]] = {
-    "core":      ["bootstrap", "whatsapp-setup"],
-    "office":    ["google-oauth"],
-    "mail":      ["gmail-setup"],
-    "planner":   ["trello-setup"],
-    "developer": ["github-setup", "vercel-setup", "supabase-setup"],
+    "core":         ["bootstrap", "whatsapp-setup"],
+    "office":       ["google-oauth"],
+    "google-drive": ["google-oauth"],
+    "mail":         ["gmail-setup"],
+    "gmail":        ["gmail-setup"],
+    "planner":      ["trello-setup"],
+    "trello":       ["trello-setup"],
+    "developer":    ["github-setup", "vercel-setup", "supabase-setup"],
 }
 
 # Etiquetas descriptivas para mostrar en el frontend
 MODULE_LABELS: dict[str, str] = {
-    "office":    "Google Drive",
-    "mail":      "Gmail",
-    "planner":   "Calendar + Trello",
-    "developer": "Developer",
+    "office":       "Google Drive",
+    "google-drive": "Google Drive",
+    "mail":         "Gmail",
+    "gmail":        "Gmail",
+    "planner":      "Calendar + Trello",
+    "trello":       "Calendar + Trello",
+    "developer":    "Developer",
 }
 
 MODULE_DESCRIPTIONS: dict[str, str] = {
-    "office":    "Documentos, hojas de cálculo y almacenamiento en la nube",
-    "mail":      "Correo electrónico y bandeja de entrada inteligente",
-    "planner":   "Calendario, tareas y organización del trabajo",
-    "developer": "GitHub, Vercel, Supabase y herramientas para desarrolladores",
+    "office":       "Documentos, hojas de cálculo y almacenamiento en la nube",
+    "google-drive": "Documentos, hojas de cálculo y almacenamiento en la nube",
+    "mail":         "Correo electrónico y bandeja de entrada inteligente",
+    "gmail":        "Correo electrónico y bandeja de entrada inteligente",
+    "planner":      "Calendario, tareas y organización del trabajo",
+    "trello":       "Calendario, tareas y organización del trabajo",
+    "developer":    "GitHub, Vercel, Supabase y herramientas para desarrolladores",
 }
-
 
 
 
@@ -64,18 +70,18 @@ def get_steps_for_modules(modules: list[str]) -> list[str]:
         "trello-setup", "github-setup", "vercel-setup",
         "supabase-setup", "whatsapp-setup", "finalize",
     ]
-    step_modules: dict[str, str] = {}
+    step_modules: dict[str, set[str]] = {}
     for mod, steps in MODULE_STEPS.items():
         for s in steps:
-            step_modules[s] = mod
+            step_modules.setdefault(s, set()).add(mod)
 
     for step in canonical:
         if step == "finalize":
             if "finalize" not in ordered:
                 ordered.append(step)
             break
-        mod = step_modules.get(step)
-        if mod and mod in modules:
+        mods = step_modules.get(step, set())
+        if mods and any(m in modules for m in mods):
             ordered.append(step)
     return ordered
 
@@ -98,7 +104,7 @@ def can_advance_to(step: str, completed: list[str], modules: list[str]) -> bool:
     return all(d in completed for d in required)
 
 
-def get_next_step(current_completed: list[str], modules: list[str]) -> Optional[str]:
+def get_next_step(current_completed: list[str], modules: list[str]) -> str | None:
     """Devuelve el siguiente paso pendiente, o None si todos completados."""
     ordered = get_steps_for_modules(modules)
     for step in ordered:

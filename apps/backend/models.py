@@ -25,7 +25,7 @@ class VCOO(Base):
 class Agent(Base):
     __tablename__ = 'agents'
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    vcoo_id = Column(String(36), nullable=False)
+    vcoo_id = Column(String(36), ForeignKey('vcoos.id', ondelete='CASCADE'), nullable=False)
     info = Column(String, nullable=True)
     last_seen = Column(DateTime, default=datetime.utcnow)
     status = Column(String, default='offline')
@@ -67,7 +67,7 @@ class Agent(Base):
 class Command(Base):
     __tablename__ = 'commands'
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    agent_id = Column(String(36), nullable=False)
+    agent_id = Column(String(36), ForeignKey('agents.id', ondelete='CASCADE'), nullable=False)
     command = Column(Text, nullable=False)
     status = Column(String, default='pending')
     result = Column(Text, nullable=True)
@@ -89,7 +89,7 @@ class CommandLog(Base):
 class ProvisionToken(Base):
     __tablename__ = 'provision_tokens'
     token = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    vcoo_id = Column(String(36), nullable=False)
+    vcoo_id = Column(String(36), ForeignKey('vcoos.id', ondelete='CASCADE'), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=True)
     used = Column(Boolean, default=False)

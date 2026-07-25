@@ -2,7 +2,7 @@
 """crypto.py — Encrypt/decrypt API keys for remote agent configuration.
 
 Flow:
-  Backend: encrypt_api_key(api_key, master_key, agent_id) → base64 token
+  Backend: encrypt_api_key(api_key, seed_key, agent_id) → base64 token
   Agent:   _crypto_decrypt(token, encryption_key, agent_id) → plaintext
 
 Both sides use PBKDF2-HMAC-SHA256 key derivation + XOR stream cipher
@@ -24,7 +24,7 @@ def _derive_key(seed_key: str, agent_id: str, salt: bytes) -> bytes:
     return hashlib.pbkdf2_hmac("sha256", seed, salt, _CRYPTO_ITERS, dklen=32)
 
 
-def encrypt_api_key(api_key: str, master_key: str, agent_id: str) -> str:
+def encrypt_api_key(api_key: str, seed_key: str, agent_id: str) -> str:
     """Encrypt an API key so only the target agent can decrypt it.
 
     Token format (urlsafe-base64, 16+16+N+32 bytes):
@@ -36,7 +36,7 @@ def encrypt_api_key(api_key: str, master_key: str, agent_id: str) -> str:
     salt = os.urandom(16)
     iv = os.urandom(16)
 
-    key = _derive_key(master_key, agent_id, salt)
+    key = _derive_key(seed_key, agent_id, salt)
 
     # Encrypt: XOR plaintext with keystream = SHA-256(key + iv + counter)
     ciphertext = bytearray()

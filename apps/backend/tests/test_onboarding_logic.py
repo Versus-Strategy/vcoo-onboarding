@@ -25,6 +25,11 @@ class TestOnboardingLogic:
         assert "bootstrap" in steps
         assert "finalize" in steps
 
+    def test_get_steps_for_modules_office_and_google_drive_equivalent(self):
+        office_steps = get_steps_for_modules(["core", "office"])
+        gdrive_steps = get_steps_for_modules(["core", "google-drive"])
+        assert office_steps == gdrive_steps
+
     def test_get_steps_for_modules_developer(self):
         steps = get_steps_for_modules(["core", "developer"])
         assert "github-setup" in steps
@@ -35,19 +40,18 @@ class TestOnboardingLogic:
 
     def test_get_steps_for_modules_all(self):
         steps = get_steps_for_modules(["core", "office", "mail", "planner", "developer"])
-        assert len(steps) == 9  # bootstrap + whatsapp-setup + google-oauth + gmail-setup + trello-setup + github-setup + vercel-setup + supabase-setup + finalize
+        assert len(steps) == 9
 
     def test_get_total_steps(self):
-        assert get_total_steps(["core"]) == 3  # bootstrap + whatsapp-setup + finalize
-        assert get_total_steps(["core", "office"]) == 4  # + google-oauth
-        assert get_total_steps(["core", "developer"]) == 6  # + github + vercel + supabase
+        assert get_total_steps(["core"]) == 3
+        assert get_total_steps(["core", "office"]) == 4
+        assert get_total_steps(["core", "developer"]) == 6
 
     def test_can_advance_to_bootstrap(self):
         """Bootstrap no tiene dependencias, siempre se puede avanzar."""
         assert can_advance_to("bootstrap", [], ["core"])
 
     def test_can_advance_to_google_oauth_only_after_bootstrap(self):
-        """Google OAuth requiere bootstrap."""
         assert not can_advance_to("google-oauth", [], ["core", "office"])
         assert can_advance_to("google-oauth", ["bootstrap"], ["core", "office"])
 
@@ -68,14 +72,12 @@ class TestOnboardingLogic:
         assert can_advance_to("supabase-setup", ["bootstrap", "github-setup"], ["core", "developer"])
 
     def test_can_advance_to_finalize_requires_all(self):
-        """Finalize requiere todos los pasos contratados."""
         assert not can_advance_to("finalize", ["bootstrap"], ["core", "office"])
-        assert not can_advance_to("finalize", ["bootstrap", "google-oauth"], ["core", "office"])  # falta whatsapp-setup
+        assert not can_advance_to("finalize", ["bootstrap", "google-oauth"], ["core", "office"])
         assert can_advance_to("finalize", ["bootstrap", "whatsapp-setup", "google-oauth"], ["core", "office"])
 
     def test_can_advance_to_finalize_with_developer(self):
         steps = get_steps_for_modules(["core", "developer"])
-        # developer steps: bootstrap, github, vercel, supabase, finalize
         all_except_finalize = [s for s in steps if s != "finalize"]
         assert can_advance_to("finalize", all_except_finalize, ["core", "developer"])
 
@@ -104,7 +106,6 @@ class TestOnboardingLogic:
         assert not is_onboarding_complete("bootstrap", [], ["core"])
 
     def test_is_onboarding_complete_false_on_finalize_without_all(self):
-        """Aunque se esté en finalize, no debe dar por completado si faltan pasos."""
         assert not is_onboarding_complete("finalize", ["bootstrap"], ["core", "office"])
 
     def test_get_wizard_step_mapping(self):
@@ -124,14 +125,56 @@ class TestOnboardingLogic:
         assert not has_agent_command("nonexistent")
 
     def test_get_agent_total_steps(self):
-        assert get_agent_total_steps(["core"]) == 3  # bootstrap + whatsapp-setup + finalize
-        assert get_agent_total_steps(["core", "office"]) == 4  # + google-oauth
+        assert get_agent_total_steps(["core"]) == 3
+        assert get_agent_total_steps(["core", "office"]) == 4
 
     def test_get_steps_order_is_canonical(self):
-        """Los pasos deben devolverse en orden canónico, no en orden de módulos."""
         steps = get_steps_for_modules(["core", "developer", "office"])
         bootstrap_idx = steps.index("bootstrap")
         google_idx = steps.index("google-oauth")
         github_idx = steps.index("github-setup")
         assert bootstrap_idx < google_idx
         assert google_idx < github_idx
+
+    def test_cannot_advance_to_whatsapp(self):
+        assert not can_advance_to("whatsapp-setup", [], ["core"])
+        assert can_advance_to("whatsapp-setup", ["bootstrap"], ["core"])
+
+    def test_onboarding_complete_all_steps(self):
+        assert is_onboarding_complete("done", ["bootstrap", "whatsapp-setup"], ["core"])
+        assert is_onboarding_complete("bootstrap", ["bootstrap", "whatsapp-setup", "finalize"], ["core"])
+        assert not is_onboarding_complete("finalize", ["bootstrap"], ["core"])
+
+
+class TestCRUDEdgeCases:
+    """CRUD integration edge cases that need a DB session."""
+
+    def test_advance_onboarding_step_none_state(self):
+        from db import SessionLocal
+        import crud
+        db = SessionLocal()
+        try:
+            result = crud.advance_onboarding_step(db, "nonexistent-id", "bootstrap")
+            assert result is None
+        finally:
+            db.close()
+
+    def test_add_onboarding_error_none_state(self):
+        from db import SessionLocal
+        import crud
+        db = SessionLocal()
+        try:
+            result = crud.add_onboarding_error(db, "nonexistent-id", "bootstrap", "error")
+            assert result is None
+        finally:
+            db.close()
+
+    def test_auto_enqueue_next_none_state(self):
+        from db import SessionLocal
+        import crud
+        db = SessionLocal()
+        try:
+            result = crud.auto_enqueue_next(db, "no-agent-id", "nonexistent-vcoo-id")
+            assert result is None
+        finally:
+            db.close()

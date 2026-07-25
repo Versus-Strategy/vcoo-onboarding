@@ -82,7 +82,7 @@ export const ProveedorDeAuth = ({ children }: { children: ReactNode }) => {
     setAuth({
       usuario,
       token,
-      refreshToken: token,
+      refreshToken: null,
       estaAutenticado: true,
       cargando: false,
       error: null,
@@ -90,7 +90,7 @@ export const ProveedorDeAuth = ({ children }: { children: ReactNode }) => {
     localStorage.setItem('vcoo-auth', JSON.stringify({
       usuario,
       token,
-      refreshToken: token,
+      refreshToken: null,
       marcaDeTiempo,
     }));
   };
@@ -217,20 +217,8 @@ export const ProveedorDeAuth = ({ children }: { children: ReactNode }) => {
   };
 
   const actualizarToken = async () => {
-    if (auth.token) {
-      try {
-        const response = await axios.post(`${API_URL}/auth/refresh`, {
-          refreshToken: auth.refreshToken || auth.token,
-        });
-        const { token } = response.data;
-        if (!token) throw new Error('No token');
-
-        const nuevoUsuario = auth.usuario;
-        guardarAuth(token, nuevoUsuario!);
-      } catch {
-        cerrarSesion();
-      }
-    }
+    // Token refresh not supported — redirect to login when expired
+    return;
   };
 
   return (

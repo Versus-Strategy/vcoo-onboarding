@@ -16,7 +16,7 @@ echo "=== Instalando componentes protegidos de VCOO para el usuario: $INSTALL_US
 
 INSTALL_DIR="/opt/vsd"
 LOG_DIR="/var/log"
-TOKENS_DIR="/etc...n
+TOKENS_DIR="/etc/vsd/tokens"
 # -------------------------------------------------
 # 2. Instalar Hermes Agent (gateway) como usuario no root
 # -------------------------------------------------
@@ -47,7 +47,7 @@ fi
 #    Aquí podemos verificar su existencia y, si falta, solicitarlo.
 # -------------------------------------------------
 if [ -n "${PROVISION_TOKEN:-}" ] && [ -n "${PROVISION_ID:-}" ]; then
-    TOKEN_FILE="$TOK..."
+    TOKEN_FILE="$TOKENS_DIR/$PROVISION_ID.token"
     if [ ! -f "$TOKEN_FILE" ]; then
         echo "Guardando token de provisión para el producto '$PROVISION_ID'…"
         echo "$PROVISION_TOKEN" > "$TOKEN_FILE"

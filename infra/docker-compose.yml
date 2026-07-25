@@ -8,7 +8,7 @@ services:
     volumes:
       - vcoo-data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
 
   backend:
     build:
@@ -18,6 +18,8 @@ services:
       - ../apps/backend/.env
     environment:
       POSTGRES_URL: postgresql://postgres:postgres@db:5432/vcoo
+      SECRET_KEY: dev-secret-key-change-in-production
+      MASTER_KEY: dev-master-key-change-in-production
     depends_on:
       - db
     ports:

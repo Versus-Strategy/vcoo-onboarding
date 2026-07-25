@@ -102,12 +102,15 @@ def send_health() -> bool:
     info = get_system_info()
     data = json.dumps(info).encode()
 
+    headers = {
+        "Content-Type": "application/json",
+    }
+    if AGENT_TOKEN:
+        headers["Authorization"] = f"Bearer {AGENT_TOKEN}"
     req = urllib.request.Request(
         f"{CONTROL_PLANE}/agent/{AGENT_ID}/health",
         data=data,
-        headers={
-            "Content-Type": "application/json",
-        },
+        headers=headers,
         method="POST"
     )
 

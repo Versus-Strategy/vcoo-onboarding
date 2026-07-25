@@ -41,3 +41,8 @@ _login_limiter = LoginRateLimiter(
     max_attempts=_int_env("LOGIN_RATE_MAX_ATTEMPTS", 5),
     window_seconds=_int_env("LOGIN_RATE_WINDOW_SECONDS", 300),
 )
+
+_register_limiter = LoginRateLimiter(
+    max_attempts=_int_env("REGISTER_RATE_MAX_ATTEMPTS", 3),
+    window_seconds=_int_env("REGISTER_RATE_WINDOW_SECONDS", 60),
+)

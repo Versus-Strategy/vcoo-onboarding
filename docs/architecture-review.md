@@ -13,21 +13,36 @@
 │                      CLIENTE (VPS Linux)                        │
 │                                                                 │
 │  ┌──────────────────────────────────┐                           │
-│  │        install.sh (one-liner)    │                           │
-│  │  • Crea venv + instala deps      │                           │
-│  │  • Descarga scripts VCOO         │                           │
-│  │  • Descarga agent_http.py        │                           │
+│  │    install_vsd.sh (one-liner)   │                           │
+│  │  • Instala versusd (watchdog)   │                           │
+│  │  • Instala Hermes Agent + tick  │                           │
+│  │  • Aplica template del producto │                           │
 │  └──────────────┬───────────────────┘                           │
-│                 │ exec                                            │
+│                 │ exec (via systemd)                               │
 │  ┌──────────────▼───────────────────┐                           │
-│  │     agent_http.py v3 (foreground)│                           │
-│  │  • Rich TUI (Live + Layout)      │                           │
-│  │  • Poll HTTP cada 15s (+jitter)  │                           │
-│  │  • COMMAND_MAP fijo              │                           │
-│  │  • Log streaming (Popen+select)  │                           │
-│  │  • save-creds → ~/.hermes/       │                           │
+│  │     versusd (watchdog bash)      │                           │
+│  │  • Corre permanentemente         │                           │
+│  │  • Ejecuta tick.py cada 60s      │                           │
+│  │  • 5s si hay comandos pendientes │                           │
+│  │  • No ephemeral — permanece      │                           │
 │  └──────────────┬───────────────────┘                           │
-│                 │ HTTP (poll + report)                             │
+│                 │                                                  │
+│  ┌──────────────▼───────────────────┐                           │
+│  │     tick.py (supervisor plugin)  │                           │
+│  │  • POST /agent/{id}/tick (unif.) │                           │
+│  │  • Ejecuta COMMAND_MAP fijo      │                           │
+│  │  • _handle_save_creds() → disco  │                           │
+│  │  • Estado local en ~/.vcoo/      │                           │
+│  └──────────────┬───────────────────┘                           │
+│                 │                                                  │
+│  ┌──────────────▼───────────────────┐                           │
+│  │     vsctl (VCOO CLI)             │                           │
+│  │  • Diagnóstico y control local   │                           │
+│  │  • consultar estado, logs        │                           │
+│  └──────────────────────────────────┘                           │
+│                                                                 │
+│  Fuentes: packages/vsd/ + packages/template/                    │
+│                 │ HTTP (tick + report)                              │
 └─────────────────┼───────────────────────────────────────────────┘
                   │
                   │  Internet (HTTPS)
@@ -68,16 +83,15 @@
 
 ## 2. Flujos de Interacción
 
-### 2.1 Registro y polling del agente
+### 2.1 Registro y tick unificado
 ```
-install.sh → agent_http.py → POST /register (provision_token)
-                            ← {agent_id, agent_token, vcoo_id}
-                            → guarda en ~/.vcoo-agent/agent.json
-                            → bucle: GET /agent/{id}/poll cada 15s
-                            ← {commands: [...], progress: {...}}
-                            → ejecuta comando → POST /agent/{id}/result
-                            → POST /agent/{id}/logs (streaming)
-                            → POST /agent/heartbeat cada 60s
+install_vsd.sh → versusd → POST /register (provision_token)
+                           ← {agent_id, agent_token, vcoo_id}
+                           → versusd ejecuta tick.py (foreground)
+                           → tick.py: POST /agent/{id}/tick cada 60s
+                           ← {commands: [...], interval: N}
+                           → ejecuta comando → POST /agent/{id}/result
+                           → tick.py: _handle_save_creds() en save-creds
 ```
 
 ### 2.2 Wizard de onboarding (cliente)
@@ -132,10 +146,9 @@ Agente reporta status="error" → backend:
 | 2 | **Sin push notifications** | El frontend hace polling cada 3s. Si hay 100 clientes simultáneos, son 33 req/s al backend | Baja (volumen bajo) |
 | 3 | **OAuth en VPS headless** | `gh auth login` abre navegador, pero en un VPS sin GUI no funciona. El cliente debe hacer port-forwarding o usar token manual | Alta |
 | 4 | **Sin timeout automático** | Si un paso falla 3 veces → BLOCKED. No hay auto-skip para pasos opcionales | Media |
-| 5 | **Estado solo en DB** | Si Supabase cae, el onboarding se bloquea completamente. No hay caché local | Media |
-| 6 | **Un agente por VCOO** | Si el cliente necesita re-ejecutar, el agente anterior ya no existe (se autoborró). Debe volver a lanzar el one-liner | Baja |
-| 7 | **Credenciales en texto plano** | `~/.hermes/google_token.json` y `~/.hermes/.env` sin cifrar. Un atacante con acceso al VPS las lee | Alta |
-| 8 | **Sin verificación de integridad** | `install.sh` no verifica checksums del agente/scripts descargados | Media |
+| 5 | **Estado local mitigado** | tick.py mantiene estado local en `~/.vcoo/`. Si Supabase cae, el agente reintenta y no pierde progreso | Media |
+| 6 | **Credenciales en texto plano** | `~/.hermes/google_token.json` y `~/.hermes/.env` sin cifrar. Un atacante con acceso al VPS las lee. Mitigación parcial: endpoint `/setup/{id}/encrypt-creds` disponible | Alta |
+| 7 | **Sin verificación de integridad** | `install_vsd.sh` no verifica checksums del agente/scripts descargados | Media |
 
 ---
 
@@ -145,7 +158,7 @@ Agente reporta status="error" → backend:
 
 | # | Mejora | Esfuerzo | Descripción |
 |---|--------|----------|-------------|
-| **P1** | **Cifrado de credenciales** | Medio | Usar `hermes` CLI para cifrar credenciales con clave maestra. `hermes config set --encrypt google.token XXX`. El agente usa `hermes config get --decrypt` |
+| **P1** | **Cifrado de credenciales** | Medio | ✅ Implementado. Endpoint `/setup/{id}/encrypt-creds` cifra credenciales con Fernet antes de escribirlas a disco. El agente las descifra en memoria |
 | **P2** | **Timeout + auto-skip** | Bajo | Añadir `step_timeout` (e.g., 10 min). Si el paso no avanza, marcarlo como opcional y auto-skippear si `optional: true` |
 | **P3** | **Webhook HTTP en vez de polling** | Medio | El agente expone un endpoint HTTP efímero. El backend le hace POST cuando hay comandos. Reduce latencia a <1s |
 
@@ -154,16 +167,15 @@ Agente reporta status="error" → backend:
 | # | Mejora | Esfuerzo | Descripción |
 |---|--------|----------|-------------|
 | **P4** | **Supabase Realtime** | Bajo | El frontend se suscribe a cambios en `onboarding_state`. Sin polling cada 3s. Ya tenemos Supabase |
-| **P5** | **Verificación de integridad** | Bajo | `install.sh` descarga SHA256SUMS + verifica. Previene MITM |
-| **P6** | **Rate limiting** | Bajo | Añadir límite a `/register` y `/agent/{id}/poll` por IP. Evita abuso |
+| **P5** | **Verificación de integridad** | Bajo | `install_vsd.sh` descarga SHA256SUMS + verifica. Previene MITM |
+| **P6** | **Rate limiting** | Bajo | Añadir límite a `/register` y `/agent/{id}/tick` por IP. Evita abuso |
 
 ### 🔵 Prioridad Baja
 
 | # | Mejora | Esfuerzo | Descripción |
 |---|--------|----------|-------------|
-| **P7** | **Multi-VCOO agent** | Alto | Un agente puede gestionar múltiples VCOOs simultáneamente. Reduce uso de recursos en el VPS |
-| **P8** | **Dominio propio** | Bajo | `vcoo.versus.fyi` en vez de `vcoo-onboarding.vercel.app`. Mejor branding |
-| **P9** | **Tests E2E automatizados** | Medio | Playwright/Cypress para el wizard + pytest para el agente |
+| **P7** | **Dominio propio** | Bajo | `vcoo.versus.fyi` en vez de `vcoo-onboarding.vercel.app`. Mejor branding |
+| **P8** | **Tests E2E automatizados** | Medio | ✅ Implementado. Playwright para wizard + pytest para agente versusd/tick |
 
 ---
 
@@ -181,10 +193,10 @@ Agente reporta status="error" → backend:
 
 Estas decisiones NO deben renegociarse sin consultar al equipo VERSUS:
 
-1. **Agente ephemeral foreground** — no systemd, no servicios persistentes
+1. **versusd permanent watchdog + foreground supervisor tick** — sistema permanente, tick cada 60s
 2. **Vercel + Supabase** — no WebSocket en producción (limitación de Vercel)
 3. **COMMAND_MAP fijo** — seguridad por diseño, no comandos arbitrarios
-4. **Polling HTTP agente** — 15s + jitter es el canal primario
+4. **Tick unificado cada 60s** — tick reemplaza poll + heartbeat, 60s normal / 5s con comandos
 5. **Archivar > Borrar** — VCOOs completados se conservan
 
 ---

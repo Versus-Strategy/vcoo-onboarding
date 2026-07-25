@@ -181,6 +181,10 @@ for script in $VCOO_SCRIPTS; do
     if [ -f "$dest" ]; then
         echo "  [OK] $script (ya existe)"
     elif curl -sSf -o "$dest" "$CONTROL_PLANE/playbooks/$script/raw" 2>/dev/null; then
+        if [ ! -s "$dest" ]; then
+            echo "ERROR: Failed to download $script from $CONTROL_PLANE"
+            exit 1
+        fi
         chmod 700 "$dest"
         echo "  [OK] $script descargado"
     else

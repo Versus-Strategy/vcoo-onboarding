@@ -128,8 +128,8 @@ async def poll_loop(agent_id: str, agent_token: str, vcoo_id: str):
                             result = f"simulated: executed '{command}'"
                             # Report result
                             try:
-                                res_url = f"{CONTROL_PLANE}/vcoo/{vcoo_id}/commands/{cmd_id}/result"
-                                resp = await client.post(res_url, json={'status': 'done', 'result': result})
+                                res_url = f"{CONTROL_PLANE}/agent/{agent_id}/result"
+                                resp = await client.post(res_url, json={'cmd_id': cmd_id, 'status': 'ok', 'output': result})
                                 logging.info(f"Reported result for {cmd_id}: {resp.status_code}")
                             except Exception as e:
                                 logging.error(f"Failed to post result: {e}")

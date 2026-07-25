@@ -1,5 +1,5 @@
 import { useParams } from 'react-router-dom';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
 import apiClient from '@/api/apiClient';
 import { useAuth } from '@/auth/authContext';
@@ -255,6 +255,17 @@ const SetupWizard = () => {
   const [waPairingCode, setWaPairingCode] = useState<string | null>(null);
   const [waPhone, setWaPhone] = useState<string>('');
   const [waPhoneInput, setWaPhoneInput] = useState<string>('');
+  const mountedRef = useRef(true);
+  const liveIntervals = useRef<Set<ReturnType<typeof setInterval>>>(new Set());
+
+  useEffect(() => {
+    const intervals = liveIntervals.current;
+    return () => {
+      mountedRef.current = false;
+      intervals.forEach(clearInterval);
+      intervals.clear();
+    };
+  }, []);
 
   // Check localStorage directly on mount for existing auth
   useEffect(() => {
@@ -289,26 +300,37 @@ const SetupWizard = () => {
     try {
       const { data } = await apiClient.get(`/setup/${token}`);
       if ((data as any).requires_registration) {
+        const hayToken = (() => {
+          try {
+            const stored = localStorage.getItem('vcoo-auth');
+            return stored ? !!JSON.parse(stored).token : false;
+          } catch { return false; }
+        })();
+        if (hayToken) {
+          try {
+            const { data: authed } = await apiClient.get(`/setup/${token}`);
+            if (!(authed as any)?.requires_registration) {
+              setOnboarding(authed as OnboardingState);
+              setError(null);
+              return;
+            }
+          } catch { /* fall through */ }
+          // Token exists but can't access — clear it and show AuthForm
+          localStorage.removeItem('vcoo-auth');
+          setMostrarWizard(false);
+          setOnboarding(null);
+          setError(null);
+          return;
+        }
         setOnboarding(null);
         setError(null);
         return;
       }
       setOnboarding(data as OnboardingState);
       setError(null);
-    } catch (err: unknown) {
-      const axiosErr = err as { response?: { status?: number; data?: { detail?: string } } };
-      const status = axiosErr?.response?.status;
-      const detail = axiosErr?.response?.data?.detail;
-      if (status === 403) {
-        setError('Tu sesión no tiene acceso a este VCOO. Puedes cerrar sesión e intentar con otra cuenta.');
-      } else if (status === 400 && typeof detail === 'object') {
-        setError((detail as any)?.message || 'El enlace ha caducado. Solicita uno nuevo.');
-      } else if (status === 401) {
-        setMostrarWizard(false);
-        return;
-      } else {
-        setError(err instanceof Error ? err.message : 'Error al cargar la configuración');
-      }
+    } catch (e) {
+      console.error('Error fetching onboarding:', e);
+      setError('Error de conexión');
     } finally {
       setCargando(false);
     }
@@ -357,6 +379,24 @@ const SetupWizard = () => {
     }
     setProvidersTimeout(false);
   }, [onboarding?.providers, onboarding]);
+
+  // ── Sync proveedor/selector state with onboarding data ──
+  useEffect(() => {
+    const raw = onboarding?.providers || [];
+    const proveedorConfigurado = onboarding?.checks?.provider === 'ok';
+    const configured = raw.find(p => p.id === 'opencode-go') || raw[0];
+    const providerFound = proveedorSeleccionado ? raw.some(p => p.id === proveedorSeleccionado) : true;
+
+    if (proveedorConfigurado && configured) {
+      setProveedorSeleccionado(configured.id);
+      setModoSelectorModelo(true);
+    } else if (!proveedorSeleccionado && modoSelectorModelo) {
+      setModoSelectorModelo(false);
+    } else if (!providerFound) {
+      setModoSelectorModelo(false);
+      setProveedorSeleccionado(null);
+    }
+  }, [onboarding, modoSelectorModelo, proveedorSeleccionado]);
 
   // ── Auth form (not yet authenticated) ──
 
@@ -497,7 +537,10 @@ const SetupWizard = () => {
       // Poll for agent confirmation (max 60s, check every 5s)
       let ok = false;
       for (let i = 0; i < 12; i++) {
-        if (i > 0) await new Promise(r => setTimeout(r, 5000));
+        if (i > 0) {
+          await new Promise(r => setTimeout(r, 5000));
+          if (!mountedRef.current) return;
+        }
         const { data } = await apiClient.get(`/setup/${token}`);
         const chk: Record<string, string> = ((data as any).checks as Record<string, string>) || {};
         if (chk.provider === 'ok') { ok = true; break; }
@@ -526,6 +569,7 @@ const SetupWizard = () => {
           modelList = extractList(provModels);
           if (modelList.length > 0) break;
           await new Promise(r => setTimeout(r, 5000));
+          if (!mountedRef.current) return;
         }
         if (modelList.length > 0) {
           await fetchOnboarding();
@@ -599,37 +643,46 @@ const SetupWizard = () => {
       const checkClosed = setInterval(() => {
         if (popup.closed) {
           clearInterval(checkClosed);
-          setConectando(null);
-          // Small delay to let backend process the OAuth callback and advance step
-          setTimeout(fetchOnboarding, 2000);
+          liveIntervals.current.delete(checkClosed);
+          if (mountedRef.current) {
+            setConectando(null);
+            setTimeout(fetchOnboarding, 2000);
+          }
         }
       }, 500);
-      // Timeout de seguridad: si después de 120s no se cierra, avisar al usuario
+      liveIntervals.current.add(checkClosed);
       const safetyTimer = setTimeout(() => {
         if (!popup.closed) {
           clearInterval(checkClosed);
-          setConectando(null);
-          setError('La ventana de autorización no se cerró automáticamente. Ciérrala manualmente y haz clic en "Verificar" si es necesario.');
+          liveIntervals.current.delete(checkClosed);
+          if (mountedRef.current) {
+            setConectando(null);
+            setError('La ventana de autorización no se cerró automáticamente. Ciérrala manualmente y haz clic en "Verificar" si es necesario.');
+          }
         }
       }, 120000);
       const handleMessage = (e: MessageEvent) => {
         if (e.data === 'oauth-complete') {
           clearInterval(checkClosed);
+          liveIntervals.current.delete(checkClosed);
           clearTimeout(safetyTimer);
-          setConectando(null);
-          fetchOnboarding();
+          if (mountedRef.current) {
+            setConectando(null);
+            fetchOnboarding();
+          }
           window.removeEventListener('message', handleMessage);
         }
       };
       window.addEventListener('message', handleMessage);
-      // Cleanup si el popup se cierra antes del timeout
       const pollCleanup = setInterval(() => {
         if (popup.closed) {
           clearInterval(pollCleanup);
+          liveIntervals.current.delete(pollCleanup);
           clearTimeout(safetyTimer);
           window.removeEventListener('message', handleMessage);
         }
       }, 1000);
+      liveIntervals.current.add(pollCleanup);
     } catch {
       setError('Error al iniciar la conexión con Google');
       setConectando(null);
@@ -697,27 +750,10 @@ const SetupWizard = () => {
     const destacados = raw.filter(p => p.id !== 'opencode-go' && destacadosIds.has(p.id));
     const resto = raw.filter(p => p.id !== 'opencode-go' && !destacadosIds.has(p.id));
 
-    // If provider already configured (after reload), skip API key form
-    if (!modoSelectorModelo && !proveedorSeleccionado && onboarding?.checks?.provider === 'ok') {
-      const configured = raw.find(p => p.id === 'opencode-go') || raw[0];
-      if (configured) {
-        setProveedorSeleccionado(configured.id);
-        setModoSelectorModelo(true);
-        return null;
-      }
-    }
-
     if (modoSelectorModelo) {
-      if (!proveedorSeleccionado) {
-        setModoSelectorModelo(false);
-        return null;
-      }
+      if (!proveedorSeleccionado) return null;
       const prov = raw.find(p => p.id === proveedorSeleccionado);
-      if (!prov) {
-        setModoSelectorModelo(false);
-        setProveedorSeleccionado(null);
-        return null;
-      }
+      if (!prov) return null;
       const modelsRaw = (onboarding.models || {})[prov.id] || {};
       const list: string[] = Array.isArray(modelsRaw) ? modelsRaw : ((modelsRaw.list || modelsRaw.models || []) as string[]);
       const recommended: string = Array.isArray(modelsRaw) ? '' : (modelsRaw.recommended || '');
@@ -1085,45 +1121,54 @@ const SetupWizard = () => {
                       setError(null);
                       try {
                         await apiClient.post(`/setup/${token}/start-pair-whatsapp`);
-                        // Poll for QR
                         const pollQr = setInterval(async () => {
                           try {
                             const { data } = await apiClient.get(`/setup/${token}/whatsapp-qr`);
+                            if (!mountedRef.current) { clearInterval(pollQr); return; }
                             if (data.status === 'qr' && data.qr) {
                               setWaQr(data.qr);
                               setWaStatus('qr_ready');
                               clearInterval(pollQr);
-                              // Keep polling for completion
+                              liveIntervals.current.delete(pollQr);
                               const pollDone = setInterval(async () => {
                                 try {
                                   const { data: d2 } = await apiClient.get(`/setup/${token}/whatsapp-qr`);
+                                  if (!mountedRef.current) { clearInterval(pollDone); return; }
                                   if (d2.status === 'done' || d2.status === 'paired') {
                                     setWaStatus('paired');
                                     setWaQr(null);
                                     clearInterval(pollDone);
+                                    liveIntervals.current.delete(pollDone);
                                     fetchOnboarding();
                                   } else if (d2.status === 'error') {
                                     setError('Error al emparejar WhatsApp');
                                     setWaStatus('idle');
                                     setWaQr(null);
                                     clearInterval(pollDone);
+                                    liveIntervals.current.delete(pollDone);
                                   }
                                 } catch { /* retry */ }
                               }, 3000);
+                              liveIntervals.current.add(pollDone);
                             } else if (data.status === 'done' || data.status === 'paired') {
                               setWaStatus('paired');
                               clearInterval(pollQr);
+                              liveIntervals.current.delete(pollQr);
                               fetchOnboarding();
                             } else if (data.status === 'error') {
                               setError('Error al emparejar WhatsApp');
                               setWaStatus('idle');
                               clearInterval(pollQr);
+                              liveIntervals.current.delete(pollQr);
                             }
                           } catch { /* retry */ }
                         }, 2000);
+                        liveIntervals.current.add(pollQr);
                       } catch {
-                        setError('Error al iniciar emparejamiento');
-                        setWaStatus('idle');
+                        if (mountedRef.current) {
+                          setError('Error al iniciar emparejamiento');
+                          setWaStatus('idle');
+                        }
                       }
                     }}>
                       Conectar WhatsApp
@@ -1284,42 +1329,53 @@ const SetupWizard = () => {
                     const pollPair = setInterval(async () => {
                       try {
                         const { data } = await apiClient.get(`/setup/${token}/whatsapp-qr`);
+                        if (!mountedRef.current) { clearInterval(pollPair); return; }
                         if (data.status === 'pairing_code' && data.code) {
                           setWaPairingCode(data.code);
                           setWaPhone(data.phone || phone);
                           setWaStatus('code_ready');
                           clearInterval(pollPair);
+                          liveIntervals.current.delete(pollPair);
                           const pollDone = setInterval(async () => {
                             try {
                               const { data: d2 } = await apiClient.get(`/setup/${token}/whatsapp-qr`);
+                              if (!mountedRef.current) { clearInterval(pollDone); return; }
                               if (d2.status === 'done' || d2.status === 'paired' || d2.status === 'connected') {
                                 setWaStatus('paired');
                                 setWaPairingCode(null);
                                 clearInterval(pollDone);
+                                liveIntervals.current.delete(pollDone);
                                 fetchOnboarding();
                               } else if (d2.status === 'error') {
                                 setError('Error al emparejar WhatsApp');
                                 setWaStatus('idle');
                                 setWaPairingCode(null);
                                 clearInterval(pollDone);
+                                liveIntervals.current.delete(pollDone);
                               }
                             } catch { /* retry */ }
                           }, 3000);
+                          liveIntervals.current.add(pollDone);
                         } else if (data.status === 'done' || data.status === 'paired' || data.status === 'connected') {
                           setWaStatus('paired');
                           setWaPairingCode(null);
                           clearInterval(pollPair);
+                          liveIntervals.current.delete(pollPair);
                           fetchOnboarding();
                         } else if (data.status === 'error') {
                           setError('Error al emparejar WhatsApp');
                           setWaStatus('idle');
                           clearInterval(pollPair);
+                          liveIntervals.current.delete(pollPair);
                         }
                       } catch { /* retry */ }
                     }, 2000);
+                    liveIntervals.current.add(pollPair);
                   } catch {
-                    setError('Error al iniciar emparejamiento');
-                    setWaStatus('idle');
+                    if (mountedRef.current) {
+                      setError('Error al iniciar emparejamiento');
+                      setWaStatus('idle');
+                    }
                   }
                 }}>
                   Obtener código
@@ -1349,40 +1405,51 @@ const SetupWizard = () => {
                     const pollQr = setInterval(async () => {
                       try {
                         const { data } = await apiClient.get(`/setup/${token}/whatsapp-qr`);
+                        if (!mountedRef.current) { clearInterval(pollQr); return; }
                         if (data.status === 'qr' && data.qr) {
                           setWaQr(data.qr);
                           setWaStatus('qr_ready');
                           clearInterval(pollQr);
+                          liveIntervals.current.delete(pollQr);
                           const pollDone = setInterval(async () => {
                             try {
                               const { data: d2 } = await apiClient.get(`/setup/${token}/whatsapp-qr`);
+                              if (!mountedRef.current) { clearInterval(pollDone); return; }
                               if (d2.status === 'done' || d2.status === 'paired' || d2.status === 'connected') {
                                 setWaStatus('paired');
                                 setWaQr(null);
                                 clearInterval(pollDone);
+                                liveIntervals.current.delete(pollDone);
                                 fetchOnboarding();
                               } else if (d2.status === 'error') {
                                 setError('Error al emparejar WhatsApp');
                                 setWaStatus('idle');
                                 setWaQr(null);
                                 clearInterval(pollDone);
+                                liveIntervals.current.delete(pollDone);
                               }
                             } catch { /* retry */ }
                           }, 3000);
+                          liveIntervals.current.add(pollDone);
                         } else if (data.status === 'done' || data.status === 'paired' || data.status === 'connected') {
                           setWaStatus('paired');
                           clearInterval(pollQr);
+                          liveIntervals.current.delete(pollQr);
                           fetchOnboarding();
                         } else if (data.status === 'error') {
                           setError('Error al emparejar WhatsApp');
                           setWaStatus('idle');
                           clearInterval(pollQr);
+                          liveIntervals.current.delete(pollQr);
                         }
                       } catch { /* retry */ }
                     }, 2000);
+                    liveIntervals.current.add(pollQr);
                   } catch {
-                    setError('Error al iniciar emparejamiento');
-                    setWaStatus('idle');
+                    if (mountedRef.current) {
+                      setError('Error al iniciar emparejamiento');
+                      setWaStatus('idle');
+                    }
                   }
                 }}>
                   Escanear QR

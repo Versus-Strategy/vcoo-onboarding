@@ -108,9 +108,10 @@ class TestAgents:
 
     def test_health_report_ok(self, client, make_vcoo, provision_token):
         vid = make_vcoo("AgentHealth")
-        aid, _ = self._register(client, provision_token, vid)
+        aid, at = self._register(client, provision_token, vid)
         r = client.post(
             f"/agent/{aid}/health",
+            headers={"Authorization": f"Bearer {at}"},
             json={
                 "hostname": "vcoo-test",
                 "uptime_seconds": 3600,
@@ -124,8 +125,11 @@ class TestAgents:
         assert r.json()["status"] == "ok"
 
     def test_health_unknown_agent_404(self, client):
+        import auth as auth_mod
+        fake_token = auth_mod.create_agent_token("00000000-0000-0000-0000-000000000000")
         r = client.post(
             "/agent/00000000-0000-0000-0000-000000000000/health",
+            headers={"Authorization": f"Bearer {fake_token}"},
             json={"hostname": "ghost"},
         )
         assert r.status_code == 404

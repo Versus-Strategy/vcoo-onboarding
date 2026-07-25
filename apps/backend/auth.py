@@ -77,7 +77,8 @@ def verify_dashboard_password(password: str) -> bool:
             print("[auth] WARNING: DASHBOARD_PASSWORD no configurado — usando fallback 'versus'",
                   file=_sys.stderr)
         pwd = 'versus'
-    return password == pwd
+    import hmac
+    return hmac.compare_digest(password, pwd)
 
 # Operator login token
 def create_operator_token(email: str, name: str, operator_id: str = '', expires_hours: int = 24):

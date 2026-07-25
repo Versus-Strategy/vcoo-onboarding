@@ -8,7 +8,7 @@ import Button from '../../../components/Button';
 import type { Servicio } from '../../../store/tipos';
 
 const ServiciosPage = () => {
-  const { data: servicios, isLoading, isFetching, refetch } = useServiciosCliente();
+  const { data: servicios, isLoading, isFetching, refetch, isError, error } = useServiciosCliente();
   const { establecerServicios } = usarAccionesCliente();
   const navigate = useNavigate();
   const [serviciosData, setServiciosData] = useState<Record<string, unknown>[]>([]);
@@ -60,6 +60,15 @@ const ServiciosPage = () => {
       ),
     },
   ];
+
+  if (isError) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-red-500 mb-4">Error al cargar servicios: {(error as Error)?.message || 'Error desconocido'}</p>
+        <Button variant="primary" onClick={() => refetch()}>Reintentar</Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
