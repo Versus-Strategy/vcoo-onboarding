@@ -121,15 +121,26 @@ class Plugin:
             # Only run auth add if api_key provided (model-only calls skip this)
             if api_key:
                 r = subprocess.run(
-                    [hermes_bin, "auth", "add", provider, "--type", "api-key", "--api-key-value", api_key],
+                    [hermes_bin, "auth", "add", provider, "--type", "api-key", "--api-key", api_key],
                     capture_output=True, text=True, timeout=30
                 )
                 if r.returncode != 0:
                     return {"status": "error", "output": r.stderr.strip() or f"hermes auth add exit={r.returncode}"}
+                _PROVIDER_BASE_URLS = {
+                    "opencode-go": "https://opencode.ai/zen/go/v1",
+                    "openai": "https://api.openai.com/v1",
+                    "openrouter": "https://openrouter.ai/api/v1",
+                }
                 subprocess.run(
                     [hermes_bin, "config", "set", "model.provider", provider],
                     capture_output=True, text=True, timeout=15
                 )
+                base_url = _PROVIDER_BASE_URLS.get(provider)
+                if base_url:
+                    subprocess.run(
+                        [hermes_bin, "config", "set", "model.base_url", base_url],
+                        capture_output=True, text=True, timeout=15
+                    )
             if model:
                 subprocess.run(
                     [hermes_bin, "config", "set", "model.default", model],
