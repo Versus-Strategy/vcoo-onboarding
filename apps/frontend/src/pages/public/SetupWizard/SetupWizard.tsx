@@ -809,7 +809,7 @@ const SetupWizard = () => {
       };
       return (
         <div className="space-y-6 max-w-2xl">
-          <button onClick={() => setProveedorSeleccionado(null)} className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1">
+          <button onClick={() => { setProveedorSeleccionado(null); setModoSelectorModelo(false); }} className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
             Volver a proveedores
           </button>
@@ -873,7 +873,7 @@ const SetupWizard = () => {
       const auth = prov?.auth;
       return (
         <div className="space-y-6 max-w-2xl">
-          <button onClick={() => { setProveedorSeleccionado(null); setError(null); }}
+          <button onClick={() => { setProveedorSeleccionado(null); setModoSelectorModelo(false); setError(null); }}
             className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
