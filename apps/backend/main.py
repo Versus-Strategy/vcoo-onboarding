@@ -1434,6 +1434,10 @@ def agent_report_result(agent_id: str, payload: dict, authorization: str = Heade
     step = payload.get("step", "")
     status = payload.get("status", "ok")
     output = payload.get("output", "")
+    mode = payload.get("mode")
+    phone = payload.get("phone")
+    if mode:
+        output = json.dumps({"output": output, "mode": mode, "phone": phone or ""})
     if not cmd_id:
         raise HTTPException(status_code=400, detail="cmd_id missing")
     cmd, acked, next_step, status_code = crud.process_agent_result(

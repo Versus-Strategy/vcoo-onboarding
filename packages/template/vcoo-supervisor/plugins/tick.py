@@ -121,7 +121,7 @@ class Plugin:
             # Only run auth add if api_key provided (model-only calls skip this)
             if api_key:
                 r = subprocess.run(
-                    [hermes_bin, "auth", "add", provider, "--type", "api-key", "--api-key", api_key],
+                    [hermes_bin, "auth", "add", provider, "--type", "api-key", "--api-key-value", api_key],
                     capture_output=True, text=True, timeout=30
                 )
                 if r.returncode != 0:

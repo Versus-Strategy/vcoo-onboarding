@@ -337,6 +337,7 @@ elif [ -n "${PROVISION_TOKEN:-}" ] && [ -n "${CONTROL_PLANE_URL:-}" ]; then
         AGENT_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['agent_id'])" 2>/dev/null || echo "")
         VCOO_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['vcoo_id'])" 2>/dev/null || echo "")
         AGENT_TOKEN=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['agent_token'])" 2>/dev/null || echo "")
+        ENCRYPTION_KEY=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('encryption_key',''))" 2>/dev/null || echo "")
         REGISTERED=true
         ok "Agente registrado en control plane (ID: $AGENT_ID)"
     else
@@ -353,6 +354,7 @@ if $REGISTERED && [ -n "${AGENT_ID:-}" ]; then
         echo "VCOO_ID=${VCOO_ID:-}"
         echo "AGENT_ID=${AGENT_ID}"
         echo "AGENT_TOKEN=${AGENT_TOKEN:-}"
+        echo "ENCRYPTION_KEY=${ENCRYPTION_KEY:-}"
         echo "CONTROL_PLANE=${CONTROL_PLANE:-${CONTROL_PLANE_URL:-}}"
     } >> "${HERMES_HOME}/.env"
 
@@ -377,6 +379,7 @@ with open('$VCOO_SUPERVISOR_DIR/config.json') as f:
 tk = cfg.setdefault('plugins', {}).setdefault('tick', {})
 tk['agent_id'] = '$AGENT_ID'
 tk['agent_token'] = '$AGENT_TOKEN'
+tk['encryption_key'] = '$ENCRYPTION_KEY'
 tk['control_plane'] = '${CONTROL_PLANE:-${CONTROL_PLANE_URL:-}}'
 with open('$VCOO_SUPERVISOR_DIR/config.json', 'w') as f:
     json.dump(cfg, f, indent=2)
