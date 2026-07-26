@@ -15,6 +15,8 @@ import {
   ExclamationTriangleIcon,
   ClockIcon,
 } from '@/components/icons';
+import PhoneInput from 'react-phone-number-input/min';
+import 'react-phone-number-input/style.css';
 
 
 // ── Tipos ──
@@ -261,6 +263,7 @@ const SetupWizard = () => {
   const [waStatus, setWaStatus] = useState<string>('idle');
   const [waPairingCode, setWaPairingCode] = useState<string | null>(null);
   const [waPhone, setWaPhone] = useState<string>('');
+  const [waPhoneValue, setWaPhoneValue] = useState<string | undefined>();
   const mountedRef = useRef(true);
   const liveIntervals = useRef<Set<ReturnType<typeof setInterval>>>(new Set());
 
@@ -412,12 +415,15 @@ const SetupWizard = () => {
   useEffect(() => {
     const raw = onboarding?.providers || [];
     const proveedorConfigurado = onboarding?.checks?.provider === 'ok';
-    const configured = raw.find(p => p.id === 'opencode-go') || raw[0];
     const providerFound = proveedorSeleccionado ? raw.some(p => p.id === proveedorSeleccionado) : true;
 
-    if (proveedorConfigurado && configured) {
-      setProveedorSeleccionado(configured.id);
-      setModoSelectorModelo(true);
+    if (proveedorConfigurado && !proveedorSeleccionado) {
+      // Provider configured but not selected yet (e.g. first load) — default to opencode-go
+      const configured = raw.find(p => p.id === 'opencode-go') || raw[0];
+      if (configured) {
+        setProveedorSeleccionado(configured.id);
+        setModoSelectorModelo(true);
+      }
     } else if (!proveedorSeleccionado && modoSelectorModelo) {
       setModoSelectorModelo(false);
     } else if (!providerFound) {
@@ -1360,34 +1366,19 @@ const SetupWizard = () => {
           ) : waStatus === 'input_phone' ? (
             <div className="flex flex-col items-center gap-3 py-2">
               <p className="text-sm text-gray-600 mb-1">Introduce tu número de teléfono de WhatsApp:</p>
-              <div className="flex gap-2 w-full max-w-xs">
-                <select defaultValue="+34"
-                  className="flex-shrink-0 px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500">
-                  <option value="+34">🇪🇸 +34</option>
-                  <option value="+1">🇺🇸 +1</option>
-                  <option value="+52">🇲🇽 +52</option>
-                  <option value="+54">🇦🇷 +54</option>
-                  <option value="+57">🇨🇴 +57</option>
-                  <option value="+56">🇨🇱 +56</option>
-                  <option value="+51">🇵🇪 +51</option>
-                  <option value="+58">🇻🇪 +58</option>
-                  <option value="+593">🇪🇨 +593</option>
-                  <option value="+44">🇬🇧 +44</option>
-                  <option value="+49">🇩🇪 +49</option>
-                  <option value="+33">🇫🇷 +33</option>
-                  <option value="+55">🇧🇷 +55</option>
-                </select>
-                <input type="tel" defaultValue=""
-                  onChange={() => {}} placeholder="612 34 56 78"
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-center text-lg font-mono focus:outline-none focus:ring-2 focus:ring-primary-500" />
+              <div className="w-full max-w-xs [&_.PhoneInput]:flex [&_.PhoneInput]:gap-2 [&_.PhoneInput_input]:flex-1 [&_.PhoneInput_input]:px-3 [&_.PhoneInput_input]:py-2 [&_.PhoneInput_input]:border [&_.PhoneInput_input]:border-gray-300 [&_.PhoneInput_input]:rounded-lg [&_.PhoneInput_input]:text-center [&_.PhoneInput_input]:text-lg [&_.PhoneInput_input]:font-mono [&_.PhoneInput_input]:focus:outline-none [&_.PhoneInput_input]:focus:ring-2 [&_.PhoneInput_input]:focus:ring-primary-500 [&_.PhoneInput_select]:px-3 [&_.PhoneInput_select]:py-2 [&_.PhoneInput_select]:border [&_.PhoneInput_select]:border-gray-300 [&_.PhoneInput_select]:rounded-lg [&_.PhoneInput_select]:text-sm [&_.PhoneInput_select]:bg-white [&_.PhoneInput_select]:focus:outline-none [&_.PhoneInput_select]:focus:ring-2 [&_.PhoneInput_select]:focus:ring-primary-500">
+                <PhoneInput
+                  defaultCountry="ES"
+                  value={waPhoneValue}
+                  onChange={setWaPhoneValue}
+                  placeholder="612 34 56 78"
+                />
               </div>
               <div className="flex gap-2">
                 <Button variant="secondary" size="sm" onClick={() => setWaStatus('idle')}>Cancelar</Button>
                 <Button variant="primary" size="sm" onClick={async () => {
-                  const prefix = (document.querySelector('select') as HTMLSelectElement)?.value || '+34';
-                  const number = (document.querySelector('input[type="tel"]') as HTMLInputElement)?.value?.trim();
-                  const phone = prefix + number;
-                  if (!number) { setError('Introduce un número de teléfono'); return; }
+                  const phone = waPhoneValue;
+                  if (!phone) { setError('Introduce un número de teléfono'); return; }
                   setWaStatus('pairing');
                   const pairTimeout = setTimeout(() => {
                     if (mountedRef.current) {

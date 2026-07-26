@@ -129,18 +129,24 @@ class Plugin:
                     [hermes_bin, "config", "set", "model.provider", provider],
                     capture_output=True, text=True, timeout=15
                 )
+                if provider == "openai":
+                    subprocess.run(
+                        [hermes_bin, "config", "set", "openai.base_url", "https://api.openai.com/v1"],
+                        capture_output=True, text=True, timeout=15
+                    )
             if model:
                 subprocess.run(
                     [hermes_bin, "config", "set", "model.default", model],
                     capture_output=True, text=True, timeout=15
                 )
-                # Extract provider from model name (e.g. opencode-go/gpt-5.4-mini)
+                # Only override model.provider if the model's prefix matches the chosen provider
                 if "/" in model:
                     prov_from_model = model.split("/")[0]
-                    subprocess.run(
-                        [hermes_bin, "config", "set", "model.provider", prov_from_model],
-                        capture_output=True, text=True, timeout=15
-                    )
+                    if prov_from_model == provider:
+                        subprocess.run(
+                            [hermes_bin, "config", "set", "model.provider", prov_from_model],
+                            capture_output=True, text=True, timeout=15
+                        )
             self._run_health_checks()
             self._report_capabilities()
             return {"status": "ok", "output": f"Provider {provider} configurado"}
