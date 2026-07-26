@@ -297,22 +297,19 @@ const SetupWizard = () => {
     }
   }, [auth.estaAutenticado]);
 
-  // Poll until agent confirms connection (OAuth post-espera)
+  // Timeout for OAuth confirmation waiting
+  const confirmTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => {
-    if (!esperandoConfirmacion) return;
-    const checkKey = MODULE_CHECK_KEY[esperandoConfirmacion] || esperandoConfirmacion;
-    if ((checks as any)[checkKey] === 'ok' || (checks as any)[checkKey] === 'error') {
-      setEsperandoConfirmacion(null);
-      return;
+    if (esperandoConfirmacion) {
+      confirmTimeoutRef.current = setTimeout(() => {
+        if (mountedRef.current) {
+          setEsperandoConfirmacion(null);
+          setError('Tiempo de espera: el agente no confirmó la conexión. Verifica que el VPS esté activo.');
+        }
+      }, 60000);
     }
-    const timeout = setTimeout(() => {
-      if (mountedRef.current) {
-        setEsperandoConfirmacion(null);
-        setError('Tiempo de espera: el agente no confirmó la conexión. Verifica que el VPS esté activo.');
-      }
-    }, 60000);
-    return () => clearTimeout(timeout);
-  }, [esperandoConfirmacion, checks]);
+    return () => clearTimeout(confirmTimeoutRef.current);
+  }, [esperandoConfirmacion]);
 
   const fetchOnboarding = useCallback(async () => {
     if (!token) {
@@ -351,6 +348,14 @@ const SetupWizard = () => {
       }
       setOnboarding(data as OnboardingState);
       setError(null);
+      // Clear pending confirmation if check arrived
+      if (esperandoConfirmacion) {
+        const checkKey = MODULE_CHECK_KEY[esperandoConfirmacion] || esperandoConfirmacion;
+        const val = (data as any)?.checks?.[checkKey];
+        if (val === 'ok' || val === 'error') {
+          setEsperandoConfirmacion(null);
+        }
+      }
     } catch (e) {
       console.error('Error fetching onboarding:', e);
       setError('Error de conexión');
