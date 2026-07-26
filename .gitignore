@@ -32,3 +32,4 @@ coverage.xml
 # Monorepo: packages
 packages/*/node_modules/
 packages/*/dist/
+.env*

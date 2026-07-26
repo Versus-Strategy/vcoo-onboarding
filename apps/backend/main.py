@@ -884,7 +884,7 @@ def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session
     access_token = ""
     refresh_token = ""
     _oauth_error = ""
-    if service == "google":
+    if service in _GOOGLE_SCOPES_MAP:
         client_id = _os.getenv("GOOGLE_CLIENT_ID", "")
         client_secret = _os.getenv("GOOGLE_CLIENT_SECRET", "")
         redirect_uri = _url('GOOGLE_REDIRECT_URI', vercel_default=f'{_CONTROL_PLANE_PROD}/auth/callback', local_default='http://localhost:8000/auth/callback')
