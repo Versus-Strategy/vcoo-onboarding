@@ -793,7 +793,7 @@ _GOOGLE_SCOPES_MAP: dict[str, str] = {
 
 # ── Auth URL generation (dynamic OAuth tabs) ────────────
 
-@ application.get("/setup/{identifier}/auth-url")
+@application.get("/setup/{identifier}/auth-url")
 def get_auth_url(identifier: str, service: str = "", db: Session = Depends(get_db)) -> dict:
     """Generates an OAuth authorization URL for the given service."""
     v = crud.get_vcoo(db, identifier)
@@ -883,6 +883,7 @@ def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session
     # Try to exchange code for real tokens
     access_token = ""
     refresh_token = ""
+    _oauth_error = ""
     if service == "google":
         client_id = _os.getenv("GOOGLE_CLIENT_ID", "")
         client_secret = _os.getenv("GOOGLE_CLIENT_SECRET", "")
@@ -904,10 +905,11 @@ def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session
                     headers={"Content-Type": "application/x-www-form-urlencoded"},
                 )
                 with urllib.request.urlopen(req, timeout=10) as resp:
-                    token_resp = json.loads(resp.read())
+                    raw_body = resp.read()
+                    print(f"[oauth] Raw response: {raw_body[:500]}", file=sys.stderr)
+                    token_resp = json.loads(raw_body)
                     access_token = token_resp.get("access_token", "")
                     refresh_token = token_resp.get("refresh_token", "")
-                    print(f"[oauth] Google token exchange OK, access_token={'ok' if access_token else 'EMPTY'}, refresh_token={'ok' if refresh_token else 'EMPTY'}", file=sys.stderr)
             except urllib.error.HTTPError as e:
                 error_body = e.read().decode()
                 print(f"[oauth] HTTP {e.code} from token endpoint: {error_body[:200]}", file=sys.stderr)
@@ -993,7 +995,7 @@ def oauth_callback(code: str = "", state: str = "", error: str = "", db: Session
 
 # ── Hermes CLI commands (dynamic) ──────────────────────
 
-@ application.get("/setup/{identifier}/hermes-commands")
+@application.get("/setup/{identifier}/hermes-commands")
 def get_hermes_commands_endpoint(identifier: str, service: str = "", db: Session = Depends(get_db)):
     """Returns Hermes CLI config commands for a service."""
     v = crud.get_vcoo(db, identifier)
