@@ -66,6 +66,11 @@ const PASOS = [
 import PhoneInput from 'react-phone-number-input';
 import 'react-phone-number-input/style.css';
 
+const MODULE_CHECK_KEY: Record<string, string> = {
+  'google-drive': 'google',
+  'gmail': 'google',
+};
+
 const BG_COLORS = [
   'bg-orange-500', 'bg-green-500', 'bg-blue-500',
   'bg-purple-500', 'bg-gray-500', 'bg-red-500',
@@ -245,6 +250,7 @@ const SetupWizard = () => {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [conectando, setConectando] = useState<string | null>(null);
+  const [esperandoConfirmacion, setEsperandoConfirmacion] = useState<string | null>(null);
   const [proveedorSeleccionado, setProveedorSeleccionado] = useState<string | null>(null);
   const [verMas, setVerMas] = useState(false);
   const [apiKeyValue, setApiKeyValue] = useState('');
@@ -293,6 +299,23 @@ const SetupWizard = () => {
       setMostrarWizard(true);
     }
   }, [auth.estaAutenticado]);
+
+  // Poll until agent confirms connection (OAuth post-espera)
+  useEffect(() => {
+    if (!esperandoConfirmacion) return;
+    const checkKey = MODULE_CHECK_KEY[esperandoConfirmacion] || esperandoConfirmacion;
+    if ((checks as any)[checkKey] === 'ok' || (checks as any)[checkKey] === 'error') {
+      setEsperandoConfirmacion(null);
+      return;
+    }
+    const timeout = setTimeout(() => {
+      if (mountedRef.current) {
+        setEsperandoConfirmacion(null);
+        setError('Tiempo de espera: el agente no confirmó la conexión. Verifica que el VPS esté activo.');
+      }
+    }, 60000);
+    return () => clearTimeout(timeout);
+  }, [esperandoConfirmacion, checks]);
 
   const fetchOnboarding = useCallback(async () => {
     if (!token) {
@@ -649,7 +672,8 @@ const SetupWizard = () => {
           liveIntervals.current.delete(checkClosed);
           if (mountedRef.current) {
             setConectando(null);
-            setTimeout(fetchOnboarding, 2000);
+            setEsperandoConfirmacion(service);
+            fetchOnboarding();
           }
         }
       }, 500);
@@ -660,7 +684,7 @@ const SetupWizard = () => {
           liveIntervals.current.delete(checkClosed);
           if (mountedRef.current) {
             setConectando(null);
-            setError('La ventana de autorización no se cerró automáticamente. Ciérrala manualmente y haz clic en "Verificar" si es necesario.');
+            setError('La ventana de autorización no se cerró automáticamente. Ciérrala manualmente.');
           }
         }
       }, 120000);
@@ -671,6 +695,7 @@ const SetupWizard = () => {
           clearTimeout(safetyTimer);
           if (mountedRef.current) {
             setConectando(null);
+            setEsperandoConfirmacion(service);
             fetchOnboarding();
           }
           window.removeEventListener('message', handleMessage);
@@ -1069,10 +1094,21 @@ const SetupWizard = () => {
                       </svg>
                     </div>
                     <p className="text-red-700 font-medium">Conexión expirada o inválida</p>
-                    <Button variant="primary" size="lg" onClick={() => conectarOAuth(oauthConfig.service)}
+                    <Button variant="primary" size="lg" onClick={() => { setEsperandoConfirmacion(null); conectarOAuth(oauthConfig.service); }}
                       loading={conectando === oauthConfig.service}>
                       Reconectar con Google
                     </Button>
+                  </div>
+                ) : esperandoConfirmacion === oauthConfig.service ? (
+                  <div className="flex flex-col items-center gap-3 py-4">
+                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div>
+                    <p className="text-sm font-medium text-gray-700">Autorización recibida</p>
+                    <p className="text-xs text-gray-400">Esperando confirmación del agente en tu VPS...</p>
+                    <div className="w-full max-w-xs bg-gray-200 rounded-full h-1.5 mt-2">
+                      <div className="bg-primary-500 h-1.5 rounded-full animate-pulse" style={{ width: '60%' }}></div>
+                    </div>
+                    <button onClick={() => setEsperandoConfirmacion(null)}
+                      className="mt-1 text-xs text-gray-400 hover:text-gray-600">Cancelar</button>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center gap-3">
@@ -1241,17 +1277,21 @@ const SetupWizard = () => {
                     <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-3 ${
                       modulo === 'office' && checks.google === 'ok' ? 'bg-green-100' :
                       modulo === 'mail' && checks.google === 'ok' ? 'bg-green-100' :
+                      (modulo === 'office' || modulo === 'mail') && esperandoConfirmacion ? 'bg-yellow-100' :
                       'bg-gray-100'
                     }`}>
                       {modulo === 'office' && checks.google === 'ok' ? <CheckCircleIcon className="w-7 h-7 text-green-600" /> :
                        modulo === 'mail' && checks.google === 'ok' ? <CheckCircleIcon className="w-7 h-7 text-green-600" /> :
-                       info.icono}
+                       (modulo === 'office' || modulo === 'mail') && esperandoConfirmacion ? (
+                         <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-yellow-600"></div>
+                       ) : info.icono}
                     </div>
                     <h3 className="font-semibold text-gray-900 mb-1">
                       {info.nombre}
                     </h3>
                     <p className="text-sm text-gray-500">
                       {checks.google === 'ok' && (modulo === 'office' || modulo === 'mail') ? 'Conectado' :
+                       (modulo === 'office' || modulo === 'mail') && esperandoConfirmacion ? 'Confirmando...' :
                        info.descripcion}
                     </p>
                   </div>
