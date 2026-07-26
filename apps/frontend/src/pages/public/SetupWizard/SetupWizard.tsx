@@ -15,6 +15,8 @@ import {
   ExclamationTriangleIcon,
   ClockIcon,
 } from '@/components/icons';
+import PhoneInput from 'react-phone-number-input';
+import 'react-phone-number-input/style.css';
 
 // ── Tipos ──
 
@@ -62,9 +64,6 @@ const PASOS = [
   'Módulos',
   'Finalización',
 ];
-
-import PhoneInput from 'react-phone-number-input';
-import 'react-phone-number-input/style.css';
 
 const MODULE_CHECK_KEY: Record<string, string> = {
   'google-drive': 'google',
