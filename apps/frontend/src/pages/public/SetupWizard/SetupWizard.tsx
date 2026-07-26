@@ -63,21 +63,8 @@ const PASOS = [
   'Finalización',
 ];
 
-const PAISES = [
-  { codigo: '+34', pais: 'España', bandera: '🇪🇸' },
-  { codigo: '+1', pais: 'EE.UU./Canadá', bandera: '🇺🇸' },
-  { codigo: '+52', pais: 'México', bandera: '🇲🇽' },
-  { codigo: '+54', pais: 'Argentina', bandera: '🇦🇷' },
-  { codigo: '+57', pais: 'Colombia', bandera: '🇨🇴' },
-  { codigo: '+56', pais: 'Chile', bandera: '🇨🇱' },
-  { codigo: '+51', pais: 'Perú', bandera: '🇵🇪' },
-  { codigo: '+58', pais: 'Venezuela', bandera: '🇻🇪' },
-  { codigo: '+593', pais: 'Ecuador', bandera: '🇪🇨' },
-  { codigo: '+44', pais: 'Reino Unido', bandera: '🇬🇧' },
-  { codigo: '+49', pais: 'Alemania', bandera: '🇩🇪' },
-  { codigo: '+33', pais: 'Francia', bandera: '🇫🇷' },
-  { codigo: '+55', pais: 'Brasil', bandera: '🇧🇷' },
-];
+import PhoneInput from 'react-phone-number-input';
+import 'react-phone-number-input/style.css';
 
 const BG_COLORS = [
   'bg-orange-500', 'bg-green-500', 'bg-blue-500',
@@ -270,8 +257,7 @@ const SetupWizard = () => {
   const [waStatus, setWaStatus] = useState<string>('idle');
   const [waPairingCode, setWaPairingCode] = useState<string | null>(null);
   const [waPhone, setWaPhone] = useState<string>('');
-  const [waPhoneInput, setWaPhoneInput] = useState<string>('');
-  const [waPrefix, setWaPrefix] = useState<string>('+34');
+  const [waPhoneInput, setWaPhoneInput] = useState<string | undefined>('');
   const mountedRef = useRef(true);
   const liveIntervals = useRef<Set<ReturnType<typeof setInterval>>>(new Set());
 
@@ -1332,24 +1318,20 @@ const SetupWizard = () => {
           ) : waStatus === 'input_phone' ? (
             <div className="flex flex-col items-center gap-3 py-2">
               <p className="text-sm text-gray-600 mb-1">Introduce tu número de teléfono de WhatsApp:</p>
-              <div className="flex gap-2 w-full max-w-xs">
-                <select value={waPrefix} onChange={(e) => setWaPrefix(e.target.value)}
-                  className="flex-shrink-0 px-2 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-                  {PAISES.map(p => (
-                    <option key={p.codigo} value={p.codigo}>{p.bandera} {p.codigo}</option>
-                  ))}
-                </select>
-                <input type="tel" defaultValue={waPhoneInput}
-                  onChange={(e) => setWaPhoneInput(e.target.value)}
+              <div className="w-full max-w-xs [&_.PhoneInput]:flex [&_.PhoneInput]:gap-2 [&_.PhoneInput_input]:flex-1 [&_.PhoneInput_input]:px-3 [&_.PhoneInput_input]:py-2 [&_.PhoneInput_input]:border [&_.PhoneInput_input]:border-gray-300 [&_.PhoneInput_input]:rounded-lg [&_.PhoneInput_input]:text-center [&_.PhoneInput_input]:text-lg [&_.PhoneInput_input]:font-mono [&_.PhoneInput_input]:focus:outline-none [&_.PhoneInput_input]:focus:ring-2 [&_.PhoneInput_input]:focus:ring-primary-500">
+                <PhoneInput
+                  defaultCountry="ES"
                   placeholder="612 34 56 78"
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-center text-lg font-mono focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                  value={waPhoneInput}
+                  onChange={setWaPhoneInput}
+                  className="w-full"
+                />
               </div>
               <div className="flex gap-2">
                 <Button variant="secondary" size="sm" onClick={() => setWaStatus('idle')}>Cancelar</Button>
                 <Button variant="primary" size="sm" onClick={async () => {
-                  const phone = waPrefix + (document.querySelector('input[type="tel"]') as HTMLInputElement)?.value?.trim();
-                  if (!phone || phone === waPrefix) { setError('Introduce un número de teléfono'); return; }
-                  setWaPhoneInput(phone);
+                  const phone = waPhoneInput;
+                  if (!phone) { setError('Introduce un número de teléfono'); return; }
                   setWaStatus('pairing');
                   const pairTimeout = setTimeout(() => {
                     if (mountedRef.current) {
