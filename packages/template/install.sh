@@ -200,6 +200,24 @@ else
     info "Hermes Agent ya configurado. Saltando..."
 fi
 
+# ── Obtener módulos contratados desde el control plane ──────────
+if [ -z "${MODULES:-}" ]; then
+    VCOO_ID="${VCOO_ID:-$(grep -oP 'VCOO_ID=\\K.*' "${HERMES_HOME}/.env" 2>/dev/null || echo '')}"
+    PROV_TOKEN="${PROVISION_TOKEN:-$(grep -oP 'PROVISION_TOKEN=\\K.*' "${HERMES_HOME}/.env" 2>/dev/null || echo '')}"
+    CONTROL="${CONTROL_PLANE:-${CONTROL_PLANE_URL:-}}"
+    MODULES=""
+    if [ -n "$VCOO_ID" ] && [ -n "$PROV_TOKEN" ] && [ -n "$CONTROL" ]; then
+        info "Obteniendo módulos desde ${CONTROL}/setup/${VCOO_ID}..."
+        MODULES=$(curl -sSf "${CONTROL}/setup/${VCOO_ID}" -H "Authorization: Bearer ***" 2>/dev/null | \
+            python3 -c "import sys,json; d=json.load(sys.stdin); print(' '.join(d.get('modules',[])))" 2>/dev/null || echo "")
+    fi
+else
+    info "Usando módulos del entorno: ${MODULES}"
+    CONTROL="${CONTROL_PLANE:-${CONTROL_PLANE_URL:-}}"
+    VCOO_ID="${VCOO_ID:-$(grep -oP 'VCOO_ID=\\K.*' "${HERMES_HOME}/.env" 2>/dev/null || echo '')}"
+    PROV_TOKEN="${PROVISION_TOKEN:-$(grep -oP 'PROVISION_TOKEN=\\K.*' "${HERMES_HOME}/.env" 2>/dev/null || echo '')}"
+fi
+
 # ── 5. Instalar skills VCOO (solo módulos contratados) ──────────
 # Skill → módulo que la requiere
 skill_requires_module() {
@@ -235,16 +253,7 @@ fi
 # ─── 6. Descargar scripts VCOO (autenticado con PROVISION_TOKEN) ──
 info "Descargando scripts de integración..."
 mkdir -p "${HERMES_SCRIPTS}"
-VCOO_ID="${VCOO_ID:-$(grep -oP 'VCOO_ID=\K.*' "${HERMES_HOME}/.env" 2>/dev/null || echo '')}"
-PROV_TOKEN="${PROVISION_TOKEN:-$(grep -oP 'PROVISION_TOKEN=\K.*' "${HERMES_HOME}/.env" 2>/dev/null || echo '')}"
-CONTROL="${CONTROL_PLANE:-${CONTROL_PLANE_URL:-}}"
-
-# Obtener módulos del VCOO desde el control plane
-MODULES=""
-if [ -n "$VCOO_ID" ] && [ -n "$PROV_TOKEN" ] && [ -n "$CONTROL" ]; then
-    MODULES=$(curl -sSf "${CONTROL}/setup/${VCOO_ID}" -H "Authorization: Bearer ${PROV_TOKEN}" 2>/dev/null | \
-        python3 -c "import sys,json; d=json.load(sys.stdin); print(' '.join(d.get('modules',[])))" 2>/dev/null || echo "")
-fi
+# Variables ya obtenidas en la sección anterior (MODULES, VCOO_ID, PROV_TOKEN, CONTROL)
 
 fetch_script() {
     local name="$1"

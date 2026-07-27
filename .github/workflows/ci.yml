@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+# NOTA: Los tests de integración LXC (packages/template/tests/lxc/) NO son
+#       compatibles con GitHub Actions porque requieren LXD. Se ejecutan
+#       localmente. El test shell puro (test_module_filter.sh) en ese mismo
+#       directorio SÍ es compatible pero no está incluido aquí; si se desea
+#       añadirlo, crear un job con: bash packages/template/tests/test_module_filter.sh
+#
 # Cancela ejecuciones antiguas del mismo ref si llega una nueva.
 concurrency:
   group: ci-${{ github.ref }}

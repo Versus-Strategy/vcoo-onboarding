@@ -1,33 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
+CONTROL_PLANE="https://vcoo-onboarding.vercel.app"
+# ════════════════════════════════════════════════════════════════
+# VCOO Virtual — Instalador completo
 # ═══════════════════════════════════════════════════════════════
-# VCOO Virtual — Unified One-Line Installer v1.0
-# ═══════════════════════════════════════════════════════════════
-# by VERSUS Strategy SL
-#
 # Uso:
-#   curl -fsSL https://vcoo.dev/install | PROVISION_TOKEN=*** bash
+#   bash install.sh
+# o
+#   curl -fsSL https://install.vcoo.dev | bash
 #
-# Este script despliega la template VCOO completa:
-#   1. Verifica/instala dependencias (curl, python3, git)
-#   2. Valida PROVISION_TOKEN contra el control plane
-#   3. Descarga la template
-#   4. Configura .env con secrets del control plane
-#   5. Ejecuta install.sh de la template (Hermes + skills + cron)
-#   6. Arranca vcoo-supervisor en background
-#   7. Muestra resumen final
-#
-# Sin PROVISION_TOKEN → instalación manual (solo template)
+# Este script:
+#   1. Verifica requisitos del sistema
+#   2. Instala dependencias (Python, uv, node, etc.)
+#   3. Configura Hermes Agent
+#   4. Copia skills y scripts VCOO
+#   5. Configura integraciones
+#   6. Arranca el gateway
 # ═══════════════════════════════════════════════════════════════
 
-# Asegurar HOME (systemd no lo exporta por defecto cuando corre como root)
-export HOME="${HOME:-/root}"
-
-CONTROL_PLANE="${CONTROL_PLANE:-https://vcoo-onboarding.vercel.app}"
-VCOO_HOME="${VCOO_HOME:-$HOME/.vcoo}"
-HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
-
-# ── Colores ──
+# ── Colores ─────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'
 info()  { echo -e "${BLUE}[VCOO]${NC} $1"; }
@@ -51,14 +42,19 @@ ENCRYPTION_KEY=""
 
 if [ -n "$PROVISION_TOKEN" ]; then
     info "Conectando con el panel de control..."
-    RESP=$(curl -sS -w "\n%{http_code}" "${CONTROL_PLANE}/register" \
+    JSON_PAYLOAD=$(python3 -c "
+import json, os
+print(json.dumps({'token': os.environ.get('PROVISION_TOKEN', ''), 'info': {'hostname': os.uname().nodename, 'platform': 'linux', 'installer': 'unified-v1'}}))
+")
+    RESP=$(curl -sS -w "\n%{http_code}" "${CONTROL_PLANE:-https://vcoo-onboarding.vercel.app}/register" \
       -H "Content-Type: application/json" \
-      -d "{\"token\": \"$PROVISION_TOKEN\", \"info\": {\"hostname\": \"$(hostname)\", \"platform\": \"linux\", \"installer\": \"unified-v1\"}}")
+      -d "$JSON_PAYLOAD")
     HTTP_CODE=$(echo "$RESP" | tail -1)
     BODY=$(echo "$RESP" | sed '$d')
 
     if [ "$HTTP_CODE" != "200" ]; then
-        err "Token inválido o expirado (HTTP $HTTP_CODE).\n  Verifica tu token en el panel de control (${CONTROL_PLANE})."
+        err "Token inválido o expirado (HTTP $HTTP_CODE).
+  Verifica tu token en el panel de control."
     fi
 
     AGENT_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['agent_id'])" 2>/dev/null || echo "")
@@ -66,11 +62,9 @@ if [ -n "$PROVISION_TOKEN" ]; then
     AGENT_TOKEN=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['agent_token'])" 2>/dev/null || echo "")
     ENCRYPTION_KEY=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('encryption_key',''))" 2>/dev/null || echo "")
     ok "¡Conectado! Agente registrado (ID: ${AGENT_ID})"
-    info "Instalando componentes en segundo plano..."
 else
     warn "No se proporcionó PROVISION_TOKEN — instalación manual."
     warn "El agente no se registrará automáticamente en el control plane."
-    echo ""
 fi
 
 # ── 1. Dependencias ─────────────────────────────────────────
@@ -165,42 +159,42 @@ fi
 ok "Dependencias listas"
 
 # ── 2. Descargar template VCOO ──
-TEMPLATE_DIR="${VCOO_HOME}/template"
+TEMPLATE_DIR="${VCOO_HOME:-$HOME/.vcoo}/template"
 info "Descargando template VCOO..."
-mkdir -p "$VCOO_HOME"
+mkdir -p "${VCOO_HOME:-$HOME/.vcoo}"
 
 # Opción 1: descarga directa desde el control plane
-info "  Descargando ${CONTROL_PLANE}/template.tar.gz ..."
-curl -fsSL "${CONTROL_PLANE}/template.tar.gz" -o /tmp/vcoo-template.tar.gz || {
-        # Opción 2: git clone como fallback
-        if command -v git &>/dev/null; then
-            warn "Descarga directa falló, intentando git clone..."
-            git clone --depth 1 "https://github.com/Versus-Strategy/vcoo-template.git" "$TEMPLATE_DIR" 2>/dev/null || \
+info "  Descargando ${CONTROL_PLANE:-https://vcoo-onboarding.vercel.app}/template.tar.gz ..."
+curl -fsSL "${CONTROL_PLANE:-https://vcoo-onboarding.vercel.app}/template.tar.gz" -o /tmp/vcoo-template.tar.gz || {
+    # Opción 2: git clone como fallback
+    if command -v git &>/dev/null; then
+        warn "Descarga directa falló, intentando git clone..."
+        git clone --depth 1 "https://github.com/Versus-Strategy/vcoo-template.git" "$TEMPLATE_DIR" 2>/dev/null || \
             err "No se pudo descargar la template. Verifica conexión a Internet."
-        else
-            err "No se pudo descargar la template. Verifica conexión a Internet."
-        fi
-    }
-
-    # Si descargamos el tar.gz, extraerlo
-    if [ -f /tmp/vcoo-template.tar.gz ]; then
-        mkdir -p "$TEMPLATE_DIR"
-        tar -xzf /tmp/vcoo-template.tar.gz -C "$TEMPLATE_DIR" || \
-        err "Error al extraer la template (descarga corrupta)."
-    fi
-
-    # Verificar que se descargó correctamente
-    if [ -f "$TEMPLATE_DIR/install.sh" ]; then
-        ok "Template descargada en $TEMPLATE_DIR"
     else
-        err "La template descargada no contiene install.sh — descarga corrupta."
+        err "No se pudo descargar la template. Verifica conexión a Internet."
     fi
+}
+
+# Si descargamos el tar.gz, extraerlo
+if [ -f /tmp/vcoo-template.tar.gz ]; then
+    mkdir -p "$TEMPLATE_DIR"
+    tar -xzf /tmp/vcoo-template.tar.gz -C "$TEMPLATE_DIR" || \
+        err "Error al extraer la template (descarga corrupta)."
+fi
+
+# Verificar que se descargó correctamente
+if [ -f "$TEMPLATE_DIR/install.sh" ]; then
+    ok "Template descargada en $TEMPLATE_DIR"
+else
+    err "La template descargada no contiene install.sh — descarga corrupta."
+fi
 
 # ── 3. Configurar .env ──
 if [ -n "$VCOO_ID" ]; then
     if [ ! -f "$TEMPLATE_DIR/.env" ]; then
         info "Configurando .env con secrets del control plane..."
-        ENV_RESP=$(curl -sS "${CONTROL_PLANE}/vcoo/${VCOO_ID}/secrets" 2>/dev/null || echo "{}")
+        ENV_RESP=$(curl -sS "${CONTROL_PLANE:-https://vcoo-onboarding.vercel.app}/vcoo/${VCOO_ID}/secrets" 2>/dev/null || echo "{}")
 
         OPENROUTER_KEY=$(echo "$ENV_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('OPENROUTER_API_KEY',''))" 2>/dev/null || echo "")
         DISCORD_TOKEN=$(echo "$ENV_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('DISCORD_BOT_TOKEN',''))" 2>/dev/null || echo "")
@@ -217,7 +211,7 @@ if [ -n "$VCOO_ID" ]; then
         echo "AGENT_ID=${AGENT_ID}" >> "$TEMPLATE_DIR/.env"
         echo "AGENT_TOKEN=${AGENT_TOKEN}" >> "$TEMPLATE_DIR/.env"
         echo "ENCRYPTION_KEY=${ENCRYPTION_KEY}" >> "$TEMPLATE_DIR/.env"
-        echo "CONTROL_PLANE_URL=${CONTROL_PLANE}" >> "$TEMPLATE_DIR/.env"
+        echo "CONTROL_PLANE_URL=${CONTROL_PLANE:-https://vcoo-onboarding.vercel.app}" >> "$TEMPLATE_DIR/.env"
         chmod 600 "$TEMPLATE_DIR/.env"
         ok ".env configurado en $TEMPLATE_DIR/.env"
     else
@@ -231,41 +225,20 @@ export VCOO_ID="${VCOO_ID:-}"
 export AGENT_ID="${AGENT_ID:-}"
 export AGENT_TOKEN="${AGENT_TOKEN:-}"
 export ENCRYPTION_KEY="${ENCRYPTION_KEY:-}"
-export CONTROL_PLANE_URL="${CONTROL_PLANE}"
+export CONTROL_PLANE_URL="${CONTROL_PLANE:-https://vcoo-onboarding.vercel.app}"
+export MODULES="${MODULES:-}"
 
 info "Ejecutando instalador de la template..."
 bash "$TEMPLATE_DIR/install.sh"
 ok "Template instalada correctamente"
 
-# ── 6. Resumen final ──
+# ── 6. Resumen final simplificado ──
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║     Instalación completada               ║${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════════╝${NC}"
 echo ""
-echo "  Template:   $TEMPLATE_DIR"
-echo "  Hermes:     $HERMES_HOME"
-if [ -n "$VCOO_ID" ]; then
-    echo "  VCOO ID:    $VCOO_ID"
-fi
-if [ -n "$AGENT_ID" ]; then
-    echo "  Agent ID:   $AGENT_ID"
-fi
-echo ""
-echo "  Próximos pasos:"
-echo "  1. Configura los módulos contratados:"
-echo "     - Google OAuth:  ${CONTROL_PLANE}/setup/${PROVISION_TOKEN}"
-echo "     - Trello:        Configurar API key en el panel"
-echo "     - GitHub:        gh auth login"
-echo ""
-echo "  2. Verifica el estado de los servicios:"
-echo "     systemctl status vcoo-supervisor"
-echo "     systemctl status vcoo-hermes-gateway"
-echo ""
-echo "  3. Edita tu configuración:"
-echo "      hermes config edit"
-echo ""
-echo "  4. Envía un mensaje a MAGI desde Discord o Telegram"
+echo "Instalación VCOO completada correctamente."
+echo "Continúa la configuración desde el onboarding web."
 echo ""
 echo -e "${CYAN}¿Necesitas ayuda? contact@versusstrategy.com${NC}"
-echo ""

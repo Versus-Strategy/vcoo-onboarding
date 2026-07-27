@@ -21,7 +21,7 @@ class TestUtils:
         assert isinstance(r.json()["playbooks"], list)
 
     def test_playbook_unknown_404(self, client):
-        r = client.get("/playbooks/does-not-exist.sh")
+        r = client.get("/playbooks/../../etc/passwd")
         assert r.status_code == 404
 
     def test_playbook_path_traversal_blocked(self, client):
@@ -33,6 +33,14 @@ class TestUtils:
         r = client.get("/install.sh")
         assert r.status_code == 200
         assert len(r.text) > 0
+        # Comprobación básica de contenido esperado tras simplificación
+        assert "Instalación VCOO completada correctamente." in r.text
+        assert "Continúa la configuración desde el onboarding web." in r.text
+        # Asegurar que texto antiguo (verbose) no está presente
+        assert "Próximos pasos:" not in r.text
+        assert "Verifica el estado" not in r.text
+        assert "systemctl status" not in r.text
+        assert "Envía un mensaje a MAGI" not in r.text
 
     def test_install_command_format(self):
         cmd = _install_command("https://control.example.com", "test-token-123")
