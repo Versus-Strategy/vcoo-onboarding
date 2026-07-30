@@ -1166,6 +1166,12 @@ const SetupWizard = () => {
                     <Button variant="primary" size="lg" onClick={async () => {
                       setWaStatus('pairing');
                       setError(null);
+                      const pairTimeout = setTimeout(() => {
+                        if (mountedRef.current) {
+                          setError('Tiempo de espera agotado para emparejar WhatsApp');
+                          setWaStatus('idle');
+                        }
+                      }, 5 * 60 * 1000);
                       try {
                         await apiClient.post(`/setup/${token}/start-pair-whatsapp`);
                         const pollQr = setInterval(async () => {

@@ -1,12 +1,14 @@
 """Tests para el tick interval y configuración del agente."""
 from unittest.mock import patch, MagicMock
 import json
+import os
 
 
 def test_agent_tick_interval_from_config():
     """El Plugin.tick debe leer el intervalo del config."""
-    import sys
-    sys.path.insert(0, "/home/ubuntu/versus/vcoo-onboarding/packages/template/vcoo-supervisor/plugins")
+    import os, sys
+    plugins_dir = os.path.join(os.path.dirname(__file__), *[".."] * 3, "packages", "template", "vcoo-supervisor", "plugins")
+    sys.path.insert(0, os.path.abspath(plugins_dir))
     from tick import Plugin
 
     p = Plugin()
@@ -26,8 +28,9 @@ def test_agent_tick_interval_from_config():
 
 def test_agent_tick_interval_from_env():
     """Si el config no tiene interval, debe mantener el default."""
-    import sys
-    sys.path.insert(0, "/home/ubuntu/versus/vcoo-onboarding/packages/template/vcoo-supervisor/plugins")
+    import os, sys
+    plugins_dir = os.path.join(os.path.dirname(__file__), *[".."] * 3, "packages", "template", "vcoo-supervisor", "plugins")
+    sys.path.insert(0, os.path.abspath(plugins_dir))
     from tick import Plugin
 
     p = Plugin()
@@ -65,7 +68,8 @@ def test_pair_whatsapp_in_valid_commands():
 def test_pair_whatsapp_payload_sent_to_agent():
     """El payload del comando pair-whatsapp debe incluirse en la respuesta del tick."""
     # Verificamos que main.py incluya pair-whatsapp en la lista de comandos con payload
-    with open("/home/ubuntu/versus/vcoo-onboarding/apps/backend/main.py") as f:
+    main_py = os.path.join(os.path.dirname(__file__), "..", "main.py")
+    with open(os.path.abspath(main_py)) as f:
         content = f.read()
     assert 'pair-whatsapp' in content
     # Verificar que está en la línea de payload
