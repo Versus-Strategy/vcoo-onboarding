@@ -379,6 +379,7 @@ if $REGISTERED && [ -n "${AGENT_ID:-}" ]; then
         sudo mkdir -p "$VCOO_SUPERVISOR_DIR/plugins"
         sudo cp "$SUPERVISOR_SRC/supervisor.py" "$VCOO_SUPERVISOR_DIR/"
         sudo cp "$SUPERVISOR_SRC/config.json" "$VCOO_SUPERVISOR_DIR/"
+        sudo cp "$SUPERVISOR_SRC/update.sh" "$VCOO_SUPERVISOR_DIR/"
         sudo cp "$SUPERVISOR_SRC/plugins/"*.py "$VCOO_SUPERVISOR_DIR/plugins/"
         # Escribir AGENT_ID y CONTROL_PLANE en config
         sudo python3 -c "
@@ -393,6 +394,16 @@ tk['control_plane'] = '${CONTROL_PLANE:-${CONTROL_PLANE_URL:-}}'
 with open('$VCOO_SUPERVISOR_DIR/config.json', 'w') as f:
     json.dump(cfg, f, indent=2)
 "
+        # El supervisor debe poder auto-actualizarse (update.sh + reinicio del servicio)
+        # sin prompt de contraseña: propiedad del dir para el usuario y regla sudoers.
+        INSTALL_USER="$(id -un)"
+        if [ -n "${SUDO_USER:-}" ]; then INSTALL_USER="$SUDO_USER"; fi
+        sudo chown -R "$INSTALL_USER:$INSTALL_USER" "$VCOO_SUPERVISOR_DIR"
+        if [ -d /etc/sudoers.d ]; then
+            echo "$INSTALL_USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart vcoo-supervisor.service, /usr/bin/systemctl stop vcoo-supervisor.service, /usr/bin/systemctl start vcoo-supervisor.service" | sudo tee /etc/sudoers.d/vcoo-supervisor >/dev/null
+            sudo chmod 440 /etc/sudoers.d/vcoo-supervisor
+            sudo visudo -cf /etc/sudoers.d/vcoo-supervisor >/dev/null 2>&1 || sudo rm -f /etc/sudoers.d/vcoo-supervisor
+        fi
         ok "vcoo-supervisor instalado en $VCOO_SUPERVISOR_DIR"
     else
         warn "Origen del supervisor no encontrado en $SUPERVISOR_SRC — saltando"

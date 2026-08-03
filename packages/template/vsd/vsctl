@@ -14,7 +14,8 @@ Comandos disponibles:
   start           Inicia hermes‑gateway
   stop            Detiene hermes‑gateway
   restart         Reinicia hermes‑gateway
-  update          Ejecuta 'hermes update' (actualiza Hermes y plantilla VCOO)
+  update          Ejecuta 'hermes update' + actualiza supervisor VCOO
+  update-supervisor   Actualiza solo el supervisor VCOO (plugins) y lo reinicia
   logs            Sigue el log de versusd (versusd.log)
   hermes-logs     Sigue el log de hermes‑gateway
   self-update     (placeholder) recarga versusd (en el futuro con verificación de firma)
@@ -35,6 +36,15 @@ case "${1:-}" in
     update)
         echo "Actualizando Hermes y plantilla VCOO…"
         hermes update
+        bash /opt/vcoo-supervisor/update.sh
+        sudo systemctl restart vcoo-supervisor.service 2>/dev/null || systemctl restart vcoo-supervisor.service 2>/dev/null || true
+        echo "Actualización completada."
+        ;;
+    update-supervisor)
+        echo "Actualizando supervisor VCOO…"
+        bash /opt/vcoo-supervisor/update.sh
+        sudo systemctl restart vcoo-supervisor.service 2>/dev/null || systemctl restart vcoo-supervisor.service 2>/dev/null || true
+        echo "Supervisor actualizado."
         ;;
     logs)    sudo tail -f "$VSD_LOG" ;;
     hermes-logs) sudo tail -f "$HERMES_LOG" ;;
