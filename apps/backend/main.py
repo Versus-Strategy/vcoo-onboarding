@@ -283,6 +283,29 @@ async def startup():
 
 # ── Health / Debug ────────────────────────────────────────────
 
+# Vercel reescribe todas las rutas a /api/index/:path* (ver vercel.json) y el
+# runtime Python recibe el path reescrito en el scope ASGI. Este middleware
+# restaura el path original antes de que FastAPI haga routing. Es no-op en
+# local (paths sin prefijo) y cuando el prefix no está presente.
+_VERCEL_PATH_PREFIX = "/api/index"
+
+@application.middleware("http")
+async def _strip_vercel_path_prefix(request: Request, call_next):
+    scope = request.scope
+    path = scope.get("path", "")
+    if path.startswith(_VERCEL_PATH_PREFIX):
+        restored = path[len(_VERCEL_PATH_PREFIX):] or "/"
+        scope["path"] = restored
+        scope["root_path"] = ""
+        rp = scope.get("raw_path")
+        if rp:
+            try:
+                scope["raw_path"] = restored.encode("latin1")
+            except Exception:
+                pass
+    return await call_next(request)
+
+
 @application.get('/healthz')
 def healthz():
     """Healthcheck que comprueba la conectividad real con la base de datos.
@@ -1308,6 +1331,7 @@ def set_provider(vcoo_id: str, payload: dict, db: Session = Depends(get_db),
     provider = payload.get("provider", "").strip()
     model = payload.get("model", "").strip()
     api_key = payload.get("api_key", "").strip()
+    base_url = payload.get("base_url", "").strip()
 
     if not provider or not api_key:
         raise HTTPException(status_code=400, detail="provider y api_key son requeridos")
@@ -1325,6 +1349,7 @@ def set_provider(vcoo_id: str, payload: dict, db: Session = Depends(get_db),
         "encrypted": encrypted,
         "provider": provider,
         "model": model,
+        "base_url": base_url,
     })
     cmd = crud.create_command(db, agent_id=str(agent.id), command="set-provider", result=command_payload)
     return {"status": "command_sent", "cmd_id": str(cmd.id), "provider": provider, "model": model}
@@ -1469,6 +1494,7 @@ def setup_set_provider(identifier: str, payload: dict, authorization: str = Head
     provider = payload.get("provider", "").strip()
     api_key = payload.get("api_key", "").strip()
     model = payload.get("model", "").strip()
+    base_url = payload.get("base_url", "").strip()
     if not provider:
         raise HTTPException(status_code=400, detail="provider required")
     if not api_key and not model:
@@ -1486,12 +1512,14 @@ def setup_set_provider(identifier: str, payload: dict, authorization: str = Head
             "encrypted": encrypted,
             "provider": provider,
             "model": model,
+            "base_url": base_url,
         })
     else:
         command_payload = json.dumps({
             "api_key": api_key,
             "provider": provider,
             "model": model,
+            "base_url": base_url,
             "encrypted": False,
         })
     cmd = crud.create_command(db, agent_id=str(agent.id), command="set-provider", result=command_payload)

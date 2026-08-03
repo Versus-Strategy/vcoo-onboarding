@@ -14,7 +14,9 @@
     "test:e2e": "npm run build:e2e && playwright test"
   },
   "dependencies": {
+    "@heroicons/react": "^2.2.0",
     "@tanstack/react-query": "^4.29.5",
+    "@thesvg/react": "^3.2.15",
     "axios": "^1.4.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

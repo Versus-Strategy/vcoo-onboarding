@@ -41,6 +41,7 @@ export default defineConfig({
         manualChunks: {
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
           'data-vendor': ['@tanstack/react-query', 'axios', 'zustand'],
+          'icons-vendor': ['@heroicons/react/24/outline', '@thesvg/react'],
         },
       },
     },

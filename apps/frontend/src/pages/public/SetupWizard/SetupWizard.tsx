@@ -6,15 +6,31 @@ import { useAuth } from '@/auth/authContext';
 import StepIndicator from '@/components/StepIndicator';
 import Button from '@/components/Button';
 import {
-  DocumentTextIcon,
-  EnvelopeIcon,
-  CalendarIcon,
   CodeBracketIcon,
   PuzzlePieceIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
   ClockIcon,
 } from '@/components/icons';
+import {
+  CheckIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ClipboardIcon,
+} from '@heroicons/react/24/outline';
+import {
+  Whatsapp,
+  Gmail,
+  GoogleDrive,
+  Trello,
+  Opencode,
+  Anthropic,
+  Openai,
+  CodexOpenai,
+  Google,
+  Gemini,
+  Openrouter,
+} from '@thesvg/react';
 import PhoneInput from 'react-phone-number-input/min';
 import 'react-phone-number-input/style.css';
 
@@ -77,6 +93,19 @@ const BG_COLORS = [
   'bg-teal-500', 'bg-pink-500', 'bg-indigo-500',
   'bg-yellow-500', 'bg-cyan-500', 'bg-rose-500',
 ];
+
+// Iconos de marca para proveedores de IA que existen en @thesvg/react.
+// Los que no tienen logo oficial se quedan con el círculo de color + inicial.
+const PROVEEDOR_ICONOS: Record<string, ReactNode> = {
+  'opencode-go': <Opencode className="w-7 h-7" />,
+  anthropic: <Anthropic variant="light" className="w-7 h-7" />,
+  openai: <Openai variant="light" className="w-7 h-7" />,
+  'openai-api': <Openai variant="light" className="w-7 h-7" />,
+  'openai-codex': <CodexOpenai className="w-7 h-7" />,
+  google: <Google className="w-7 h-7" />,
+  gemini: <Gemini className="w-7 h-7" />,
+  openrouter: <Openrouter variant="light" className="w-7 h-7" />,
+};
 
 // ── AuthForm: registro e inicio de sesión para clientes (tema claro) ──
 
@@ -238,6 +267,16 @@ const AuthForm = ({ setupToken, onAutenticado }: AuthFormProps) => {
 
 // ── Componente principal ──
 
+const DEFAULT_BASE_URLS: Record<string, string> = {
+  'opencode-go': 'https://opencode.ai/zen/go/v1',
+  openai: 'https://api.openai.com/v1',
+  'openai-api': 'https://api.openai.com/v1',
+  openrouter: 'https://openrouter.ai/api/v1',
+  anthropic: 'https://api.anthropic.com',
+  google: 'https://generativelanguage.googleapis.com/v1beta/openai',
+  gemini: 'https://generativelanguage.googleapis.com/v1beta/openai',
+};
+
 const SetupWizard = () => {
   const params = useParams<{ token: string }>();
   const token = params.token || window.location.pathname.replace('/setup/', '').replace('/onboarding/', '');
@@ -254,6 +293,7 @@ const SetupWizard = () => {
   const [proveedorSeleccionado, setProveedorSeleccionado] = useState<string | null>(null);
   const [verMas, setVerMas] = useState(false);
   const [apiKeyValue, setApiKeyValue] = useState('');
+  const [baseUrlValue, setBaseUrlValue] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [modeloEnCurso, setModeloEnCurso] = useState<string | null>(null);
   const [modoSelectorModelo, setModoSelectorModelo] = useState(false);
@@ -275,6 +315,15 @@ const SetupWizard = () => {
       intervals.clear();
     };
   }, []);
+
+  // Pre-rellena la Base URL por defecto del proveedor seleccionado
+  useEffect(() => {
+    if (proveedorSeleccionado && DEFAULT_BASE_URLS[proveedorSeleccionado]) {
+      setBaseUrlValue((prev) => prev || DEFAULT_BASE_URLS[proveedorSeleccionado]);
+    } else if (!proveedorSeleccionado) {
+      setBaseUrlValue('');
+    }
+  }, [proveedorSeleccionado]);
 
   // Check localStorage directly on mount for existing auth
   useEffect(() => {
@@ -567,6 +616,7 @@ const SetupWizard = () => {
       await apiClient.post(`/setup/${token}/set-provider`, {
         provider: providerId,
         api_key: apiKeyValue.trim(),
+        base_url: baseUrlValue.trim(),
       });
       // Poll for agent confirmation (max 60s, check every 5s)
       let ok = false;
@@ -755,9 +805,7 @@ const SetupWizard = () => {
               className="flex-shrink-0 text-gray-400 hover:text-primary-600 transition-colors"
               title="Copiar comando"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
+              <ClipboardIcon className="w-5 h-5" />
             </button>
           </div>
         </div>
@@ -797,12 +845,18 @@ const SetupWizard = () => {
       const configurar = async (modelo: string) => {
         setModeloEnCurso(modelo);
         try {
-          await apiClient.post(`/setup/${token}/set-provider`, { provider: prov!.id, model: modelo });
+          await apiClient.post(`/setup/${token}/set-provider`, { provider: prov!.id, model: modelo, base_url: baseUrlValue.trim() });
+          let modeloOk = false;
           for (let i = 0; i < 15; i++) {
             await new Promise(r => setTimeout(r, 4000));
             const { data: fresh } = await apiClient.get(`/setup/${token}`);
             const cfg = (fresh as any).checks || {};
-            if (cfg.model === 'ok') break;
+            if (cfg.model === 'ok') { modeloOk = true; break; }
+          }
+          if (!modeloOk) {
+            setError('El agente no confirmó el modelo configurado. Verifica el nombre del modelo o la Base URL e inténtalo de nuevo.');
+            setModeloEnCurso(null);
+            return;
           }
           await apiClient.post(`/setup/${token}/advance`);
           setVistaActual(null);
@@ -815,13 +869,18 @@ const SetupWizard = () => {
       };
       return (
         <div className="space-y-6 max-w-2xl">
-          <button onClick={() => { setProveedorSeleccionado(null); setModoSelectorModelo(false); }} className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+          <button onClick={() => { setProveedorSeleccionado(null); setModoSelectorModelo(false); setError(null); }} className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1">
+            <ChevronLeftIcon className="w-4 h-4" />
             Volver a proveedores
           </button>
           <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
             <h3 className="text-lg font-bold text-gray-900 mb-2">{prov?.nombre}</h3>
             <p className="text-sm text-gray-500 mb-4">{prov?.descripcion}</p>
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 mb-4">
+                {error}
+              </div>
+            )}
             <div className="space-y-4">
               {recommended && (
                 <div className="bg-primary-50 border border-primary-300 rounded-xl p-5">
@@ -831,9 +890,7 @@ const SetupWizard = () => {
                       <p className="text-sm font-semibold text-primary-900 flex items-center gap-2">
                         {recommended}
                         {modeloEnCurso === recommended && (
-                          <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                          </svg>
+                          <CheckIcon className="w-4 h-4 text-green-600" />
                         )}
                       </p>
                       <p className="text-xs text-primary-600 mt-1">Rápido y económico — ideal para empezar</p>
@@ -881,9 +938,7 @@ const SetupWizard = () => {
         <div className="space-y-6 max-w-2xl">
           <button onClick={() => { setProveedorSeleccionado(null); setModoSelectorModelo(false); setError(null); }}
             className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
+            <ChevronLeftIcon className="w-4 h-4" />
             Volver a proveedores
           </button>
 
@@ -911,6 +966,12 @@ const SetupWizard = () => {
                   placeholder={`API Key (${auth.credential || ''})`}
                   value={apiKeyValue}
                   onChange={e => setApiKeyValue(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 outline-none"
+                />
+                <input type="text"
+                  placeholder="Base URL (opcional, p.ej. https://api.openai.com/v1)"
+                  value={baseUrlValue}
+                  onChange={e => setBaseUrlValue(e.target.value)}
                   className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 outline-none"
                 />
                 {error && (
@@ -947,8 +1008,8 @@ const SetupWizard = () => {
             : 'hover:bg-gray-50 border border-transparent'
         }`}
       >
-        <div className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white ${BG_COLORS[idx % BG_COLORS.length]}`}>
-          {proveedor.nombre.charAt(0)}
+        <div className={`flex-shrink-0 w-7 h-7 ${PROVEEDOR_ICONOS[proveedor.id] ? 'flex items-center justify-center' : 'rounded-full flex items-center justify-center text-xs font-bold text-white ' + BG_COLORS[idx % BG_COLORS.length]}`}>
+          {PROVEEDOR_ICONOS[proveedor.id] || proveedor.nombre.charAt(0)}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
@@ -963,9 +1024,7 @@ const SetupWizard = () => {
           </div>
           <p className="text-xs text-gray-500 truncate">{proveedor.descripcion}</p>
         </div>
-        <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
+        <ChevronRightIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
       </div>
     );
 
@@ -1044,17 +1103,17 @@ const SetupWizard = () => {
       office: {
         nombre: onboarding.module_labels?.office?.label || 'Google Drive',
         descripcion: onboarding.module_labels?.office?.description || 'Documentos, hojas de cálculo y almacenamiento en la nube',
-        icono: <DocumentTextIcon className="w-7 h-7 text-gray-600" />,
+        icono: <GoogleDrive className="w-7 h-7" />,
       },
       mail: {
         nombre: onboarding.module_labels?.mail?.label || 'Gmail',
         descripcion: onboarding.module_labels?.mail?.description || 'Correo electrónico y bandeja de entrada inteligente',
-        icono: <EnvelopeIcon className="w-7 h-7 text-gray-600" />,
+        icono: <Gmail className="w-7 h-7" />,
       },
       planner: {
         nombre: onboarding.module_labels?.planner?.label || 'Calendar + Trello',
         descripcion: onboarding.module_labels?.planner?.description || 'Calendario, tareas y organización del trabajo',
-        icono: <CalendarIcon className="w-7 h-7 text-gray-600" />,
+        icono: <Trello className="w-7 h-7" />,
       },
       developer: {
         nombre: onboarding.module_labels?.developer?.label || 'Developer',
@@ -1074,9 +1133,7 @@ const SetupWizard = () => {
         <div className="space-y-6 max-w-2xl">
           <button onClick={() => setModuloSeleccionado(null)}
             className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
+            <ChevronLeftIcon className="w-4 h-4" />
             Volver a módulos
           </button>
           <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
@@ -1087,9 +1144,7 @@ const SetupWizard = () => {
                 {googleOk ? (
                   <div className="flex flex-col items-center gap-3">
                     <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center">
-                      <svg className="w-7 h-7 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                      </svg>
+                      <CheckIcon className="w-7 h-7 text-green-600" />
                     </div>
                     <p className="text-green-700 font-medium">Conectado a {info?.nombre}</p>
                     <p className="text-xs text-gray-400">Acceso a {oauthConfig.scopes}</p>
@@ -1097,9 +1152,7 @@ const SetupWizard = () => {
                 ) : googleError ? (
                   <div className="flex flex-col items-center gap-3">
                     <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center">
-                      <svg className="w-7 h-7 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01" />
-                      </svg>
+                      <ExclamationTriangleIcon className="w-7 h-7 text-red-600" />
                     </div>
                     <p className="text-red-700 font-medium">Conexión expirada o inválida</p>
                     <Button variant="primary" size="lg" onClick={() => { setEsperandoConfirmacion(null); conectarOAuth(oauthConfig.service); }}
@@ -1138,9 +1191,7 @@ const SetupWizard = () => {
                 {waStatus === 'paired' || checks.whatsapp === 'ok' ? (
                   <div className="flex flex-col items-center gap-3">
                     <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center">
-                      <svg className="w-7 h-7 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                      </svg>
+                      <CheckIcon className="w-7 h-7 text-green-600" />
                     </div>
                     <p className="text-green-700 font-medium">WhatsApp conectado</p>
                   </div>
@@ -1318,9 +1369,7 @@ const SetupWizard = () => {
         {/* ── Canales de comunicación ── */}
         <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
           <div className="flex items-center gap-3 mb-4">
-            <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-            </svg>
+            <Whatsapp className="w-6 h-6" />
             <h3 className="text-lg font-bold text-gray-900">Canales de comunicación</h3>
           </div>
           <p className="text-sm text-gray-500 mb-4">Conecta canales para que VCOO pueda comunicarse con tus clientes.</p>
@@ -1328,9 +1377,7 @@ const SetupWizard = () => {
           {checks.whatsapp === 'ok' ? (
             <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
               <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
-                <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                </svg>
+                <CheckIcon className="w-5 h-5 text-green-600" />
               </div>
               <div>
                 <p className="text-sm font-medium text-green-700">WhatsApp conectado</p>
@@ -1457,9 +1504,7 @@ const SetupWizard = () => {
           ) : (
             <div className="flex items-center justify-between p-3 border border-gray-100 rounded-lg">
               <div className="flex items-center gap-3">
-                <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
+                <Whatsapp className="w-8 h-8" />
                 <div>
                   <p className="text-sm font-medium text-gray-900">WhatsApp</p>
                   <p className="text-xs text-gray-500">Recibe y envía mensajes</p>
@@ -1557,13 +1602,9 @@ const SetupWizard = () => {
     <div className="text-center py-8">
       <div className={`w-16 h-16 rounded-full mx-auto mb-6 flex items-center justify-center ${allOk ? 'bg-green-100' : 'bg-yellow-100'}`}>
         {allOk ? (
-          <svg className="h-8 w-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-          </svg>
+          <CheckIcon className="h-8 w-8 text-green-600" />
         ) : (
-          <svg className="h-8 w-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-          </svg>
+          <ExclamationTriangleIcon className="h-8 w-8 text-yellow-600" />
         )}
       </div>
       <h1 className={`text-2xl font-bold mb-2 ${allOk ? 'text-gray-900' : 'text-yellow-800'}`}>

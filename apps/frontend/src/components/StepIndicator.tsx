@@ -1,4 +1,5 @@
 import React from 'react';
+import { ExclamationTriangleIcon, CheckIcon } from '@heroicons/react/24/outline';
 
 interface StepIndicatorProps {
   pasoActual: number;
@@ -60,13 +61,9 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({
               }`}
             >
               {degraded && !isCurrent ? (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                </svg>
+                <ExclamationTriangleIcon className="w-4 h-4" />
               ) : showCheckmark ? (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                </svg>
+                <CheckIcon className="w-4 h-4" />
               ) : (
                 idx + 1
               )}

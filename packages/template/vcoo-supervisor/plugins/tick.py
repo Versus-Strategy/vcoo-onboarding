@@ -116,6 +116,16 @@ class Plugin:
                 except Exception as e:
                     return {"status": "error", "output": f"decryption failed: {e}"}
         model = payload.get("model", "")
+        base_url_override = payload.get("base_url", "").strip()
+        _DEFAULT_BASE_URLS = {
+            "opencode-go": "https://opencode.ai/zen/go/v1",
+            "openai": "https://api.openai.com/v1",
+            "openrouter": "https://openrouter.ai/api/v1",
+            "anthropic": "https://api.anthropic.com",
+            "google": "https://generativelanguage.googleapis.com/v1beta/openai",
+            "gemini": "https://generativelanguage.googleapis.com/v1beta/openai",
+        }
+        _base_url = base_url_override
         if not provider:
             return {"status": "error", "output": "missing provider"}
         hermes_bin = os.path.expanduser("~/.local/bin/hermes")
@@ -130,10 +140,10 @@ class Plugin:
                 )
                 if r.returncode != 0:
                     return {"status": "error", "output": r.stderr.strip() or f"hermes auth add exit={r.returncode}"}
+                # Resolve base_url: payload override > auth.json pool > default map
                 import json as _json
                 _auth_path = os.path.expanduser("~/.hermes/auth.json")
-                _base_url = ""
-                if os.path.isfile(_auth_path):
+                if not _base_url and os.path.isfile(_auth_path):
                     try:
                         with open(_auth_path) as _f:
                             _pool = _json.load(_f).get("credential_pool", {}).get(provider, [])
@@ -141,6 +151,8 @@ class Plugin:
                             _base_url = _pool[0].get("base_url", "")
                     except Exception:
                         pass
+                if not _base_url:
+                    _base_url = _DEFAULT_BASE_URLS.get(provider, "")
                 _env_path = os.path.expanduser("~/.hermes/.env")
                 _env_key = _ENV_OVERRIDES.get(provider, provider.upper().replace("-", "_") + "_API_KEY")
                 try:
@@ -159,28 +171,44 @@ class Plugin:
                             _f.writelines(_lines)
                 except Exception:
                     pass
-                subprocess.run(
+                r = subprocess.run(
                     [hermes_bin, "config", "set", "model.provider", provider],
                     capture_output=True, text=True, timeout=15
                 )
+                if r.returncode != 0:
+                    return {"status": "error", "output": f"hermes config set model.provider falló: {r.stderr.strip() or r.returncode}"}
                 if _base_url:
-                    subprocess.run(
+                    r = subprocess.run(
                         [hermes_bin, "config", "set", "model.base_url", _base_url],
                         capture_output=True, text=True, timeout=15
                     )
+                    if r.returncode != 0:
+                        return {"status": "error", "output": f"hermes config set model.base_url falló: {r.stderr.strip() or r.returncode}"}
             if model:
-                subprocess.run(
+                # Aplica base_url en llamadas solo-modelo si llegó un override (p.ej. editado en el paso modelo)
+                if _base_url and not api_key:
+                    r = subprocess.run(
+                        [hermes_bin, "config", "set", "model.base_url", _base_url],
+                        capture_output=True, text=True, timeout=15
+                    )
+                    if r.returncode != 0:
+                        return {"status": "error", "output": f"hermes config set model.base_url falló: {r.stderr.strip() or r.returncode}"}
+                r = subprocess.run(
                     [hermes_bin, "config", "set", "model.default", model],
                     capture_output=True, text=True, timeout=15
                 )
+                if r.returncode != 0:
+                    return {"status": "error", "output": f"hermes config set model.default falló: {r.stderr.strip() or r.returncode}"}
                 # Only override model.provider if the model's prefix matches the chosen provider
                 if "/" in model:
                     prov_from_model = model.split("/")[0]
                     if prov_from_model == provider:
-                        subprocess.run(
+                        r = subprocess.run(
                             [hermes_bin, "config", "set", "model.provider", prov_from_model],
                             capture_output=True, text=True, timeout=15
                         )
+                        if r.returncode != 0:
+                            return {"status": "error", "output": f"hermes config set model.provider falló: {r.stderr.strip() or r.returncode}"}
             self._run_health_checks()
             self._report_capabilities()
             return {"status": "ok", "output": f"Provider {provider} configurado"}
@@ -520,7 +548,7 @@ class Plugin:
         # Check model.default is configured
         import re as _re2
         dm = _re2.search(r"'default':\s*'([^']+)'", config_text)
-        result["model"] = "ok" if (dm and dm.group(1) and "/" in dm.group(1)) else "missing"
+        result["model"] = "ok" if (dm and dm.group(1)) else "missing"
         # Check Google OAuth (office/mail modules) via token file
         google_token_path = os.path.expanduser("~/.hermes/google_token.json")
         if os.path.isfile(google_token_path):

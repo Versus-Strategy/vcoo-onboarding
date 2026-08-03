@@ -11,6 +11,7 @@ import {
   ClockIcon,
   ExclamationTriangleIcon,
 } from '@/components/icons';
+import { CheckIcon } from '@heroicons/react/24/outline';
 import { mapEstadoVcoo, mapEstadoAgente, mapEstadoOnboarding } from '@/store/estados';
 
 const DetalleClientePage = () => {
@@ -60,6 +61,7 @@ const DetalleClientePage = () => {
   const [provider, setProvider] = useState('openrouter');
   const [model, setModel] = useState('');
   const [apiKey, setApiKey] = useState('');
+  const [baseUrl, setBaseUrl] = useState('');
   const [configuring, setConfiguring] = useState(false);
   const [configResult, setConfigResult] = useState<{ tipo: 'ok' | 'error'; texto: string } | null>(null);
   const [regenerando, setRegenerando] = useState(false);
@@ -247,6 +249,7 @@ const DetalleClientePage = () => {
         provider,
         model,
         api_key: apiKey,
+        base_url: baseUrl.trim(),
       });
       setConfigResult({ tipo: 'ok', texto: `Comando enviado: ${data.provider}${data.model ? ` (${data.model})` : ''}` });
       setApiKey('');
@@ -593,6 +596,19 @@ const DetalleClientePage = () => {
               />
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Base URL <span className="text-gray-400">(opcional)</span>
+              </label>
+              <input
+                type="text"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                placeholder="p.ej. https://openrouter.ai/api/v1"
+                value={baseUrl}
+                onChange={(e) => setBaseUrl(e.target.value)}
+              />
+            </div>
+
             <Button
               onClick={handleSetProvider}
               disabled={configuring || !provider || !apiKey}
@@ -635,15 +651,7 @@ const DetalleClientePage = () => {
               <ul className="mt-1 space-y-1">
                 {completedSteps.map((paso, idx) => (
                   <li key={idx} className="text-sm text-gray-700 flex items-center">
-                    <svg
-                      className="h-4 w-4 text-green-500 mr-2 flex-shrink-0"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      strokeWidth="2"
-                      stroke="currentColor"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                    </svg>
+                    <CheckIcon className="h-4 w-4 text-green-500 mr-2 flex-shrink-0" />
                     {paso}
                   </li>
                 ))}

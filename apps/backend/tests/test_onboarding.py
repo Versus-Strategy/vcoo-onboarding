@@ -297,6 +297,57 @@ class TestOnboarding:
         assert d["status"] == "command_sent"
         assert d["cmd_id"]
 
+    # ── base_url se propaga del frontend al payload del agente ──
+
+    def test_set_provider_with_base_url(self, client, make_vcoo, provision_token):
+        vid = make_vcoo("ProvBaseUrl")
+        pt = provision_token(vid)
+        r = client.post("/register", json={"token": pt, "info": {}})
+        assert r.status_code == 200
+        reg = r.json()
+        aid = reg["agent_id"]
+        atk = reg["agent_token"]
+        r = client.post("/auth/client/register", json={
+            "name": "ProvBase", "email": "provbase@t.com", "password": "p", "token": vid,
+        })
+        ct = r.json()["token"]
+
+        r = client.post(f"/setup/{vid}/set-provider",
+            json={"provider": "openai", "api_key": "sk-test-secret-98765",
+                  "base_url": "https://api.openai.com/v1"},
+            headers={"Authorization": f"Bearer {ct}"})
+        assert r.status_code == 200
+
+        poll = client.get(f"/agent/{aid}/poll",
+            headers={"Authorization": f"Bearer {atk}"}).json()
+        sp = [c for c in poll.get("commands", []) if c["command"] == "set-provider"]
+        assert sp, "debe existir un comando set-provider"
+        payload = sp[0].get("payload", {})
+        assert payload.get("base_url") == "https://api.openai.com/v1", \
+            f"base_url debe propagarse al payload del agente, got: {payload}"
+
+    def test_set_provider_operator_with_base_url(self, client, operator_token, make_vcoo):
+        vid = make_vcoo("OpProvBase")
+        pt = client.get(f"/vcoo/{vid}/provision-token",
+            headers={"Authorization": f"Bearer {operator_token}"}).json()["token"]
+        r = client.post("/register", json={"token": pt, "info": {}})
+        assert r.status_code == 200
+        reg = r.json()
+        aid = reg["agent_id"]
+        atk = reg["agent_token"]
+        r = client.post(f"/vcoo/{vid}/set-provider",
+            json={"provider": "anthropic", "api_key": "sk-ant-test",
+                  "base_url": "https://api.anthropic.com"},
+            headers={"Authorization": f"Bearer {operator_token}"})
+        assert r.status_code == 200
+        poll = client.get(f"/agent/{aid}/poll",
+            headers={"Authorization": f"Bearer {atk}"}).json()
+        sp = [c for c in poll.get("commands", []) if c["command"] == "set-provider"]
+        assert sp, "debe existir un comando set-provider"
+        payload = sp[0].get("payload", {})
+        assert payload.get("base_url") == "https://api.anthropic.com", \
+            f"base_url debe propagarse al payload del agente, got: {payload}"
+
     # ── OAuth callback ──
 
     def test_oauth_callback_error(self, client):
