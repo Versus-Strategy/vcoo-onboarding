@@ -10,8 +10,8 @@ import {
   GlobeAltIcon,
   ClockIcon,
   ExclamationTriangleIcon,
+  CheckIcon,
 } from '@/components/icons';
-import { CheckIcon } from '@heroicons/react/24/outline';
 import { mapEstadoVcoo, mapEstadoAgente, mapEstadoOnboarding } from '@/store/estados';
 
 const DetalleClientePage = () => {
@@ -240,7 +240,8 @@ const DetalleClientePage = () => {
   const installCommand = tokenData?.install_command;
   const onboardingUrl = tokenData?.onboarding_url;
 
-  const handleSetProvider = async () => {
+  const handleSetProvider = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!provider || !apiKey) return;
     setConfiguring(true);
     setConfigResult(null);
@@ -322,7 +323,7 @@ const DetalleClientePage = () => {
 
       {/* Mensaje de acción */}
       {accionMsg && (
-        <div className={`rounded-lg p-3 text-sm ${accionMsg.tipo === 'ok' ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+        <div role="status" className={`rounded-lg p-3 text-sm ${accionMsg.tipo === 'ok' ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
           {accionMsg.texto}
         </div>
       )}
@@ -518,11 +519,11 @@ const DetalleClientePage = () => {
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <form className="space-y-4" onSubmit={handleSetProvider}>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Proveedor</label>
               <select
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 cursor-pointer focus-ring"
                 value={provider}
                 onChange={(e) => {
                   setProvider(e.target.value);
@@ -551,10 +552,10 @@ const DetalleClientePage = () => {
                 return (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Modelo <span className="text-gray-400">(opcional)</span>
+                      Modelo <span className="text-gray-500">(opcional)</span>
                     </label>
                     <select
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 cursor-pointer focus-ring"
                       value={model}
                       onChange={(e) => setModel(e.target.value)}
                     >
@@ -572,11 +573,11 @@ const DetalleClientePage = () => {
               return (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Modelo <span className="text-gray-400">(opcional)</span>
+                    Modelo <span className="text-gray-500">(opcional)</span>
                   </label>
                   <input
                     type="text"
-                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus-ring"
                     placeholder="p.ej. openrouter/deepseek-v4, claude-sonnet-4, gpt-4o"
                     value={model}
                     onChange={(e) => setModel(e.target.value)}
@@ -589,7 +590,8 @@ const DetalleClientePage = () => {
               <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
               <input
                 type="password"
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                autoComplete="off"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus-ring"
                 placeholder="sk-..."
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
@@ -598,11 +600,11 @@ const DetalleClientePage = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Base URL <span className="text-gray-400">(opcional)</span>
+                Base URL <span className="text-gray-500">(opcional)</span>
               </label>
               <input
                 type="text"
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus-ring"
                 placeholder="p.ej. https://openrouter.ai/api/v1"
                 value={baseUrl}
                 onChange={(e) => setBaseUrl(e.target.value)}
@@ -610,18 +612,18 @@ const DetalleClientePage = () => {
             </div>
 
             <Button
-              onClick={handleSetProvider}
+              type="submit"
               disabled={configuring || !provider || !apiKey}
             >
               {configuring ? 'Enviando...' : 'Configurar proveedor'}
             </Button>
 
             {configResult && (
-              <p className={`text-sm ${configResult.tipo === 'ok' ? 'text-green-600' : 'text-red-600'}`}>
+              <p role="status" className={`text-sm ${configResult.tipo === 'ok' ? 'text-green-600' : 'text-red-600'}`}>
                 {configResult.texto}
               </p>
             )}
-          </div>
+          </form>
         )}
       </div>
 
@@ -686,7 +688,7 @@ const DetalleClientePage = () => {
             {modulos.map((mod) => (
               <span
                 key={mod}
-                className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-primary-100 text-primary-800"
               >
                 {mod}
               </span>
