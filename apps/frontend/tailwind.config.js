@@ -21,7 +21,20 @@ export default {
           900: '#43148a',
           950: '#2e1065'
         }
-      }
+      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        mono: ['ui-monospace', 'SFMono-Regular', 'JetBrains Mono', 'Menlo', 'monospace'],
+      },
+      keyframes: {
+        'step-in': {
+          '0%': { opacity: '0', transform: 'translateY(8px)' },
+          '100%': { opacity: '1', transform: 'none' },
+        },
+      },
+      animation: {
+        'step-in': 'step-in 0.2s ease-out',
+      },
     }
   },
   plugins: [],

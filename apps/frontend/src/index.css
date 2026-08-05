@@ -3,12 +3,29 @@
 @tailwind utilities;
 
 :root {
-  --font-sans: system-ui, sans-serif;
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'JetBrains Mono', 'Menlo', monospace;
+  --duration-fast: 150ms;
+  --duration-standard: 200ms;
+  --duration-progress: 500ms;
 }
 
 body {
   font-family: var(--font-sans);
-  @apply bg-gray-50 text-gray-900;
+  @apply bg-gray-50 text-gray-900 antialiased;
 }
 
+/* Anillo de foco reutilizable (a11y) */
+.focus-ring {
+  @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2;
+}
 
+/* Respetar prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
