@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useAuthActions } from '../../auth/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { EyeIcon, EyeSlashIcon } from '../../components/icons';
+import Button from '../../components/Button';
+import Logo from '../../components/Logo';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -32,14 +34,12 @@ const Login = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-8 sm:px-6">
       <div className="w-full max-w-md space-y-6">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-primary-600">
-            VERSUS Strategy
-          </h2>
-          <p className="text-gray-600">
-            Acceso al Panel de Control VCOO
-          </p>
+        <div className="text-center flex justify-center">
+          <Logo size="md" />
         </div>
+        <p className="text-center text-gray-600 -mt-3">
+          Acceso al Panel de Control VCOO
+        </p>
 
         <form onSubmit={manejarEnvio} className="space-y-4">
           <div>
@@ -50,9 +50,11 @@ const Login = () => {
               id="email"
               type="email"
               required
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              aria-invalid={!!error}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
           </div>
 
@@ -65,14 +67,16 @@ const Login = () => {
                 id="password"
                 type={showPassword ? 'text' : 'password'}
                 required
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent pr-10"
+                aria-invalid={!!error}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent pr-10"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 hover:text-gray-700"
+                className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 hover:text-gray-700 cursor-pointer focus-ring rounded-r-lg"
                 aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
               >
                 {showPassword ? <EyeSlashIcon className="w-5 h-5" /> : <EyeIcon className="w-5 h-5" />}
@@ -81,35 +85,30 @@ const Login = () => {
           </div>
 
           <div className="flex items-center justify-between">
-            <label className="flex items-center space-x-2 text-sm text-gray-600">
+            <label className="flex items-center space-x-2 text-sm text-gray-600 cursor-pointer">
               <input
                 type="checkbox"
                 checked={recordarme}
                 onChange={(e) => setRecordarme(e.target.checked)}
+                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
               />
               Recordarme
             </label>
-            <a href="#" className="text-sm text-primary-600 hover:underline">
-              ¿Olvidó su contraseña?
-            </a>
+            <span className="text-sm text-gray-400">¿Olvidó su contraseña?</span>
           </div>
 
-          <button
-            type="submit"
-            disabled={cargando}
-            className="w-full flex items-center justify-center px-4 py-2 bg-primary-600 text-white font-medium rounded-md disabled:opacity-50 hover:bg-primary-700 transition-colors"
-          >
+          <Button type="submit" loading={cargando} className="w-full">
             {cargando ? 'Iniciando sesión...' : 'Ingresar'}
-          </button>
+          </Button>
 
           {error && (
-            <p className="text-sm text-red-600 text-center">
+            <p role="alert" className="text-sm text-red-600 text-center">
               {error}
             </p>
           )}
 
           <div className="text-center text-sm text-gray-500">
-            ¿No tiene cuenta? <a href="#" className="text-primary-600 hover:underline">Solicitar acceso</a>
+            ¿No tiene cuenta? <span className="text-gray-400">Solicitar acceso</span>
           </div>
         </form>
       </div>
