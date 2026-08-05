@@ -30,6 +30,7 @@ import {
   Google,
   Gemini,
   Openrouter,
+  GithubCopilot,
 } from '@thesvg/react';
 import PhoneInput from 'react-phone-number-input/min';
 import 'react-phone-number-input/style.css';
@@ -105,6 +106,8 @@ const PROVEEDOR_ICONOS: Record<string, ReactNode> = {
   google: <Google className="w-7 h-7" />,
   gemini: <Gemini className="w-7 h-7" />,
   openrouter: <Openrouter variant="light" className="w-7 h-7" />,
+  copilot: <GithubCopilot className="w-7 h-7" />,
+  'copilot-acp': <GithubCopilot className="w-7 h-7" />,
 };
 
 // ── AuthForm: registro e inicio de sesión para clientes (tema claro) ──
