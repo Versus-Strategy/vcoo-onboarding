@@ -98,6 +98,8 @@ const NuevoClientePage = () => {
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
               placeholder="Ej: Empresa XYZ"
+              required
+              aria-invalid={!!error}
               className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder-gray-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
               disabled={isPending}
             />
@@ -130,12 +132,12 @@ const NuevoClientePage = () => {
                 </label>
               ))}
             </div>
-            <p className="mt-1 text-xs text-gray-400">El módulo Core es obligatorio y siempre está incluido.</p>
+            <p className="mt-1 text-xs text-gray-500">El módulo Core es obligatorio y siempre está incluido.</p>
           </div>
 
           {/* Error */}
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">
+            <div role="alert" className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">
               {error}
             </div>
           )}
@@ -157,7 +159,7 @@ const NuevoClientePage = () => {
         </form>
       ) : (
         /* Success result */
-        <div className="bg-white rounded-lg shadow p-6 space-y-6">
+        <div className="bg-white rounded-lg shadow p-6 space-y-6" role="status" aria-live="polite">
           <div className="bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg p-4">
             <p className="font-medium">¡Cliente creado exitosamente!</p>
             <p className="mt-1">
@@ -184,7 +186,7 @@ const NuevoClientePage = () => {
                   size="sm"
                   onClick={() => copiarAlPortapapeles(onboardingUrl)}
                 >
-                  {copiado ? '¡Copiado!' : 'Copiar'}
+                  <span aria-live="polite">{copiado ? '¡Copiado!' : 'Copiar'}</span>
                 </Button>
               </div>
             </div>
@@ -214,7 +216,7 @@ const NuevoClientePage = () => {
                   size="sm"
                   onClick={() => copiarAlPortapapeles(provisionToken)}
                 >
-                  {copiado ? '¡Copiado!' : 'Copiar'}
+                  <span aria-live="polite">{copiado ? '¡Copiado!' : 'Copiar'}</span>
                 </Button>
               </div>
             </div>
@@ -235,7 +237,7 @@ const NuevoClientePage = () => {
                   size="sm"
                   onClick={() => copiarAlPortapapeles(installCommand)}
                 >
-                  {copiado ? '¡Copiado!' : 'Copiar'}
+                  <span aria-live="polite">{copiado ? '¡Copiado!' : 'Copiar'}</span>
                 </Button>
               </div>
             </div>
