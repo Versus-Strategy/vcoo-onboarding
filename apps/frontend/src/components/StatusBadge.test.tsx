@@ -20,9 +20,9 @@ describe('StatusBadge', () => {
     expect(badge.className).toContain('bg-gray-100');
   });
 
-  it('mapea configurando al color azul', () => {
+  it('mapea configurando al color violeta (identidad VERSUS)', () => {
     render(<StatusBadge estado="configurando" />);
     const badge = screen.getByText('Configurando');
-    expect(badge.className).toContain('bg-blue-100');
+    expect(badge.className).toContain('bg-primary-100');
   });
 });
