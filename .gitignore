@@ -12,6 +12,9 @@ master.key
 node_modules/
 dist/
 
+# Worktrees aislados (superpowers)
+.worktrees/
+
 # Monorepo: apps
 apps/*/.env
 apps/*/.env.*
