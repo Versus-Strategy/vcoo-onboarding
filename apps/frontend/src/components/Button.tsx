@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowPathIcon } from '@heroicons/react/24/outline';
+import { ArrowPathIcon } from './icons';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'ghost';
@@ -8,9 +8,9 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantClasses = {
-  primary: 'bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50',
-  secondary: 'bg-gray-200 text-gray-700 hover:bg-gray-300 disabled:opacity-50',
-  ghost: 'text-primary-600 hover:bg-primary-50 disabled:opacity-50',
+  primary: 'bg-primary-600 text-white hover:bg-primary-700 focus-visible:ring-primary-300 disabled:bg-primary-300 disabled:text-white',
+  secondary: 'bg-gray-200 text-gray-700 hover:bg-gray-300 focus-visible:ring-gray-400 disabled:bg-gray-100 disabled:text-gray-400',
+  ghost: 'text-primary-600 hover:bg-primary-50 focus-visible:ring-primary-300 disabled:text-gray-300',
 };
 
 const sizeClasses = {
@@ -30,12 +30,13 @@ const Button: React.FC<ButtonProps> = ({
 }) => {
   return (
     <button
-      className={`inline-flex items-center justify-center font-medium rounded-lg transition-colors duration-200 ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
+      className={`inline-flex items-center justify-center font-medium rounded-lg transition-colors duration-200 cursor-pointer focus-ring ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
       disabled={disabled || loading}
+      aria-busy={loading || undefined}
       {...props}
     >
       {loading && (
-        <ArrowPathIcon className="animate-spin -ml-1 mr-2 h-4 w-4" />
+        <ArrowPathIcon className="animate-spin motion-reduce:animate-none -ml-1 mr-2 h-4 w-4" />
       )}
       {children}
     </button>
