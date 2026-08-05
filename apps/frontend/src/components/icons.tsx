@@ -22,4 +22,11 @@ export {
   CodeBracketIcon,
   PuzzlePieceIcon,
   CheckCircleIcon,
+  // nuevos registrados (eran importados directos de heroicons):
+  CheckIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ClipboardIcon,
+  MagnifyingGlassIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline';
