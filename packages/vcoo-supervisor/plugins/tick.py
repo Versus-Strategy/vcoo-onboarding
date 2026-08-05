@@ -127,6 +127,22 @@ class Plugin:
         _base_url = base_url_override
         if not provider:
             return {"status": "error", "output": "missing provider"}
+        # Resolver base_url SIEMPRE (payload override > auth.json pool > default map),
+        # no solo cuando llega api_key: las llamadas solo-modelo del wizard (sin api_key)
+        # tambien deben configurar model.base_url, si no queda vacia.
+        if not _base_url:
+            import json as _json
+            _auth_path = os.path.expanduser("~/.hermes/auth.json")
+            if os.path.isfile(_auth_path):
+                try:
+                    with open(_auth_path) as _f:
+                        _pool = _json.load(_f).get("credential_pool", {}).get(provider, [])
+                    if _pool:
+                        _base_url = _pool[0].get("base_url", "")
+                except Exception:
+                    pass
+        if not _base_url:
+            _base_url = _DEFAULT_BASE_URLS.get(provider, "")
         hermes_bin = os.path.expanduser("~/.local/bin/hermes")
         if not os.path.isfile(hermes_bin):
             hermes_bin = "hermes"
@@ -140,20 +156,6 @@ class Plugin:
                 )
                 if r.returncode != 0:
                     return {"status": "error", "output": r.stderr.strip() or f"hermes auth add exit={r.returncode}"}
-                # Read credential pool from auth.json to get base_url (auto-resolved by hermes);
-                # fallback: payload override > auth.json pool > default map
-                import json as _json
-                _auth_path = os.path.expanduser("~/.hermes/auth.json")
-                if not _base_url and os.path.isfile(_auth_path):
-                    try:
-                        with open(_auth_path) as _f:
-                            _pool = _json.load(_f).get("credential_pool", {}).get(provider, [])
-                        if _pool:
-                            _base_url = _pool[0].get("base_url", "")
-                    except Exception:
-                        pass
-                if not _base_url:
-                    _base_url = _DEFAULT_BASE_URLS.get(provider, "")
                 # Write API key to .env so gateway/cron can find it (e.g. OPENCODE_GO_API_KEY)
                 _env_path = os.path.expanduser("~/.hermes/.env")
                 _env_key = _ENV_OVERRIDES.get(provider, provider.upper().replace("-", "_") + "_API_KEY")
