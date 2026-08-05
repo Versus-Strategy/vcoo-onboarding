@@ -11,13 +11,11 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   ClockIcon,
-} from '@/components/icons';
-import {
   CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   ClipboardIcon,
-} from '@heroicons/react/24/outline';
+} from '@/components/icons';
 import {
   Whatsapp,
   Gmail,
@@ -492,7 +490,7 @@ const SetupWizard = () => {
       return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4" />
+            <div className="animate-spin motion-reduce:animate-none rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4" />
             <p className="text-gray-500">Verificando sesión...</p>
           </div>
         </div>
@@ -513,7 +511,7 @@ const SetupWizard = () => {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4" />
+          <div className="animate-spin motion-reduce:animate-none rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4" />
           <p className="text-gray-500">Cargando configuración...</p>
         </div>
       </div>
@@ -805,7 +803,8 @@ const SetupWizard = () => {
             </code>
             <button
               onClick={() => { navigator.clipboard.writeText(cmdText); fetchOnboarding(); }}
-              className="flex-shrink-0 text-gray-400 hover:text-primary-600 transition-colors"
+              aria-label="Copiar comando"
+              className="flex-shrink-0 p-2 text-gray-400 hover:text-primary-600 transition-colors cursor-pointer focus-ring rounded-lg"
               title="Copiar comando"
             >
               <ClipboardIcon className="w-5 h-5" />
@@ -815,7 +814,7 @@ const SetupWizard = () => {
 
         {onboarding?.agent_online && !(onboarding.completed || []).includes('bootstrap') && (
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
+            <div className="animate-spin motion-reduce:animate-none rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-3"></div>
             <p className="text-blue-700 font-medium">Agente conectado</p>
             <p className="text-sm text-blue-500 mt-1">Instalando componentes en el servidor...</p>
           </div>
@@ -872,7 +871,7 @@ const SetupWizard = () => {
       };
       return (
         <div className="space-y-6 max-w-2xl">
-          <button onClick={() => { setProveedorSeleccionado(null); setModoSelectorModelo(false); setError(null); }} className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1">
+          <button onClick={() => { setProveedorSeleccionado(null); setModoSelectorModelo(false); setError(null); }} className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1 cursor-pointer focus-ring rounded-lg">
             <ChevronLeftIcon className="w-4 h-4" />
             Volver a proveedores
           </button>
@@ -900,7 +899,7 @@ const SetupWizard = () => {
                     </div>
                     {modeloEnCurso === recommended ? (
                       <div className="flex items-center gap-2">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600" />
+                        <div className="animate-spin motion-reduce:animate-none rounded-full h-4 w-4 border-b-2 border-primary-600" />
                         <span className="text-sm text-primary-600">Configurando...</span>
                       </div>
                     ) : (
@@ -921,7 +920,7 @@ const SetupWizard = () => {
                       >
                         <span className={modeloEnCurso === m ? 'text-primary-800' : 'text-gray-600'}>{m}</span>
                         {modeloEnCurso === m && (
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600" />
+                          <div className="animate-spin motion-reduce:animate-none rounded-full h-4 w-4 border-b-2 border-primary-600" />
                         )}
                       </div>
                     ))}
@@ -1003,9 +1002,11 @@ const SetupWizard = () => {
     }
 
     const renderRow = (proveedor: typeof raw[0], idx: number, rec: boolean) => (
-      <div key={proveedor.id}
+      <button
+        key={proveedor.id}
+        type="button"
         onClick={() => manejarConectarProveedor(proveedor.id)}
-        className={`flex items-center gap-3 px-4 py-2.5 rounded-lg cursor-pointer transition-colors ${
+        className={`w-full text-left flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer transition-colors focus-ring ${
           rec
             ? 'bg-primary-50 border border-primary-200 hover:bg-primary-100'
             : 'hover:bg-gray-50 border border-transparent'
@@ -1025,10 +1026,10 @@ const SetupWizard = () => {
               </span>
             )}
           </div>
-          <p className="text-xs text-gray-500 truncate">{proveedor.descripcion}</p>
+          <p className="text-xs text-gray-600 truncate">{proveedor.descripcion}</p>
         </div>
-        <ChevronRightIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
-      </div>
+        <ChevronRightIcon className="w-5 h-5 text-gray-400 flex-shrink-0" />
+      </button>
     );
 
     return (
@@ -1063,7 +1064,7 @@ const SetupWizard = () => {
             </>
           ) : (
             <>
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-500 mx-auto mb-4" />
+              <div className="animate-spin motion-reduce:animate-none rounded-full h-10 w-10 border-b-2 border-primary-600 mx-auto mb-4" />
               <p className="text-gray-500">Esperando a que el agente reporte los proveedores disponibles...</p>
               <p className="text-gray-400 text-sm mt-2">Completa el paso 1 (Instalar Agente) para continuar.</p>
             </>
@@ -1073,19 +1074,19 @@ const SetupWizard = () => {
       <div className="space-y-1 max-w-2xl">
         {recomendado && renderRow(recomendado, 0, true)}
         <div className="border-t border-gray-100 pt-2 mt-2">
-          <p className="text-xs text-gray-400 font-medium mb-1 px-4">POPULARES</p>
+          <p className="text-xs text-gray-500 font-medium mb-1 px-4">POPULARES</p>
           {destacados.map((p, i) => renderRow(p, i + 1, false))}
         </div>
         {resto.length > 0 && (
           <>
             {verMas && (
               <div className="border-t border-gray-100 pt-2 mt-2">
-                <p className="text-xs text-gray-400 font-medium mb-1 px-4">OTROS</p>
+                <p className="text-xs text-gray-500 font-medium mb-1 px-4">OTROS</p>
                 {resto.map((p, i) => renderRow(p, i + 1 + destacados.length, false))}
               </div>
             )}
             <button onClick={() => setVerMas(!verMas)}
-              className="text-sm text-primary-600 hover:text-primary-700 px-4 py-2">
+              className="text-sm text-primary-600 hover:text-primary-700 px-4 py-2 cursor-pointer focus-ring rounded-lg">
               {verMas ? 'Mostrar menos' : `Ver más (${resto.length} proveedores)`}
             </button>
           </>
@@ -1135,7 +1136,7 @@ const SetupWizard = () => {
       return (
         <div className="space-y-6 max-w-2xl">
           <button onClick={() => setModuloSeleccionado(null)}
-            className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1">
+            className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1 cursor-pointer focus-ring rounded-lg">
             <ChevronLeftIcon className="w-4 h-4" />
             Volver a módulos
           </button>
@@ -1165,7 +1166,7 @@ const SetupWizard = () => {
                   </div>
                 ) : esperandoConfirmacion === oauthConfig.service ? (
                   <div className="flex flex-col items-center gap-3 py-4">
-                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600"></div>
+                    <div className="animate-spin motion-reduce:animate-none rounded-full h-10 w-10 border-b-2 border-primary-600"></div>
                     <p className="text-sm font-medium text-gray-700">Autorización recibida</p>
                     <p className="text-xs text-gray-400">Esperando confirmación del agente en tu VPS...</p>
                     <div className="w-full max-w-xs bg-gray-200 rounded-full h-1.5 mt-2">
@@ -1209,7 +1210,7 @@ const SetupWizard = () => {
                   </div>
                 ) : waStatus === 'pairing' ? (
                   <div className="flex flex-col items-center gap-3">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+                    <div className="animate-spin motion-reduce:animate-none rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
                     <p className="text-sm text-gray-600">Iniciando emparejamiento...</p>
                   </div>
                 ) : (
@@ -1351,7 +1352,7 @@ const SetupWizard = () => {
                       {modulo === 'office' && checks.google === 'ok' ? <CheckCircleIcon className="w-7 h-7 text-green-600" /> :
                        modulo === 'mail' && checks.google === 'ok' ? <CheckCircleIcon className="w-7 h-7 text-green-600" /> :
                        (modulo === 'office' || modulo === 'mail') && esperandoConfirmacion ? (
-                         <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-yellow-600"></div>
+                         <div className="animate-spin motion-reduce:animate-none rounded-full h-5 w-5 border-b-2 border-primary-600"></div>
                        ) : info.icono}
                     </div>
                     <h3 className="font-semibold text-gray-900 mb-1">
@@ -1416,7 +1417,7 @@ const SetupWizard = () => {
             </div>
           ) : waStatus === 'pairing' ? (
             <div className="flex flex-col items-center gap-3 py-4">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+              <div className="animate-spin motion-reduce:animate-none rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
               <p className="text-sm text-gray-600">Iniciando emparejamiento...</p>
             </div>
           ) : waStatus === 'input_phone' ? (
@@ -1626,6 +1627,16 @@ const SetupWizard = () => {
           </div>
         ))}
       </div>
+      {allOk && (
+        <div className="mt-8" role="status" aria-live="polite">
+          <Button
+            size="lg"
+            onClick={() => { window.location.href = '/'; }}
+          >
+            Ir al dashboard
+          </Button>
+        </div>
+      )}
     </div>
     );
   };
@@ -1685,15 +1696,17 @@ const SetupWizard = () => {
         </div>
 
         <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-          {pasoActual === 3 || pasoActual >= 4
-            ? renderPasoFinalizacion()
-            : pasoActual === 0
-            ? renderPasoInstalacion()
-            : pasoActual === 1
-            ? renderPasoProveedor()
-            : pasoActual === 2
-            ? renderPasoModulos()
-            : renderPasoInstalacion()}
+          <div key={pasoActual} className="animate-step-in motion-reduce:animate-none">
+            {pasoActual === 3 || pasoActual >= 4
+              ? renderPasoFinalizacion()
+              : pasoActual === 0
+              ? renderPasoInstalacion()
+              : pasoActual === 1
+              ? renderPasoProveedor()
+              : pasoActual === 2
+              ? renderPasoModulos()
+              : renderPasoInstalacion()}
+          </div>
         </div>
 
 
