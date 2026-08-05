@@ -6,8 +6,8 @@ import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import StatusBadge from '@/components/StatusBadge';
 import Button from '@/components/Button';
-import { ChevronUpDownIcon, ChevronUpIcon, ChevronDownIcon } from '@/components/icons';
-import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import ClienteCard from './ClienteCard';
+import { ChevronUpDownIcon, ChevronUpIcon, ChevronDownIcon, MagnifyingGlassIcon } from '@/components/icons';
 import { etiquetasEstado } from '@/store/estados';
 
 // Los valores de los chips coinciden con los estados de UI ya mapeados que
@@ -101,7 +101,7 @@ const ClientesPage = () => {
     return (
       <div className="space-y-6">
         <HeaderRow navigate={navigate} total={0} />
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="bg-white rounded-lg shadow p-6" role="status" aria-busy="true">
           <div className="animate-pulse space-y-4">
             {[1, 2, 3, 4].map((i) => (
               <div key={i} className="h-12 bg-gray-200 rounded" />
@@ -149,6 +149,7 @@ const ClientesPage = () => {
                 <input
                   type="text"
                   placeholder="Buscar por nombre..."
+                  aria-label="Buscar por nombre"
                   value={busqueda}
                   onChange={e => setBusqueda(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -161,7 +162,8 @@ const ClientesPage = () => {
                 <button
                   key={s}
                   onClick={() => setFiltroEstado(filtroEstado === s ? null : s)}
-                  className={`text-xs px-3 py-1 rounded-full border transition-colors ${
+                  aria-pressed={filtroEstado === s}
+                  className={`text-xs px-3 py-2 min-h-[40px] rounded-full border transition-colors cursor-pointer focus-ring ${
                     filtroEstado === s
                       ? 'bg-primary-100 border-primary-300 text-primary-800'
                       : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'
@@ -175,7 +177,8 @@ const ClientesPage = () => {
                 <button
                   key={s}
                   onClick={() => setFiltroAgente(filtroAgente === s ? null : s)}
-                  className={`text-xs px-3 py-1 rounded-full border transition-colors ${
+                  aria-pressed={filtroAgente === s}
+                  className={`text-xs px-3 py-2 min-h-[40px] rounded-full border transition-colors cursor-pointer focus-ring ${
                     filtroAgente === s
                       ? 'bg-primary-100 border-primary-300 text-primary-800'
                       : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'
@@ -187,7 +190,7 @@ const ClientesPage = () => {
               {(busqueda || filtroEstado || filtroAgente) && (
                 <button
                   onClick={() => { setBusqueda(''); setFiltroEstado(null); setFiltroAgente(null); }}
-                  className="text-xs text-primary-600 hover:text-primary-700 ml-2"
+                  className="text-xs text-primary-600 hover:text-primary-700 ml-2 cursor-pointer focus-ring rounded"
                 >
                   Limpiar filtros
                 </button>
@@ -203,11 +206,17 @@ const ClientesPage = () => {
                   {(['nombre', 'estado', 'ultimoContacto', 'agente'] as SortField[]).map(field => (
                     <th
                       key={field}
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700 select-none"
-                      onClick={() => toggleSort(field)}
+                      aria-sort={sortField === field ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                     >
-                      {field === 'nombre' ? 'Nombre' : field === 'estado' ? 'Estado VCOO' : field === 'ultimoContacto' ? 'Último contacto' : 'Agente'}
-                      <SortIcon field={field} />
+                      <button
+                        type="button"
+                        onClick={() => toggleSort(field)}
+                        className="inline-flex items-center gap-1 cursor-pointer focus-ring rounded uppercase tracking-wider"
+                      >
+                        {field === 'nombre' ? 'Nombre' : field === 'estado' ? 'Estado VCOO' : field === 'ultimoContacto' ? 'Último contacto' : 'Agente'}
+                        <SortIcon field={field} />
+                      </button>
                     </th>
                   ))}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -295,83 +304,19 @@ const ClientesPage = () => {
           {/* Tarjetas (móvil) */}
           <div className="md:hidden space-y-3">
             {filtrados.length === 0 ? (
-              <div className="bg-white rounded-lg shadow p-8 text-center text-sm text-gray-500">
+              <div className="bg-white rounded-lg shadow-sm p-8 text-center text-sm text-gray-500">
                 No se encontraron clientes con los filtros actuales.
               </div>
             ) : (
               filtrados.map((cliente: RowData) => {
                 const id = cliente.id as string;
                 const nombre = (cliente.nombre as string) || 'Sin nombre';
-                const estado = (cliente.estado as string) || 'sin-provisionar';
-                const ultimoContacto = cliente.ultimoContacto as string | undefined;
-                const agenteEstado = (cliente.servicios?.[0]?.estado as string) || 'sin-provisionar';
-                const modulos = cliente.servicios?.[0]?.modulos as string[] | undefined;
-
                 return (
-                  <div
+                  <ClienteCard
                     key={id}
-                    className="bg-white rounded-lg shadow p-4 space-y-3 cursor-pointer hover:bg-gray-50 transition-colors"
-                    onClick={() => navigate(`/operador/clientes/${id}`)}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium text-gray-900 break-words">{nombre}</div>
-                        {modulos && modulos.filter(m => m !== 'core').length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {modulos.filter(m => m !== 'core').slice(0, 3).map(m => (
-                              <span key={m} className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{m}</span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                      <div>
-                        <dt className="text-gray-500 text-xs">Estado VCOO</dt>
-                        <dd className="mt-0.5"><StatusBadge estado={estado} /></dd>
-                      </div>
-                      <div>
-                        <dt className="text-gray-500 text-xs">Agente</dt>
-                        <dd className="mt-0.5"><StatusBadge estado={agenteEstado} /></dd>
-                      </div>
-                      <div className="col-span-2">
-                        <dt className="text-gray-500 text-xs">Último contacto</dt>
-                        <dd className="mt-0.5 text-gray-900">
-                          {ultimoContacto
-                            ? new Date(ultimoContacto).toLocaleDateString('es-ES', {
-                                year: 'numeric',
-                                month: 'short',
-                                day: 'numeric',
-                              })
-                            : '—'}
-                        </dd>
-                      </div>
-                    </dl>
-                    <div className="flex items-center gap-2 pt-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="flex-1"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/operador/clientes/${id}`);
-                        }}
-                      >
-                        Ver detalle
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="flex-1 text-red-600 hover:bg-red-50"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEliminar(id, nombre);
-                        }}
-                      >
-                        Eliminar
-                      </Button>
-                    </div>
-                  </div>
+                    cliente={cliente}
+                    onEliminar={() => handleEliminar(id, nombre)}
+                  />
                 );
               })
             )}
