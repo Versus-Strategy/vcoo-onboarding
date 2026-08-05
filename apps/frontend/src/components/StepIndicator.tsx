@@ -45,39 +45,45 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({
           const isNext = idx === unlockedLimit + 1;
           const isDone = idx < pasoCompletado;
           const showCheckmark = !isCurrent && (isDone || degraded) && !isNext;
-          return (
-          <div key={idx}
-            onClick={() => isUnlocked && onStepClick?.(idx)}
-            className={`flex flex-col items-center flex-shrink-0 min-w-[56px] text-center ${isUnlocked && onStepClick ? 'cursor-pointer' : ''}`}
-          >
-            <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
-                isCurrent && !degraded ? 'bg-primary-100 text-primary-600 border-2 border-primary-600 ring-4 ring-primary-200'
-                : isCurrent && degraded ? 'bg-yellow-100 text-yellow-600 border-2 border-yellow-600 ring-4 ring-yellow-200'
-                : degraded ? 'bg-yellow-100 text-yellow-600 border-2 border-yellow-400'
-                : showCheckmark ? 'bg-primary-100 text-primary-600 border-2 border-primary-400'
-                : isNext ? 'bg-gray-100 text-gray-400 border-2 border-dashed border-gray-300'
-                : 'bg-gray-100 text-gray-400 border-2 border-gray-200'
-              }`}
+          const clickable = isUnlocked && !!onStepClick;
+          const dotClasses = `w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
+            isCurrent && !degraded ? 'bg-primary-100 text-primary-600 border-2 border-primary-600 ring-4 ring-primary-200'
+            : isCurrent && degraded ? 'bg-yellow-100 text-yellow-600 border-2 border-yellow-600 ring-4 ring-yellow-200'
+            : degraded ? 'bg-yellow-100 text-yellow-600 border-2 border-yellow-400'
+            : showCheckmark ? 'bg-primary-100 text-primary-600 border-2 border-primary-400'
+            : isNext ? 'bg-gray-100 text-gray-400 border-2 border-dashed border-gray-300'
+            : 'bg-gray-100 text-gray-400 border-2 border-gray-200'
+          }`;
+          const content = (
+            <>
+              <div className={dotClasses}>
+                {degraded && !isCurrent ? (
+                  <ExclamationTriangleIcon className="w-4 h-4" />
+                ) : showCheckmark ? (
+                  <CheckIcon className="w-4 h-4" />
+                ) : (
+                  idx + 1
+                )}
+              </div>
+              <span className={`mt-1 text-xs ${isCurrent || showCheckmark || degraded ? 'text-primary-600 font-medium' : 'text-gray-500'}`}>
+                {paso}
+              </span>
+            </>
+          );
+          return clickable ? (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => onStepClick?.(idx)}
+              aria-current={isCurrent ? 'step' : undefined}
+              className="flex flex-col items-center flex-shrink-0 min-w-[56px] text-center cursor-pointer rounded-lg focus-ring"
             >
-              {degraded && !isCurrent ? (
-                <ExclamationTriangleIcon className="w-4 h-4" />
-              ) : showCheckmark ? (
-                <CheckIcon className="w-4 h-4" />
-              ) : (
-                idx + 1
-              )}
+              {content}
+            </button>
+          ) : (
+            <div key={idx} className="flex flex-col items-center flex-shrink-0 min-w-[56px] text-center">
+              {content}
             </div>
-            <span
-              className={`mt-1 text-xs ${
-                isCurrent || showCheckmark || degraded
-                  ? 'text-primary-600 font-medium'
-                  : 'text-gray-400'
-              }`}
-            >
-              {paso}
-            </span>
-          </div>
           );
         })}
       </div>
